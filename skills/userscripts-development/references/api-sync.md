@@ -425,7 +425,7 @@ const css = GM_getResourceText('myCSS');
 GM_addStyle(css);
 ```
 
-Portability: Tampermonkey and Violentmonkey support sync `GM_getResourceText`. Greasemonkey 4+ has no sync form (planned greasemonkey/greasemonkey#2548, current state UNVERIFIED per [managers.md](managers.md)); Safari does not implement `@resource` at all. Promise form `GM.getResourceText` exists where noted in [managers.md](managers.md).
+Portability: Tampermonkey and Violentmonkey support sync `GM_getResourceText`. Greasemonkey 4+ does NOT implement it (nor a promise form) — greasemonkey/greasemonkey#2548 remains open; use `fetch(await GM.getResourceUrl(name)).then(r => r.text())` there. Safari does not implement `@resource` at all. Promise form `GM.getResourceText` exists where noted in [managers.md](managers.md).
 
 ---
 

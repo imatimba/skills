@@ -25,11 +25,21 @@ Do not present any single ordering as universal. Each manager ships its own comp
 | Manager | Comparator | Notes |
 | --- | --- | --- |
 | Tampermonkey | Mozilla-toolkit-like comparator (reference implementation) | Exhaustive hierarchy below is the **Tampermonkey reference**. Handles numeric segments, leading zeros, prerelease tags, build metadata, date versions, negative segments, etc. |
-| Violentmonkey | Simpler segment-numeric compare, semver-like prerelease handling | Numeric dot-separated segments compared numerically; prerelease identifiers compare lexically / semver-like. Exact edge divergences from Tampermonkey are **UNVERIFIED** — verify per Violentmonkey docs. |
-| Greasemonkey 4+ | Similar simple comparator | Also segment-numeric; exact edge divergences are **UNVERIFIED** |
+| Violentmonkey | Own `compareVersion` implementation | Verified from source (`src/common/util.js`): splits on first `-`; main segments parsed as integers ⇒ trailing zeros equal (`1 == 1.0 == 1.0.0`) and leading zeros equal (`16.04 == 16.4`); `1.9 < 1.10`; hyphenated prerelease orders **below** its release (`1.10.0-alpha < 1.10.0`); build metadata after `+` is ignored. |
+| Greasemonkey 4+ | Strict-semver library (bundled `compare-versions` v3.3.0) | Verified from source: requires a complete `X.Y.Z` before a prerelease tag — `1.0-alpha` is INVALID (comparator throws and the script's update checks get disabled), `1.0.0-alpha` is valid and sorts below release. `+build` metadata ignored; 4-part versions like `2018.03.23.1414` supported. |
 | Safari Userscripts | String compare | Behaviour is **UNVERIFIED** — treat as string comparison until verified per Safari Userscripts docs |
 
 Violentmonkey is the worked example for this skill; when a concrete comparator must be shown, use the Tampermonkey reference hierarchy and label it, then note Violentmonkey's simpler model as the portable assumption.
+
+### The Portable Subset (TM + VM + GM4+)
+
+The comparator runs inside the manager during update checks — portability comes from choosing an `@version` string all three parse identically. Verified common ground:
+
+- Numeric `X.Y.Z` segments: `1.9 < 1.10`, `1 == 1.0 == 1.0.0`.
+- Prerelease **below** its release — attached to a COMPLETE `X.Y.Z`: `1.0.0-alpha < 1.0.0`. Greasemonkey rejects short forms (`1.0-alpha`) outright.
+- Build metadata after `+` ignored by all three.
+
+Stay inside this subset and update comparison is portable. Outside it (dates, letter tokens, exotic hierarchies), every manager does its own thing.
 
 ---
 
@@ -45,7 +55,7 @@ The following subsections document **Tampermonkey behaviour** (semver + Tampermo
 1.0.0 < 1.0.1 < 1.1.0
 ```
 
-**Note:** `1.9 < 1.10` (numeric comparison, not string) — holds in Tampermonkey and Violentmonkey; Safari string-compare is UNVERIFIED.
+**Note:** `1.9 < 1.10` (numeric comparison, not string) — verified in Tampermonkey and Violentmonkey; Safari string-compare is UNVERIFIED.
 
 ### Equivalent Versions (Tampermonkey reference)
 
@@ -57,7 +67,7 @@ These are considered equal in Tampermonkey:
 16.4 == 16.04
 ```
 
-Violentmonkey/Greasemonkey likely behave the same for numeric equivalence, but edge cases (trailing dots, leading zeros) are UNVERIFIED.
+Verified equal in Violentmonkey (its comparator parses segments as integers). Greasemonkey 4+'s semver library normalizes segment count, so the same equality is expected there, though not separately replicated.
 
 ### Pre-release Tags (semver + Tampermonkey behaviour)
 
@@ -82,7 +92,7 @@ Alpha-v1 < Alpha-v2 < Alpha-v10 < Beta < 1.0
 
 ## Key Relations Table (Tampermonkey reference)
 
-Preserved alongside the exhaustive hierarchy — prose decisions rendered as a table per the skill style guide. All relations below are **Tampermonkey reference**; Violentmonkey/Greasemonkey/Safari may differ at edges (UNVERIFIED).
+Preserved alongside the exhaustive hierarchy — prose decisions rendered as a table per the skill style guide. All relations below are **Tampermonkey reference**; see the comparator matrix above for verified Violentmonkey/Greasemonkey behaviour; Safari remains UNVERIFIED at edges.
 
 | A | Relation | B | Note (Tampermonkey) |
 | --- | --- | --- | --- |
@@ -150,15 +160,15 @@ Beta
 2023-09-11_14-0
 ```
 
-Violentmonkey: expects the same broad ordering for simple semver/date versions, but the full edge list above is not guaranteed — verify per Violentmonkey docs.
-Greasemonkey 4+: similar simple comparator — UNVERIFIED edges.
+Violentmonkey: numeric-segment equality holds as listed (source-verified); exotic tokens like `Alpha-v1`, `pre*`, and date-plus-suffix forms follow its own simpler rules — do not assume Tampermonkey's full hierarchy.
+Greasemonkey 4+: strict semver — versions without complete `X.Y.Z` before a prerelease tag (e.g. `2023-08-17.alpha`, `1.1a`) may be REJECTED outright, disabling update checks for that script. Prefer plain `X.Y.Z[-pre][+build]`.
 Safari Userscripts: string-compare — UNVERIFIED; do not rely on numeric or prerelease semantics.
 
 ---
 
 ## Recommended Version Formats
 
-Formats below are portable; comparison semantics remain manager-specific, so always verify that a bump is detected as newer in your target managers.
+Only the semver family is verified portable across TM / VM / GM4+ (see The Portable Subset above). Date-based formats work in Tampermonkey but are risky elsewhere — labeled below. Always verify that a bump is detected as newer in your target managers.
 
 ### Semantic Versioning (Recommended)
 
@@ -180,9 +190,11 @@ Formats below are portable; comparison semantics remain manager-specific, so alw
 // @version 1.0.0
 ```
 
-Pre-release ordering (`-alpha` < `-beta` < release) is Tampermonkey and semver behaviour; other managers expect similar but verify per manager docs.
+Pre-release ordering (`-alpha` < `-beta` < release) is verified in Tampermonkey, Violentmonkey, and Greasemonkey 4+ — provided the tag attaches to a complete `X.Y.Z` (all examples above qualify). Never write `1.0-alpha`; Greasemonkey treats it as invalid and disables update checks for the script.
 
-### Date-Based Versions
+### Date-Based Versions — Tampermonkey-leaning, NOT portable
+
+Greasemonkey's strict-semver comparator may reject these entirely (silently disabling updates); Violentmonkey parses them by its own rules. Use only if you target Tampermonkey specifically.
 
 ```javascript
 // @version 2024-01-15
@@ -190,7 +202,7 @@ Pre-release ordering (`-alpha` < `-beta` < release) is Tampermonkey and semver b
 // @version 2024-01-16
 ```
 
-### Date-Time Based
+### Date-Time Based — Tampermonkey-leaning, NOT portable
 
 ```javascript
 // @version 2024-01-15_14-30
@@ -234,7 +246,7 @@ Pre-release ordering (`-alpha` < `-beta` < release) is Tampermonkey and semver b
 // @version 1.1.0
 ```
 
-Other managers: pre-release tags are available but ordering is UNVERIFIED at edges — test a `-dev` vs release bump before relying.
+Violentmonkey: hyphenated prerelease orders below its release (source-verified). Greasemonkey 4+: prerelease valid only on complete `X.Y.Z` (`1.0.0-dev` yes, `1.0-dev` invalid). Safari: UNVERIFIED — test a `-dev` vs release bump before relying.
 
 ### 4. Build Metadata — semver + Tampermonkey behaviour
 
@@ -245,7 +257,7 @@ Use `+` for build info (doesn't affect comparison order in Tampermonkey/semver):
 // @version 1.0.0+20240115
 ```
 
-Other managers may ignore or string-compare the `+` suffix — verify per manager docs; build metadata is **UNVERIFIED** outside Tampermonkey.
+Build metadata after `+` is ignored by Tampermonkey, Violentmonkey, and Greasemonkey 4+ (all source/doc verified); Safari remains UNVERIFIED.
 
 ---
 

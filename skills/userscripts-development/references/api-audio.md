@@ -89,9 +89,9 @@ Register/remove an audio-state-change listener.
 // @grant GM_audio
 
 function audioListener(event) {
-  // Event shape below is UNVERIFIED against official docs — log it once to confirm
-  // before depending on specific fields:
-  if ("muted" in event) console.log(event.muted ? "muted" : "unmuted");
+  // Documented shape (tampermonkey.net GM_audio): { muted?: string | false, audible?: boolean }
+  // Fields are optional — check presence before use:
+  if ("muted" in event) console.log(event.muted ? "muted by " + event.muted : "unmuted");
   if ("audible" in event) console.log("audible:", event.audible);
 }
 
@@ -101,7 +101,7 @@ GM_audio.addStateChangeListener(audioListener);
 GM_audio.removeStateChangeListener(audioListener);
 ```
 
-Promise forms (`await GM.audio.addStateChangeListener(...)` / `removeStateChangeListener(...)`) exist under `@grant GM.audio`. The exact event object fields are **UNVERIFIED** — feature-detect fields (`"muted" in event`, `"audible" in event`) rather than assuming shapes.
+Promise forms (`await GM.audio.addStateChangeListener(...)` / `removeStateChangeListener(...)`) exist under `@grant GM.audio`. Note the listener's field names differ from `getState`'s: the event uses `muted`/`audible`, while `getState` returns `{ isMuted?, muteReason?, isAudible? }`. Keep the presence checks above — all fields are optional in the documented shape.
 
 ---
 
@@ -149,7 +149,7 @@ Storage APIs are portable; only the audio calls are Tampermonkey-specific:
 
 ## Error Handling
 
-The error strings shown in older drafts (`not_supported`, `permission_denied`) are **UNVERIFIED** — no official documentation confirms them. Log the raw error value instead of switching on assumed strings:
+The error strings shown in older drafts (`not_supported`, `permission_denied`) are **undocumented** — verified against the official Tampermonkey docs, which describe callback/promise errors only as a generic string message with no enumerated values. Log the raw error value instead of switching on assumed strings:
 
 ```javascript
 GM_audio.setMute({ isMuted: true }, (error) => {

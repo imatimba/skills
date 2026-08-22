@@ -57,8 +57,8 @@ Legend: ✅ supported · ⚠️ partial/experimental · ❌ absent. Versions are
 | `GM_addElement(tag, attrs)` / `(parent, tag, attrs)` | ✅ (returns element since 5.5.0) | ✅ sync | ❌ (issue #2484) | ❌ |
 | `GM.addElement` promise | ✅ | ✅ since 2.13.1 | ❌ | ❌ |
 | `unsafeWindow` | ✅ needs explicit `@grant unsafeWindow` when other grants exist | ✅ exposed without grant; sandbox off only with `@grant none` (since 2.32) | ✅ (`window.wrappedJSObject` equivalent) | ❌ **none at all** |
-| `GM_getResourceText(name)` sync | ✅ | ✅ | ⚠️ planned #2548, current state UNVERIFIED | ❌ resources not implemented |
-| `GM.getResourceText` | ✅ promise | ✅ sync-typed | ⚠️ UNVERIFIED | ❌ |
+| `GM_getResourceText(name)` sync | ✅ | ✅ | ❌ **not implemented** (GM 4.0–4.14; greasemonkey/greasemonkey#2548 still open; wiki: "does not exist" since 4.0) | ❌ resources not implemented |
+| `GM.getResourceText` | ✅ promise | ✅ sync-typed | ❌ not implemented — polyfill via `fetch(await GM.getResourceUrl(name)).then(r => r.text())` | ❌ |
 | `GM_getResourceURL(name[, isBlobUrl])` | ✅ data: URL | ✅ `isBlobUrl` since 2.13.1 | ❌ sync form | ❌ |
 | `GM.getResourceUrl(name)` promise (lowercase rl!) | ✅ | ✅ since 2.12.0 | ✅ | ❌ |
 
