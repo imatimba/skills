@@ -164,11 +164,11 @@ const canMuteTab = typeof GM_audio !== "undefined" || typeof GM?.audio !== "unde
 
 ## 7. Universal Limitations (all managers)
 
-- No local filesystem access.
-- Cross-origin iframe DOM is blocked by the browser (same-origin policy), regardless of manager.
-- GM storage is per-browser-profile unless the manager offers cloud sync.
+- No local filesystem access via any GM API. Adjacent capabilities don't change this: `GM_download` writes only through the browser's download subsystem; `GM_xmlhttpRequest` blob/arraybuffer responses stay in memory; `@require`/`@resource` are network-only fetches by default — Tampermonkey accepts `file://` requires only after the user opts in to local file access (FAQ Q402). The "allow file URLs" extension toggle grants permission to run scripts on local pages — it is not a filesystem API.
+- Cross-origin iframe DOM is unreachable from the top frame (browser same-origin policy), regardless of manager. To affect iframe content, match the iframe's own URL — every manager injects separate script instances into frames whose URLs match; `@noframes` = top-frame-only.
+- GM storage values are per-browser-profile and never cloud-synced: manager sync features (TM TESLA/GDrive/Dropbox/WebDAV, VM Dropbox/OneDrive/GDrive/WebDAV/S3, Greasemonkey Firefox Sync, Safari iCloud folder) cover scripts and settings only.
 - Very strict CSP can still defeat injection (VM degrades to content world; TM relaxation is best-effort; neither guarantees bypass).
-- A userscript in an isolated/content world observes the DOM but shares no JS scope with the page — page variables require the bridges in §4.
+- A userscript in an isolated/content world observes the DOM but shares no JS scope with the page — page variables require the bridges in §4. (Edge case: DOM prototypes such as `Element.prototype` live in the shared native realm — prototype mutations are visible cross-world.)
 
 ---
 
