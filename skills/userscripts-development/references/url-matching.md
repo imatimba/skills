@@ -1,6 +1,8 @@
 # URL Matching Patterns
 
-Complete guide to @match, @include, and @exclude patterns.
+Complete guide to @match, @include, and @exclude patterns. For per-manager header support see [managers.md](managers.md) §3.
+
+> **@match base = Chrome match patterns everywhere; Violentmonkey ≥2.10.4 adds a documented superset** (`.tld` and extra host-position wildcards inside `@match`). `@include` globs cover TLDs in all managers. See table below.
 
 ---
 
@@ -17,7 +19,7 @@ The modern, safer way to specify where scripts run.
 | Component | Description | Wildcards |
 |-----------|-------------|-----------|
 | `scheme` | Protocol (http, https, *) | `*` matches http or https |
-| `host` | Domain name | `*` matches any subdomain |
+| `host` | Domain name | See host-wildcard table below |
 | `path` | URL path | `*` matches any characters |
 
 ### Common Patterns
@@ -42,19 +44,28 @@ The modern, safer way to specify where scripts run.
 // @match https://example.com/page.html
 ```
 
-### Wildcard Rules
+### Wildcard Rules — Base Grammar vs Violentmonkey Superset
 
-| Pattern | Matches | Does NOT Match |
-|---------|---------|----------------|
-| `https://example.com/*` | example.com/page | sub.example.com |
-| `https://*.example.com/*` | sub.example.com | example.com |
-| `*://example.com/*` | http://example.com, https://example.com | ftp://example.com |
-| `https://example.com/app/*` | example.com/app/page | example.com/other |
+Chrome match-pattern grammar applies in all managers. Violentmonkey ≥2.10.4 extends it inside `@match`.
+
+| Pattern | Base (Chrome) support | Violentmonkey ≥2.10.4 | Matches | Does NOT Match |
+|---------|----------------------|------------------------|---------|----------------|
+| `https://example.com/*` | ✅ | ✅ | example.com/page | sub.example.com |
+| `https://*.example.com/*` | ✅ (`*` only as leftmost label) | ✅ | sub.example.com | example.com, foo.bar.example.com* |
+| `*://example.com/*` | ✅ | ✅ | http://example.com, https://example.com | ftp://example.com |
+| `https://example.com/app/*` | ✅ | ✅ | example.com/app/page | example.com/other |
+| `https://example.*/*` | ❌ not valid `@match` | ✅ (`.tld` wildcard) | example.com, example.co.uk, example.de | — |
+| `https://*.example.*/*` | ❌ | ✅ (two host wildcards) | foo.example.com, bar.example.co.uk | — |
+| `https://*example.com/*` | ❌ | ✅ (wildcard not at dot boundary) | example.com, myexample.com | — |
+
+\* Base `*.example.com` typically matches one subdomain level; behaviour for nested subdomains varies — test per manager.
+
+**Takeaway:** For maximum portability, stay within base Chrome grammar in `@match` and use `@include` for TLD wildcards (or add explicit `@match` lines per TLD). Use the Violentmonkey superset only when targeting Violentmonkey.
 
 ### Special Patterns
 
 ```javascript
-// Match root domain AND all subdomains
+// Match root domain AND all subdomains — need two lines in base grammar
 // @match https://example.com/*
 // @match https://*.example.com/*
 
@@ -64,6 +75,10 @@ The modern, safer way to specify where scripts run.
 
 // Path with wildcard in middle
 // @match https://example.com/user/*/profile
+
+// Violentmonkey ≥2.10.4 superset — TLD wildcard directly in @match (not portable)
+// @match https://example.*/*
+// @match https://*.example.*/*
 ```
 
 ---
@@ -81,8 +96,13 @@ More flexible but less secure than @match. Supports glob patterns and regex.
 // Multiple wildcards
 // @include *://*.example.com/*
 
-// Match any TLD
+// Match any TLD — works in ALL managers via @include glob
 // @include https://example.*/*
+// Equivalent Violentmonkey ≥2.10.4 @match: https://example.*/*
+
+// Any subdomain + any TLD — @include glob in all managers
+// @include https://*.example.*/*
+// Equivalent Violentmonkey ≥2.10.4 @match: https://*.example.*/*
 ```
 
 ### Regular Expressions
@@ -105,8 +125,9 @@ Wrap in forward slashes:
 | Feature | @match | @include |
 |---------|--------|----------|
 | Security | Stricter | More permissive |
-| Regex support | No | Yes |
-| TLD wildcards | No | Yes (`example.*`) |
+| Regex support | No | Yes (wrapped in `/.../`; Safari plans removal — prefer `@match` + runtime test) |
+| TLD wildcards | Base: No — only Violentmonkey ≥2.10.4 superset (`example.*`) | Yes — `example.*` in all managers |
+| Extra host wildcards (`*.example.*`, `*example.com`) | Base: No — Violentmonkey ≥2.10.4 only | Yes via glob in all managers |
 | Recommended | Yes | Legacy |
 
 ---
@@ -149,10 +170,12 @@ Exclude URLs even if they match @match or @include.
 ### Multiple Related Sites
 
 ```javascript
-// Company's multiple domains
+// Company's multiple domains — explicit per TLD for portability
 // @match https://example.com/*
 // @match https://example.co.uk/*
 // @match https://example.de/*
+// Portable alternative: one @include glob
+// @include https://example.*/*
 ```
 
 ### SaaS Application
@@ -273,21 +296,24 @@ patterns.forEach(pattern => {
 
 ### Mistake 5: Query Parameters
 
-@match doesn't match query strings or hashes:
+`@match` doesn't match query strings reliably — the match-pattern spec ignores `?` and `#`:
 
 ```javascript
-// This won't match https://example.com/page?id=123
+// This won't reliably match https://example.com/page?id=123
 // @match https://example.com/page?*
 
-// Use @include with regex instead
+// Workaround — regex in @include (supported in Tampermonkey, Violentmonkey, Greasemonkey 4+)
+// Safari plans to remove regex support in @include/@exclude — prefer @match + runtime URL check there
 // @include /^https:\/\/example\.com\/page\?/
+// Runtime fallback (portable):
+if (!location.href.includes('?id=')) return;
 ```
 
 ---
 
 ## URL Fragment Handling
 
-@match ignores URL fragments (#hash):
+`@match` ignores URL fragments (`#hash`):
 
 ```javascript
 // @match https://example.com/*
@@ -298,33 +324,57 @@ patterns.forEach(pattern => {
 // https://example.com/page#section2
 ```
 
-For SPA fragment detection, use window.onurlchange:
+For SPA hash/History navigation, do NOT rely on a manager event beyond Tampermonkey. The portable fallback is patching `history.pushState`/`replaceState` plus `popstate`/`hashchange` (see [managers.md](managers.md) §2 and [patterns.md](patterns.md)).
 
 ```javascript
-// @grant window.onurlchange
+// Tampermonkey-only — window.onurlchange (requires @grant window.onurlchange, Tampermonkey only)
+// Violentmonkey declined this API (issue #1195); Greasemonkey 4+ and Safari also do not implement it
+// Portable code must feature-detect and fall back to history patching
 
-if (window.onurlchange === null) {
+// @grant window.onurlchange  // Tampermonkey only
+
+if (typeof window.onurlchange !== 'undefined' && window.onurlchange === null) {
     window.addEventListener('urlchange', (info) => {
-        console.log('URL changed:', info.url);
+        console.log('URL changed (Tampermonkey):', info.url);
     });
 }
+
+// Portable fallback — works in all managers
+let lastUrl = location.href;
+function handleUrlChange() {
+    if (location.href !== lastUrl) {
+        lastUrl = location.href;
+        console.log('URL changed:', lastUrl);
+        onPageChange();
+    }
+}
+const _pushState = history.pushState;
+const _replaceState = history.replaceState;
+history.pushState = function (...args) { const r = _pushState.apply(this, args); handleUrlChange(); return r; };
+history.replaceState = function (...args) { const r = _replaceState.apply(this, args); handleUrlChange(); return r; };
+window.addEventListener('popstate', handleUrlChange);
+window.addEventListener('hashchange', handleUrlChange);
 ```
 
 ---
 
 ## Performance Considerations
 
-More @match patterns = more overhead:
+> **Heuristic, not a measured guarantee** — manager matching cost depends on engine, pattern count, and regex complexity. Treat the guidance below as ordering hints; benchmark if you target hundreds of patterns.
+
+More URL patterns introduce more matching work at navigation time (heuristic):
 
 ```javascript
-// SLOW - 100 separate patterns
+// Heuristic: many separate patterns introduce more matching overhead
 // @match https://site1.com/*
 // @match https://site2.com/*
 // ... 98 more ...
 
-// FASTER - use wildcards where possible
+// Heuristic: fewer broad patterns or a single regex @include may reduce match cost
 // @match https://*.example.com/*
 
-// Or use @include with regex for complex patterns
+// Or use @include with regex for complex patterns (heuristic: one regex may be cheaper than many @match)
 // @include /^https:\/\/(site1|site2|site3)\.com/
 ```
+
+If you need to cover many hosts, prefer wildcards or a single `@include` regex over dozens of individual `@match` lines — but verify per manager, as regex-in-`@include` is slated for removal in Safari.

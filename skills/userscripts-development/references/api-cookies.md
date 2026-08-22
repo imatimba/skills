@@ -2,21 +2,33 @@
 
 Documentation for browser cookie manipulation functions.
 
+> **Support banner — GM_cookie is Tampermonkey (stable) & Violentmonkey (since 2.35.1) only. Greasemonkey 4+ and Safari "Userscripts" app: not supported — use `document.cookie` fallback.** See `managers.md` §2 Browser/OS integration → Cookies row and `browser-compatibility.md` for the broader compatibility matrix. **Tampermonkey enforces `@match`/`@include` host access for target URLs** — a script can only list/set/delete cookies for hosts its metadata grants access to.
+
 ---
 
 ## Overview
 
-The GM_cookie API allows userscripts to:
-- List cookies from any domain (with @match/@include access)
+The `GM_cookie` / `GM.cookie` API allows userscripts where supported to:
+- List cookies from any granted domain
 - Set cookies with full control over attributes
 - Delete cookies
 
-**Note:** httpOnly cookies are supported in BETA versions only.
-
 **Required grant:**
+
 ```javascript
-// @grant GM_cookie
+// @grant GM_cookie   // sync callback form
+// @grant GM.cookie   // promise form (Tampermonkey & Violentmonkey expose both)
+// Both grants resolve to the same permission; pick the form you call.
 ```
+
+**Sync-callback vs promise duality:**
+
+| Form | Manager support | Signature |
+| --- | --- | --- |
+| `GM_cookie.list/set/delete(details[, callback])` | Tampermonkey (stable), Violentmonkey since 2.35.1 — callback style | `callback(result, error)` or `callback(error)` for set/delete |
+| `GM.cookie.list/set/delete(details)` | Same managers — promise style | `await GM.cookie.list(details)` → `Promise<Cookie[]>` |
+
+Greasemonkey 4+ and Safari do not implement either form — guard with `typeof GM_cookie !== 'undefined'` or `typeof GM?.cookie !== 'undefined'` and fall back to `document.cookie`.
 
 ---
 
@@ -24,12 +36,20 @@ The GM_cookie API allows userscripts to:
 
 Retrieve cookies matching specified criteria.
 
+### Decision table — filters
+
+| Need | Filter to use | Notes |
+| --- | --- | --- |
+| Scope to host/domain | `domain` or `url` | `url` requires a full URL (`https://example.com/path`); `domain` matches domain scope (`.example.com` includes subdomains). Tampermonkey checks `@match`/`@include` for the target. |
+| Filter by name/path | `name`, `path` | Exact match. |
+| CHIPS partitioned cookies | `partitionKey: { topLevelSite: 'https://...' }` | **Tampermonkey 5.2+ (Chrome CHIPS) only**; Violentmonkey ignores this key. Empty `partitionKey: {}` lists all partitions where supported. |
+
 ### Basic Usage
 
 ```javascript
 // @grant GM_cookie
 
-// List all cookies for current domain
+// List all cookies for current domain — callback form
 GM_cookie.list({}, function(cookies, error) {
     if (error) {
         console.error('Error:', error);
@@ -38,8 +58,8 @@ GM_cookie.list({}, function(cookies, error) {
     console.log('Cookies:', cookies);
 });
 
-// Async version
-const cookies = await GM.cookie.list();
+// Promise form
+const cookies = await GM.cookie.list({});
 ```
 
 ### Filter Options
@@ -47,6 +67,7 @@ const cookies = await GM.cookie.list();
 ```javascript
 // By domain
 GM_cookie.list({ domain: 'example.com' }, callback);
+await GM.cookie.list({ domain: 'example.com' });
 
 // By name
 GM_cookie.list({ name: 'sessionId' }, callback);
@@ -57,31 +78,49 @@ GM_cookie.list({ path: '/app' }, callback);
 // By URL
 GM_cookie.list({ url: 'https://example.com/page' }, callback);
 
-// Partitioned cookies (v5.2+)
+// Partitioned cookies — Tampermonkey 5.2+ only (Chrome CHIPS); Violentmonkey ignores
 GM_cookie.list({
     partitionKey: { topLevelSite: 'https://example.com' }
 }, callback);
 
-// All cookies (empty partitionKey)
+// All partitions (empty object) — Tampermonkey 5.2+ only
 GM_cookie.list({ partitionKey: {} }, callback);
 ```
 
 ### Cookie Object Properties
 
+Each element returned by `list` has:
+
+| Property | Type | Manager support | Description |
+| --- | --- | --- | --- |
+| `name` | string | Tampermonkey, Violentmonkey | Cookie name |
+| `value` | string | Tampermonkey, Violentmonkey | Cookie value |
+| `domain` | string | Tampermonkey, Violentmonkey | Domain (e.g., `".example.com"`) |
+| `path` | string | Tampermonkey, Violentmonkey | Path (e.g., `"/"`) |
+| `secure` | boolean | Tampermonkey, Violentmonkey | HTTPS only |
+| `httpOnly` | boolean | Tampermonkey, Violentmonkey | Not accessible via `document.cookie`; httpOnly handling is beta-gated (see Set section) |
+| `sameSite` | `"strict"` \| `"lax"` \| `"none"` | Tampermonkey, Violentmonkey | SameSite attribute |
+| `session` | boolean | Tampermonkey, Violentmonkey | `true` if session cookie (no `expirationDate`) |
+| `expirationDate` | number | Tampermonkey, Violentmonkey | Unix timestamp **in seconds since epoch** (not ms) |
+| `hostOnly` | boolean | Tampermonkey, Violentmonkey | Exact domain match only |
+| `firstPartyDomain` | string | **Firefox-specific** (Tampermonkey/Violentmonkey on Firefox) | First-party isolation; absent on Chrome/Edge |
+| `partitionKey` | `{ topLevelSite: string }` | **Tampermonkey 5.2+ only** | CHIPS partitioned key; Violentmonkey ignores / does not populate |
+
 ```javascript
 GM_cookie.list({}, (cookies, error) => {
     cookies.forEach(cookie => {
-        console.log(cookie.name);           // Cookie name
-        console.log(cookie.value);          // Cookie value
-        console.log(cookie.domain);         // Domain (e.g., ".example.com")
-        console.log(cookie.path);           // Path (e.g., "/")
-        console.log(cookie.secure);         // HTTPS only
-        console.log(cookie.httpOnly);       // Not accessible via JS
-        console.log(cookie.sameSite);       // "strict", "lax", "none"
-        console.log(cookie.session);        // Session cookie (no expiry)
-        console.log(cookie.expirationDate); // Unix timestamp (seconds)
-        console.log(cookie.hostOnly);       // Exact domain match only
-        console.log(cookie.firstPartyDomain); // First-party isolation
+        console.log(cookie.name);
+        console.log(cookie.value);
+        console.log(cookie.domain);
+        console.log(cookie.path);
+        console.log(cookie.secure);
+        console.log(cookie.httpOnly);
+        console.log(cookie.sameSite);
+        console.log(cookie.session);
+        console.log(cookie.expirationDate); // seconds since epoch
+        console.log(cookie.hostOnly);
+        console.log(cookie.firstPartyDomain); // Firefox only
+        console.log(cookie.partitionKey);     // Tampermonkey 5.2+ only
     });
 });
 ```
@@ -97,7 +136,7 @@ Create or update a cookie.
 ```javascript
 // @grant GM_cookie
 
-// Simple cookie
+// Simple cookie — callback form
 GM_cookie.set({
     name: 'myCookie',
     value: 'myValue'
@@ -109,7 +148,7 @@ GM_cookie.set({
     }
 });
 
-// Async version
+// Promise form
 await GM.cookie.set({ name: 'myCookie', value: 'myValue' });
 ```
 
@@ -121,28 +160,38 @@ GM_cookie.set({
     name: 'sessionToken',
     value: 'abc123xyz',
 
-    // Optional - domain and path
-    url: 'https://example.com',           // URL to associate with
+    // Optional — domain and path (or url)
+    url: 'https://example.com',           // URL to associate with (checked against @match/@include in Tampermonkey)
     domain: '.example.com',               // Cookie domain
     path: '/',                            // Cookie path
 
-    // Optional - security
+    // Optional — security
     secure: true,                         // HTTPS only
-    httpOnly: true,                       // Not accessible via JS
+    httpOnly: true,                       // BETA-GATED — see note below
     sameSite: 'strict',                   // "strict", "lax", "none"
 
-    // Optional - expiry
+    // Optional — expiry (seconds since epoch — both managers)
     expirationDate: Math.floor(Date.now() / 1000) + 86400,  // 24 hours
 
-    // Optional - partitioning (v5.2+)
+    // Optional — partitioning — Tampermonkey 5.2+ only (Chrome CHIPS)
     partitionKey: {
         topLevelSite: 'https://example.com'
     },
 
-    // Optional - first-party isolation
+    // Optional — first-party isolation — Firefox-specific
     firstPartyDomain: 'example.com'
 }, callback);
+
+// Promise form — same details, no callback
+await GM.cookie.set({ name: 'x', value: 'y', url: 'https://example.com/' });
 ```
+
+> **httpOnly — beta-gated in BOTH managers (resolves contradiction with earlier overview):**
+> - **Tampermonkey:** enable Config Mode **Advanced** → Security → allow httpOnly cookies.
+> - **Violentmonkey:** needs **BOTH** the global httpOnly toggle **and** the per-script toggle enabled.
+> - Without these toggles, `httpOnly: true` is ignored or errors. `managers.md` §2 Cookies row is the source of truth.
+
+> **expirationDate — both managers use seconds since epoch** (not milliseconds). Compute with `Math.floor(Date.now() / 1000) + seconds` or `new Date('2025-12-31').getTime() / 1000`.
 
 ### Cookie Expiry Examples
 
@@ -150,7 +199,7 @@ GM_cookie.set({
 // Session cookie (no expirationDate)
 GM_cookie.set({ name: 'session', value: 'temp' });
 
-// Expire in 1 hour
+// Expire in 1 hour — seconds since epoch
 GM_cookie.set({
     name: 'hourly',
     value: 'data',
@@ -164,7 +213,7 @@ GM_cookie.set({
     expirationDate: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60)
 });
 
-// Expire at specific date
+// Expire at specific date — seconds since epoch
 GM_cookie.set({
     name: 'endOfYear',
     value: 'data',
@@ -174,16 +223,17 @@ GM_cookie.set({
 
 ---
 
-## GM_cookie.delete(details, callback)
+## GM_cookie.delete(details[, callback])
 
-Remove a cookie.
+Remove a cookie. **Callback is optional** — `[, callback]` — consistent with `list` and `set`.
 
 ### Basic Usage
 
 ```javascript
 // @grant GM_cookie
 
-GM_cookie.delete({ name: 'myCookie' }, function(error) {
+// Callback form — callback is optional
+GM_cookie.delete({ name: 'myCookie', url: 'https://example.com/' }, function(error) {
     if (error) {
         console.error('Failed to delete:', error);
     } else {
@@ -191,22 +241,45 @@ GM_cookie.delete({ name: 'myCookie' }, function(error) {
     }
 });
 
-// Async version
-await GM.cookie.delete({ name: 'myCookie' });
+// Without callback
+GM_cookie.delete({ name: 'myCookie', url: 'https://example.com/' });
+
+// Promise form
+await GM.cookie.delete({ name: 'myCookie', url: 'https://example.com/' });
 ```
 
 ### Delete Options
 
+| Property | Required | Notes |
+| --- | --- | --- |
+| `name` | Yes | Cookie name |
+| `url` | Recommended | URL associated with the cookie — **preferred identifier** (checked against `@match`/`@include` in Tampermonkey) |
+| `firstPartyDomain` | No | Firefox-specific |
+| `partitionKey` | No | **Tampermonkey 5.2+ only** (Chrome CHIPS); Violentmonkey ignores |
+
 ```javascript
+// By URL + name — preferred (matches the file's own spec table)
 GM_cookie.delete({
     name: 'sessionToken',
-    url: 'https://example.com',           // URL associated with cookie
-    firstPartyDomain: 'example.com',      // First-party isolation
-    partitionKey: {                       // Partitioned cookies (v5.2+)
-        topLevelSite: 'https://example.com'
-    }
+    url: 'https://example.com/'
+}, callback);
+
+// With partitioning — Tampermonkey 5.2+ only
+GM_cookie.delete({
+    name: 'sessionToken',
+    url: 'https://example.com/',
+    partitionKey: { topLevelSite: 'https://example.com' }
+}, callback);
+
+// Firefox first-party isolation
+GM_cookie.delete({
+    name: 'sessionToken',
+    url: 'https://example.com/',
+    firstPartyDomain: 'example.com'
 }, callback);
 ```
+
+> **Note:** `domain` is **not** a valid delete identifier — use `url` + `name`. The `CookieManager` example below has been fixed accordingly.
 
 ---
 
@@ -248,6 +321,8 @@ updateCookie('visitCount', val => String(parseInt(val || '0') + 1));
 class CookieManager {
     constructor(domain) {
         this.domain = domain;
+        // Derive a URL for delete/set operations that require `url`
+        this.baseUrl = `https://${domain}/`;
     }
 
     async get(name) {
@@ -259,6 +334,7 @@ class CookieManager {
         await GM.cookie.set({
             name,
             value,
+            url: options.url || this.baseUrl,
             domain: this.domain,
             path: options.path || '/',
             secure: options.secure ?? true,
@@ -269,7 +345,8 @@ class CookieManager {
     }
 
     async delete(name) {
-        await GM.cookie.delete({ name, domain: this.domain });
+        // Fixed: delete uses url + name (not domain alone) per spec table above
+        await GM.cookie.delete({ name, url: this.baseUrl });
     }
 
     async getAll() {
@@ -279,7 +356,7 @@ class CookieManager {
     async clear() {
         const cookies = await this.getAll();
         for (const cookie of cookies) {
-            await this.delete(cookie.name);
+            await GM.cookie.delete({ name: cookie.name, url: this.baseUrl });
         }
     }
 }
@@ -347,16 +424,33 @@ async function checkSessionSecurity() {
 }
 ```
 
+### Fallback for unsupported managers
+
+```javascript
+// Greasemonkey 4+ / Safari — use document.cookie
+function getDocumentCookie(name) {
+    const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([$?*|{}\]\\^])/g, '\\$1') + '=([^;]*)'));
+    return match ? decodeURIComponent(match[1]) : null;
+}
+
+function setDocumentCookie(name, value, { days = 7, path = '/', secure = true, sameSite = 'Lax' } = {}) {
+    const expires = new Date(Date.now() + days * 864e5).toUTCString();
+    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=${path}; SameSite=${sameSite}${secure && location.protocol === 'https:' ? '; Secure' : ''}`;
+}
+```
+
 ---
 
 ## Security Considerations
 
-1. **Access Control**: The userscript manager checks @match/@include access to the URL before allowing cookie operations
+1. **Access Control**: Tampermonkey checks `@match`/`@include` access to the target URL before allowing cookie operations; Violentmonkey declares `@connect`-like host scope similarly. See `managers.md` §2.
 
-2. **httpOnly Cookies**: Only available in BETA versions - most session cookies are httpOnly
+2. **httpOnly Cookies**: Beta-gated in **both** managers — Tampermonkey: Advanced → Security toggle; Violentmonkey: global + per-script toggles. Most session cookies are `httpOnly` — without the toggles you cannot read/set them.
 
-3. **Secure Flag**: Always set `secure: true` for sensitive cookies
+3. **Secure Flag**: Always set `secure: true` for sensitive cookies.
 
-4. **SameSite**: Use `sameSite: 'strict'` or `'lax'` to prevent CSRF
+4. **SameSite**: Use `sameSite: 'strict'` or `'lax'` to prevent CSRF.
 
-5. **Domain Scope**: Be careful with domain - `.example.com` includes all subdomains
+5. **Domain Scope**: Be careful with domain — `.example.com` includes all subdomains.
+
+Cross-reference: `managers.md` §2 Cookies row, `browser-compatibility.md` (Browser Support Matrix).

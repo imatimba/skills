@@ -1,6 +1,8 @@
 # Common Userscript Pitfalls
 
-Mistakes that break userscripts and how to avoid them.
+Mistakes that break userscripts and how to avoid them. Scope: Violentmonkey-first, portable across TM / VM / GM4+ / Safari Userscripts. Manager facts per `managers.md`; anything not confirmed there is UNVERIFIED.
+
+Manager literals for `GM_info.scriptHandler`: `"Tampermonkey"` | `"Violentmonkey"` | `"Greasemonkey"` | `"Userscripts"` (Safari app). Prefer capability checks over handler branching. Labeling convention for manager-specific notes follows Pitfall 15 as the model (`> **Manager-specific note:** This pitfall is specific to …`).
 
 ---
 
@@ -22,11 +24,16 @@ Running on every page slows the browser and causes unexpected behaviour.
 
 **Why it matters:** Overly broad patterns mean your script runs on thousands of sites, consuming memory and potentially breaking pages.
 
+| Decision | Pattern | When to use |
+|----------|---------|-------------|
+| Broad | `*://*/*` | Almost never — debugging only |
+| Scoped | `https://example.com/*` or `https://*.example.com/*` | Always — limit blast radius |
+
 ---
 
 ## Pitfall 2: Missing @connect
 
-Cross-origin requests fail silently or show permission dialogs without @connect.
+Cross-origin requests fail silently or show permission dialogs without `@connect` — but enforcement is **manager-specific**.
 
 **Wrong:**
 ```javascript
@@ -34,7 +41,7 @@ Cross-origin requests fail silently or show permission dialogs without @connect.
 // No @connect declaration
 
 GM_xmlhttpRequest({
-    url: 'https://api.example.com/data',  // Will prompt or fail
+    url: 'https://api.example.com/data',  // Will prompt or fail in TM
     ...
 });
 ```
@@ -43,20 +50,28 @@ GM_xmlhttpRequest({
 ```javascript
 // @grant GM_xmlhttpRequest
 // @connect api.example.com
+// @connect cdn.example.com
 
 GM_xmlhttpRequest({
-    url: 'https://api.example.com/data',  // Works
+    url: 'https://api.example.com/data',
     ...
 });
 ```
 
-**Best practice:** Declare all known domains, then add `@connect *` as fallback.
+| Manager | `@connect` enforcement | Effect of missing entry |
+|---------|------------------------|-------------------------|
+| TM | **Strict** — unlisted hosts prompt/block (initial + final URL) | Blocked or permission prompt |
+| VM | Declared but **NOT enforced** — requests allowed anyway | Allowed (declaration advisory) |
+| GM4+ | Ignored / not used | Allowed |
+| Safari Userscripts | n/a | Allowed (promise subset) |
+
+**Best practice:** Enumerate known domains for TM compatibility (`// @connect api.example.com` per host). `@connect *` as a fallback is a TM-model concept — it satisfies TM's strict check but is elsewhere advisory; prefer explicit domains and add `*` only when you truly need wildcard. Diagnostic checklist labels this as `[@connect — TM-required]` (see Quick Diagnostic Checklist).
 
 ---
 
 ## Pitfall 3: Not Waiting for Elements
 
-Elements may not exist when your script runs, especially on SPAs.
+Elements may not exist when your script runs, especially on SPAs or at `document-start`.
 
 **Wrong:**
 ```javascript
@@ -69,7 +84,7 @@ document.querySelector('#dynamic-content').textContent = 'Modified';
 
 **Right:**
 ```javascript
-// Use waitForElement pattern
+// Use waitForElement pattern — guard document.body (null at document-start)
 async function init() {
     const element = await waitForElement('#dynamic-content');
     element.textContent = 'Modified';
@@ -88,7 +103,8 @@ function waitForElement(selector, timeout = 10000) {
             }
         });
 
-        observer.observe(document.body, { childList: true, subtree: true });
+        // document.body is null at document-start — fall back to documentElement
+        observer.observe(document.body ?? document.documentElement, { childList: true, subtree: true });
         setTimeout(() => {
             observer.disconnect();
             reject(new Error(`Timeout: ${selector}`));
@@ -96,14 +112,26 @@ function waitForElement(selector, timeout = 10000) {
     });
 }
 
-init();
+init().catch(e => console.error('init failed:', e));
+
+// Portable SPA navigation: no universal window.onurlchange (TM-only). For SPAs,
+// patch history + listen popstate/hashchange, or VM.onNavigate from @violentmonkey/url.
+// See browser-compatibility.md and managers.md for fallback snippet.
 ```
+
+Additional guards:
+
+| Concern | Fix |
+|---------|-----|
+| `document.body` null at `document-start` | `observer.observe(document.body ?? document.documentElement, …)` |
+| Unhandled async failure | `init().catch(e => …)` — don't drop the rejection |
+| SPA navigation (no universal `onurlchange`) | History patch (`pushState`/`replaceState` + `popstate`/`hashchange`) or `VM.onNavigate`; `window.onurlchange` is TM-only |
 
 ---
 
 ## Pitfall 4: Blocking Async Operations
 
-GM_xmlhttpRequest is asynchronous - you can't use its return value directly.
+`GM_xmlhttpRequest` is asynchronous — you can't use its return value directly. Which variant exists is **manager-specific**.
 
 **Wrong:**
 ```javascript
@@ -111,7 +139,7 @@ const response = GM_xmlhttpRequest({
     method: 'GET',
     url: 'https://api.example.com/data'
 });
-console.log(response.responseText);  // undefined!
+console.log(response.responseText);  // undefined! (and GM4+/Safari have no callback form)
 ```
 
 **Right (callback):**
@@ -120,7 +148,7 @@ GM_xmlhttpRequest({
     method: 'GET',
     url: 'https://api.example.com/data',
     onload: function(response) {
-        console.log(response.responseText);  // Works
+        console.log(response.responseText);  // Works in TM/VM only
     }
 });
 ```
@@ -131,20 +159,48 @@ const response = await GM.xmlHttpRequest({
     method: 'GET',
     url: 'https://api.example.com/data'
 });
-console.log(response.responseText);  // Works
+console.log(response.responseText);  // Works where promise form exists
+```
+
+| Form | TM | VM | GM4+ | Safari Userscripts | Notes |
+|------|----|----|------|-------------------|-------|
+| `GM_xmlhttpRequest` (callback) | ✅ returns `{abort}` | ✅ returns control | ❌ | ❌ (promise-only) | GM4+/Safari have no callback form |
+| `GM.xmlHttpRequest` (promise) | ✅ (capital H) | ✅ since 2.18.3 | ✅ | ✅ custom promise + `abort` | Shapes differ — feature-detect; Safari promise-only |
+
+**Portable wrapper — feature-detect before calling:**
+
+```javascript
+// Prefer promise form where available; fall back to callback form
+const req = typeof GM !== 'undefined' && GM.xmlHttpRequest ? GM.xmlHttpRequest : GM_xmlhttpRequest;
+
+// Usage: if promise form exists, await it; else wrap callback in promise
+async function fetchText(url) {
+    if (typeof GM !== 'undefined' && GM.xmlHttpRequest) {
+        const r = await GM.xmlHttpRequest({ method: 'GET', url });
+        return r.responseText;
+    }
+    return new Promise((resolve, reject) => {
+        GM_xmlhttpRequest({
+            method: 'GET', url,
+            onload: r => resolve(r.responseText),
+            onerror: reject,
+            ontimeout: () => reject(new Error('timeout'))
+        });
+    });
+}
 ```
 
 ---
 
 ## Pitfall 5: CSP Blocking Script Injection
 
-Content Security Policy blocks dynamically created scripts.
+Content Security Policy blocks dynamically created scripts — but whether `GM_addElement` helps depends on **manager**, not just browser.
 
 **Wrong:**
 ```javascript
 const script = document.createElement('script');
 script.textContent = 'console.log("blocked by CSP")';
-document.head.appendChild(script);  // Blocked!
+document.head.appendChild(script);  // Blocked on strict-CSP pages!
 ```
 
 **Right:**
@@ -152,32 +208,62 @@ document.head.appendChild(script);  // Blocked!
 // @grant GM_addElement
 
 GM_addElement('script', {
-    textContent: 'console.log("bypasses CSP")'
+    textContent: 'console.log("bypasses CSP where supported")'
 });
 ```
+
+| Manager | CSP handling | What `GM_addElement` does | How to verify |
+|---------|--------------|---------------------------|---------------|
+| TM | May strip/relax CSP headers in some modes — **do NOT rely on it** | Bypasses in best-effort modes | Test in VM to surface the real CSP |
+| VM | **Respects page CSP** — falls back to content-world injection if page-world injection fails; no header stripping | Respects CSP; graceful fallback | **Test in VM** — if it works there, it will work in TM; the reverse is not true |
+| GM4+ | Subject to Firefox sandbox; `GM_addElement` ❌ (issue #2484) | No `GM_addElement` — use `@require` or Xray bridges | Verify in GM4+ console |
+| Safari Userscripts | Content world only; `GM_addElement` ❌ | No bypass possible | Design without page-world access |
+
+**Best practice:** Test CSP-sensitive injection in Violentmonkey first — TM may hide the CSP failure by stripping headers. If VM works, you have a truly portable solution.
 
 ---
 
 ## Pitfall 6: Sandbox Context Confusion
 
-Without unsafeWindow, you can't access page variables.
+Whether `unsafeWindow` exists and whether `@grant none` helps depends on **manager** — it is NOT universal.
 
 **Wrong:**
 ```javascript
 // @grant none
 
 // Trying to access page's React app
-console.log(window.React);  // undefined in sandbox
+console.log(window.React);  // undefined in sandbox (and GM_* lost!)
 ```
 
 **Right:**
 ```javascript
 // @grant unsafeWindow
 
-console.log(unsafeWindow.React);  // Works
+if (typeof unsafeWindow !== 'undefined') {
+    console.log(unsafeWindow.React);  // Works in TM/VM/GM4+ only
+} else {
+    console.warn('unsafeWindow absent — Safari or no grant model; design without page-world access');
+}
 ```
 
-**Note:** `@grant none` disables the sandbox entirely (different approach).
+| Manager | `unsafeWindow` without grants | `unsafeWindow` with other `@grant`s | `@grant none` effect | Safari note |
+|---------|-------------------------------|--------------------------------------|----------------------|-------------|
+| TM | Not exposed | ✅ needs explicit `@grant unsafeWindow` when other grants exist | Disables sandbox **and loses all `GM_*`/`GM.*` APIs** | — |
+| VM ≥2.32 | ✅ exposed (`GM_info` + `unsafeWindow`) | ✅ exposed | Full page context; no sandbox | — |
+| VM <2.32 / GM4+ | ✅ | ✅ (`wrappedJSObject` equiv. on Firefox) | Full page context | — |
+| Safari Userscripts | ❌ NONE | ❌ NONE | Still ❌ — any `@grant` ⇒ forced content world; `none` does not conjure `unsafeWindow` | Never available — branch around it |
+
+**Fix the incompleteness:** `@grant none` does not just "disable the sandbox entirely" — it disables the sandbox **and removes all `GM_*`/`GM.*` APIs** (you lose storage, XHR, etc.). In Safari, it still does not provide `unsafeWindow` (always ❌). Always guard:
+
+```javascript
+if (typeof unsafeWindow !== 'undefined') {
+    // page-world access
+} else {
+    // Safari / content-world fallback: work with DOM only, or GM_addElement bridge where supported
+}
+```
+
+Safari design note: any `@grant` forces content-world execution; there is no page-world access to design around — build features that work from the isolated DOM.
 
 ---
 
@@ -190,7 +276,7 @@ MutationObservers that never disconnect consume memory.
 const observer = new MutationObserver(() => {
     processNewContent();
 });
-observer.observe(document.body, { childList: true, subtree: true });
+observer.observe(document.body ?? document.documentElement, { childList: true, subtree: true });
 // Never disconnected - runs forever!
 ```
 
@@ -203,11 +289,20 @@ const observer = new MutationObserver(() => {
     }
     processNewContent();
 });
-observer.observe(document.body, { childList: true, subtree: true });
+observer.observe(document.body ?? document.documentElement, { childList: true, subtree: true });
 
-// Or disconnect on page unload
+// Explicit teardown — beforeunload is unreliable (bfcache, SPA navigation may not fire it)
+function teardown() { observer.disconnect(); }
+// Prefer explicit teardown hooks over beforeunload:
+// - SPA: hook history navigation (see Pitfall 3 fallback)
+// - Page lifecycle: use `pagehide` or explicit router hooks where available
+window.addEventListener('pagehide', teardown, { once: true });
+
+// Or disconnect on page unload as best-effort fallback (may not fire in bfcache/SPAs)
 window.addEventListener('beforeunload', () => observer.disconnect());
 ```
+
+> **bfcache/SPA note:** `beforeunload` is unreliable — bfcache restores pages without firing it, and SPAs navigate without unloading. Prefer explicit teardown (observer.disconnect on navigation detection) and `pagehide` over `beforeunload`.
 
 ---
 
@@ -238,13 +333,19 @@ const observer = new MutationObserver(() => {
         });
     }, 100);
 });
+observer.observe(document.body ?? document.documentElement, { childList: true, subtree: true });
 ```
+
+| Strategy | Cost | When to use |
+|----------|------|-------------|
+| Direct per-mutation | High — thousands of style recalculations | Never for bulk |
+| Debounced + `.processed` guard | Low — batches + idempotent | Always for observer-driven styling |
 
 ---
 
 ## Pitfall 9: Forgetting Error Handling
 
-Network requests and async operations can fail.
+Network requests and async operations can fail — handle **both** callback errors and promise rejections.
 
 **Wrong:**
 ```javascript
@@ -257,7 +358,7 @@ GM_xmlhttpRequest({
 });
 ```
 
-**Right:**
+**Right (callback — onerror/ontimeout):**
 ```javascript
 GM_xmlhttpRequest({
     url: 'https://api.example.com/data',
@@ -278,11 +379,34 @@ GM_xmlhttpRequest({
 });
 ```
 
+**Right (promise — try/catch):**
+```javascript
+try {
+    const r = await GM.xmlHttpRequest({
+        method: 'GET',
+        url: 'https://api.example.com/data',
+        timeout: 10000
+    });
+    const data = JSON.parse(r.responseText);
+    process(data);
+} catch (e) {
+    // Covers network errors, timeout, and JSON parse failures when awaited
+    console.error('Request or parse failed:', e);
+}
+```
+
+| Form | Error channel | Handler |
+|------|---------------|---------|
+| Callback (`GM_xmlhttpRequest`) | `onerror` / `ontimeout` + `try/catch` inside `onload` | All three |
+| Promise (`GM.xmlHttpRequest`) | Rejection + `try/catch` | `try { await … } catch (e) { … }` |
+
+Violentmonkey worked example: trigger airplane mode after `GM.xmlHttpRequest` — promise path must be caught or the unhandled rejection shows in Violentmonkey's console.
+
 ---
 
 ## Pitfall 10: Global Variable Pollution
 
-Variables leak into page scope without IIFE wrapper.
+Whether variables leak to the page depends on **grant mode**, not just IIFE presence.
 
 **Wrong:**
 ```javascript
@@ -290,29 +414,40 @@ Variables leak into page scope without IIFE wrapper.
 // ...
 // ==/UserScript==
 
-var myData = 'secret';  // Visible to page as window.myData!
-function process() { ... }  // Visible to page
+var myData = 'secret';  // Visible to page as window.myData when @grant none!
+function process() { ... }  // Visible to page when @grant none
 ```
 
 **Right:**
 ```javascript
 // ==UserScript==
-// ...
+// @grant GM_getValue
 // ==/UserScript==
 
+// With any grant (sandbox isolated), var is already isolated — but use let/const anyway
+let myData = 'secret';  // Private to script sans page leak
+function process() { ... }  // Private to script
+
+// For @grant none (page context), wrap in IIFE or use let/const at top-level of module
 (function() {
     'use strict';
-
-    var myData = 'secret';  // Private to script
-    function process() { ... }  // Private to script
+    let myData2 = 'secret';  // Private even in page context
 })();
 ```
+
+| Grant mode | Execution context | `var` at top level | Leak? | Recommendation |
+|------------|-------------------|--------------------|-------|----------------|
+| `@grant none` | **Page context** (no sandbox) | `var myData` → `window.myData` | ✅ leaks | IIFE/module wrapper **required**; or use `let`/`const` |
+| Any `@grant` (`GM_*`, `unsafeWindow`, etc.) | **Manager sandbox** (isolated) | `var` scoped to sandbox | ❌ isolated (page cannot see) | Still use `let`/`const` always; IIFE chiefly for `none` |
+| Safari (any grant) | **Content world** (isolated) | Isolated | ❌ isolated | Use `let`/`const` always |
+
+**Recommendation:** Use `let`/`const` always. Reserve IIFE as the primary defense for `@grant none` (page context) and as defense-in-depth elsewhere.
 
 ---
 
 ## Pitfall 11: Wrong Timing with @run-at
 
-Script runs before elements exist.
+`@run-at` defaults differ by **manager** — assuming one default breaks portability. Script may run before elements exist.
 
 **Wrong:**
 ```javascript
@@ -323,41 +458,79 @@ document.querySelector('#header').remove();  // null - DOM doesn't exist yet!
 
 **Right:**
 ```javascript
-// @run-at document-end
+// @run-at document-end — explicit, not relying on manager default
 
-document.querySelector('#header').remove();  // Works
+document.querySelector('#header')?.remove();  // Works when DOM ready
 ```
 
-**Or wait for DOM:**
+**Or wait for DOM robustly (works regardless of manager default):**
 ```javascript
-// @run-at document-start
+// @run-at document-start — need robust wait, not just DOMContentLoaded single path
+function onReady(callback) {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', callback, { once: true });
+    } else {
+        callback();
+    }
+}
 
-document.addEventListener('DOMContentLoaded', () => {
-    document.querySelector('#header').remove();
+onReady(() => {
+    document.querySelector('#header')?.remove();
 });
+
+// Or poll/waitForElement (see Pitfall 3) for elements injected after DOMContentLoaded (SPAs)
 ```
+
+| Manager | Default `@run-at` | Explicit values available |
+|---------|-------------------|---------------------------|
+| TM | `document-idle` | `document-start` / `document-end` / `document-idle` / `document-body` |
+| VM | `document-end` | `document-start` / `document-end` / `document-body` (2.12.10+) |
+| GM4+ | `document-end` | `document-start` / `document-end` (no `document-body`, no `document-idle`) |
+| Safari Userscripts | `document-end` | `document-start` / `document-end` (ignores `document-body`) |
+
+**Robust pattern:** Always declare `@run-at` explicitly to match intent, and guard DOM access with `readyState` check or `waitForElement` — don't assume the default matches your timing need.
 
 ---
 
-## Pitfall 12: Cross-Browser Differences
+## Pitfall 12: Cross-Browser / Cross-Manager Differences
 
-Firefox and Chrome behave differently.
+Conflating browser and manager responsibilities causes subtle bugs.
 
-**Firefox-only features:**
+**Firefox-only bridges (Xray — not manager features):**
 ```javascript
-// cloneInto and exportFunction only exist in Firefox
+// cloneInto and exportFunction only exist in Firefox Xray (GM4+ and TM-on-Firefox)
 if (typeof cloneInto !== 'undefined') {
-    unsafeWindow.myData = cloneInto(data, unsafeWindow);
+    unsafeWindow.myData = cloneInto(data, unsafeWindow, { cloneFunctions: true });
+} else if (typeof unsafeWindow !== 'undefined') {
+    unsafeWindow.myData = data;  // Chromium page-world
 } else {
-    unsafeWindow.myData = data;  // Chrome
+    // Safari — no page-world access at all; stay in content world
+    console.warn('No page-world bridge available');
 }
 ```
 
-**Manifest V3 limitations (Chrome):**
+**Manifest V3 limitations (framed by manager, not browser):**
 ```javascript
-// @webRequest doesn't work in Chrome MV3
-// Use alternative approaches or inform user
+// @webRequest / GM_webRequest is NOT "Chrome MV3" generically — it's:
+// TM experimental, Firefox MV2 only; broken on TM Chrome MV3 5.2+ (issue #2209);
+// VM wontfix (issue #583); GM/Safari ❌.
+// Don't present as browser capability row — it's manager + manifest.
+if (typeof GM_webRequest !== 'undefined') {
+    // TM Firefox MV2 only
+    GM_webRequest([...], listener);
+} else if (typeof unsafeWindow !== 'undefined') {
+    // MV3 portable alternative: page-level fetch/XHR patch (guard Safari absent)
+    // see browser-compatibility.md workaround snippet
+}
 ```
+
+| Topic | Manager-aware fact | Browser tie |
+|-------|-------------------|-------------|
+| `cloneInto` / `exportFunction` | Firefox Xray vision — GM4+ and TM-on-Firefox; not a GM API | Firefox only; Chromium has no Xray |
+| `GM_webRequest` / `@webRequest` | TM experimental Firefox MV2 only; broken TM Chrome MV3 5.2+; VM wontfix; GM/Safari ❌ | Manifest (MV2 vs MV3) + manager |
+| Firefox containers | TM's `@run-in container-id-N` (TM 5.3+) is TM-only; Firefox's native contextual identities are separate | Firefox only |
+| Storage types | GM4+ stores **primitives only** — `JSON.stringify` objects yourself; TM/VM/Safari store objects | Manager, not browser |
+| Logging | `GM_log` removed in GM4+ — use `console.log` | Manager (GM4+) |
 
 ---
 
@@ -382,17 +555,33 @@ const element = document.querySelector('#username') ||
                 document.querySelector('.profile-name');
 ```
 
+| Selector style | Resilience | When to use |
+|----------------|------------|-------------|
+| Generated class / `:nth-child` chain | ❌ Fragile — breaks on redeploy | Never |
+| Stable attributes (`data-testid`, `aria-label`, `id`) | ✅ Robust | Always prefer |
+| Multiple fallbacks (try stable, then heuristic) | ✅ Resilient | Production scripts |
+
 ---
 
-## Pitfall 14: Not Testing in Target Browser
+## Pitfall 14: Not Testing in Target Manager
 
-Scripts that work in Chrome may break in Firefox.
+Scripts that work in one manager may break in another. Browser-only testing hides manager differences (e.g., VM respects CSP while TM may not).
 
-**Before deploying:**
-1. Test in Chrome
-2. Test in Firefox
-3. Test in private/incognito mode
-4. Test with page's CSP (disable extensions to check)
+**Manager-first testing matrix — Violentmonkey first (owner default):**
+
+| Step | Manager | What to verify |
+|------|---------|----------------|
+| 1 | **Violentmonkey** (Chrome + Firefox) | Install via dashboard/drag-and-drop, enable, storage types (objects ok), batch APIs (2.19.1+), CSP behavior (GM_addElement fallback), `unsafeWindow` exposed |
+| 2 | Tampermonkey (Chrome MV3 + Firefox MV2) | `GM_cookie` stable, `GM_audio` 5.4 only, `window.onurlchange` TM-only, `@sandbox`/`@run-in` parsing |
+| 3 | Greasemonkey 4+ (Firefox) | Promise-only APIs, primitives-only storage, `GM_addStyle`/`GM_log` removed (polyfill or `console.log`), `GM.notification` shape |
+| 4 | Safari Userscripts (macOS/iOS 15.1+) | Promise subset only, no `unsafeWindow`, any `@grant` ⇒ content world, `openInTab`/`closeTab` bool only, `setClipboard` deprecated |
+| 5 | Private/Incognito | Manager permissions for incognito tabs (`@run-in` where needed), CSP strictness |
+
+Before deploying, also verify:
+
+- [ ] Violentmonkey: build artifact loads in dashboard and survives external-edits reload
+- [ ] Manager-specific workarounds (e.g., GM4+ stringify) don't break TM/VM
+- [ ] Page CSP tested in VM (strict) not just TM (lenient)
 
 ---
 
@@ -412,15 +601,46 @@ Tampermonkey v5.4.1+ requires explicit user permission to inject scripts into pa
 
 ## Quick Diagnostic Checklist
 
-When a script doesn't work:
+When a script doesn't work — manager-first verification. Check each item against the relevant manager.
+
+| # | Check | Where to look | TM | VM | GM4+ | Safari | Notes |
+|---|-------|---------------|----|----|------|--------|-------|
+| 1 | Console shows errors? (F12 → Console) | Page console + manager console | ✅ | ✅ | ✅ | ✅ | Violentmonkey: page console + sandboxed console |
+| 2 | Script is enabled in your manager's dashboard? | Manager dashboard | ✅ | ✅ | ✅ | ✅ | VM: `chrome-extension://<id>/options/index.html#/installed` |
+| 3 | `@match`/`@include` pattern matches current URL? | `GM_info.script.matches` / URL bar | ✅ | ✅ | ✅ | ✅ | Safari requires ≥1 rule; prefers `@match` |
+| 4 | Required `@grant` statements present? | Metadata block | ✅ | ✅ | ✅ | ✅ | Missing grant ⇒ API undefined |
+| 5 | `@connect` includes target domains? **[TM-required]** | Metadata block | **Strict** | Advisory | Ignored | n/a | TM blocks without it; split from generic `@grant` check |
+| 6 | `@connect *` fallback understood as TM-model? | Metadata block | TM-concept | Advisory | Ignored | n/a | Enumerate domains for TM; `*` is TM fallback |
+| 7 | Default `@run-at` matches intent? | Metadata block / `managers.md` | Default `idle` | Default `end` | Default `end` | Default `end` | Wrong default ⇒ DOM not ready |
+| 8 | Correct GM variant used? (`GM_*` vs `GM.*`) | Code: `typeof GM !== 'undefined' && GM.xmlHttpRequest` | Both | Both | `GM.*` only | `GM.*` only | `GM_xmlhttpRequest` ❌ on GM4+/Safari |
+| 9 | `unsafeWindow` guarded? (`typeof unsafeWindow !== 'undefined'`) | Code | Grant-gated | Exposed | `wrappedJSObject` | ❌ absent | Unguarded ⇒ crash on Safari |
+| 10 | Storage value types within GM4 limits? | `GM_setValue` payloads | Objects ok | Objects ok | **Primitives only** — stringify | Objects ok | GM4+ `JSON.stringify` objects |
+| 11 | Element exists when script runs? | `waitForElement` / `readyState` | ✅ | ✅ | ✅ | ✅ | Use `?? document.documentElement` guard |
+| 12 | Using async correctly (callbacks/await + `try/catch`)? | `GM_xmlhttpRequest` vs `GM.xmlHttpRequest` | Both | Both | Promise only | Promise only | Callback needs `onerror`/`ontimeout`; promise needs `catch` |
+| 13 | `scriptHandler` branching avoided in favor of capability checks? | Code: `if (GM?.getValues)` not `if (handler === "Tampermonkey")` | ✅ | ✅ | ✅ | ✅ | Prefer `typeof` / `in` checks |
+| 14 | Manager-specific features gated? (`GM_cookie`, `GM_audio`, `window.onurlchange`) | Code guards | `GM_cookie` ✅ / `GM_audio` 5.4 | `GM_cookie` 2.35.1+ | ❌ | ❌ | Don't assume universal |
+| 15 | Browser-specific bridges gated? (`cloneInto`, `exportFunction`) | Firefox Xray check | TM/Firefox ✅ | VM/Firefox ✅ | ✅ | ❌ | Chromium has no Xray |
 
 ```
-[ ] Console shows errors? (F12 → Console)
-[ ] Script is enabled in your userscript manager's dashboard?
+[ ] Console shows errors? (F12 → Console) — per manager
+[ ] Script is enabled in your manager's dashboard? — VM dashboard first
 [ ] @match pattern matches current URL?
 [ ] Required @grant statements present?
-[ ] @connect includes target domains?
-[ ] Element exists when script runs?
-[ ] Using async correctly (callbacks/await)?
-[ ] Browser-specific features used correctly?
+[ ] @connect includes target domains? — TM REQUIRED (others advisory)
+[ ] Default @run-at matches intent? (TM idle vs VM/GM/Safari end)
+[ ] Correct GM variant used? (callback vs promise per manager)
+[ ] unsafeWindow guarded? (Safari ❌)
+[ ] Storage value types within GM4 limits? (primitives only)
+[ ] Element exists when script runs? (readyState / waitForElement)
+[ ] Using async correctly (callback onerror/ontimeout vs promise try/catch)?
+[ ] scriptHandler branching avoided (capability checks)?
+[ ] Manager-specific features gated? (GM_cookie / GM_audio / onurlchange)
+[ ] Browser-specific bridges gated? (cloneInto / exportFunction)
 ```
+
+---
+
+## Scope Closing
+
+Scope: Violentmonkey-first, portable across TM/VM/GM4+/Safari — verify against `managers.md` before claiming support. For manager-neutral typing, see `typescript.md`; for compatibility matrix, see `browser-compatibility.md`. Prefer capability checks (`typeof GM !== 'undefined' && GM.xmlHttpRequest`) over `GM_info.scriptHandler` branching.
+

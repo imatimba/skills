@@ -1,19 +1,31 @@
 # Audio API Reference
 
-Documentation for browser tab audio control functions.
+Tab audio control — **Tampermonkey-only experimental API**. Violentmonkey, Greasemonkey, and the Safari Userscripts app do not implement any `GM_audio`/`GM.audio` surface (verified against their official API docs). For portable scripts, use the fallback in [Portable Alternatives](#portable-alternatives).
 
 ---
 
 ## Overview
 
-The GM_audio API (v5.0+) allows userscripts to:
-- Mute and unmute browser tabs
-- Check if a tab is currently playing audio
-- Monitor audio state changes
+`GM_audio` (Tampermonkey **beta 5.3.6230**, stable **5.4**+) lets a userscript:
 
-**Required grant:**
+- Mute/unmute **the current tab only** (inter-tab control is not supported — Tampermonkey issue #2472)
+- Check whether the tab is currently audible
+- Monitor audio-state changes
+
+**Required grant** (both spellings are documented by Tampermonkey):
+
 ```javascript
 // @grant GM_audio
+// or: @grant GM.audio
+```
+
+**Feature-detect before use** — the API must degrade gracefully everywhere else:
+
+```javascript
+const canMuteTab = typeof GM_audio !== "undefined" || typeof GM?.audio !== "undefined";
+if (!canMuteTab) {
+  // Violentmonkey / Greasemonkey / Safari Userscripts: fall back to element-level muting
+}
 ```
 
 ---
@@ -22,292 +34,114 @@ The GM_audio API (v5.0+) allows userscripts to:
 
 Mute or unmute the current tab.
 
-### Basic Usage
-
 ```javascript
 // @grant GM_audio
 
-// Mute the tab
-GM_audio.setMute({ isMuted: true }, function(error) {
-    if (error) {
-        console.error('Failed to mute:', error);
-    } else {
-        console.log('Tab muted');
-    }
-});
-
-// Unmute the tab
-GM_audio.setMute({ isMuted: false }, function(error) {
-    if (error) {
-        console.error('Failed to unmute:', error);
-    } else {
-        console.log('Tab unmuted');
-    }
+GM_audio.setMute({ isMuted: true }, function (error) {
+  if (error) console.error("Failed to mute:", error);
+  else console.log("Tab muted");
 });
 ```
 
-### Async Version
+Promise form:
 
 ```javascript
 // @grant GM.audio
 
-// Mute
 await GM.audio.setMute({ isMuted: true });
-console.log('Tab muted');
-
-// Unmute
-await GM.audio.setMute({ isMuted: false });
-console.log('Tab unmuted');
 ```
 
 ---
 
 ## GM_audio.getState(callback)
 
-Get the current audio state of the tab.
-
-### Basic Usage
+Current audio state of the tab.
 
 ```javascript
 // @grant GM_audio
 
-GM_audio.getState(function(state) {
-    if (!state) {
-        console.error('Failed to get audio state');
-        return;
-    }
-
-    console.log('Is muted:', state.isMuted);
-    console.log('Mute reason:', state.muteReason);  // Why it was muted
-    console.log('Is audible:', state.isAudible);    // Currently playing sound
+GM_audio.getState(function (state) {
+  if (!state) return console.error("Failed to get audio state");
+  console.log(state.isMuted, state.muteReason, state.isAudible);
 });
+
+// Promise form
+const state = await GM.audio.getState();
 ```
 
 ### State Object Properties
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `isMuted` | boolean | Whether tab is currently muted |
-| `muteReason` | string | Why the tab was muted (see below) |
-| `isAudible` | boolean | Whether tab is currently playing audio |
+| `isMuted` | boolean | Whether the tab is currently muted |
+| `muteReason` | string | Why it was muted: `user` \| `capture` \| `extension` |
+| `isAudible` | boolean | Whether the tab is currently playing sound |
 
-### Mute Reasons
-
-| Value | Description |
-|-------|-------------|
-| `user` | User manually muted (browser UI) |
-| `capture` | Muted by tab capture API |
-| `extension` | Muted by a browser extension |
-
-### Async Version
-
-```javascript
-// @grant GM.audio
-
-const state = await GM.audio.getState();
-console.log(`Muted: ${state.isMuted}, Audible: ${state.isAudible}`);
-```
+> The mute-reason enum mirrors Chrome's `tabs.MutedInfoReason` values (`user`, `capture`, `extension`) — treat it as Tampermonkey's mapping of that browser concept.
 
 ---
 
-## GM_audio.addStateChangeListener(listener, callback)
+## GM_audio.addStateChangeListener(listener, callback?) / removeStateChangeListener(listener, callback?)
 
-Listen for changes to the tab's audio state.
-
-### Basic Usage
+Register/remove an audio-state-change listener.
 
 ```javascript
 // @grant GM_audio
 
 function audioListener(event) {
-    if ('muted' in event) {
-        if (event.muted) {
-            console.log('Tab was muted. Reason:', event.muted);
-        } else {
-            console.log('Tab was unmuted');
-        }
-    }
-
-    if ('audible' in event) {
-        console.log('Audible state changed:', event.audible);
-    }
+  // Event shape below is UNVERIFIED against official docs — log it once to confirm
+  // before depending on specific fields:
+  if ("muted" in event) console.log(event.muted ? "muted" : "unmuted");
+  if ("audible" in event) console.log("audible:", event.audible);
 }
 
-GM_audio.addStateChangeListener(audioListener, function(error) {
-    if (error) {
-        console.error('Failed to add listener:', error);
-    } else {
-        console.log('Audio state listener registered');
-    }
-});
+GM_audio.addStateChangeListener(audioListener);
+
+// Later:
+GM_audio.removeStateChangeListener(audioListener);
 ```
 
-### Event Object Properties
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `muted` | string or false | Mute reason if muted, false if unmuted |
-| `audible` | boolean | Current audible state |
-
-### Async Version
-
-```javascript
-// @grant GM.audio
-
-await GM.audio.addStateChangeListener((event) => {
-    if (event.muted) {
-        console.log('Tab muted by:', event.muted);
-    }
-    if ('audible' in event) {
-        console.log('Audio playing:', event.audible);
-    }
-});
-```
-
----
-
-## GM_audio.removeStateChangeListener(listener, callback)
-
-Remove a previously registered state change listener.
-
-### Basic Usage
-
-```javascript
-// @grant GM_audio
-
-function myListener(event) {
-    console.log('Audio event:', event);
-}
-
-// Register
-GM_audio.addStateChangeListener(myListener, () => {
-    console.log('Listener added');
-});
-
-// Later, remove
-GM_audio.removeStateChangeListener(myListener, () => {
-    console.log('Listener removed');
-});
-```
-
-### Async Version
-
-```javascript
-// @grant GM.audio
-
-await GM.audio.removeStateChangeListener(myListener);
-console.log('Listener removed');
-```
+Promise forms (`await GM.audio.addStateChangeListener(...)` / `removeStateChangeListener(...)`) exist under `@grant GM.audio`. The exact event object fields are **UNVERIFIED** — feature-detect fields (`"muted" in event`, `"audible" in event`) rather than assuming shapes.
 
 ---
 
 ## Common Patterns
 
-### Auto-Mute Tab
+### Auto-Mute Tab (Tampermonkey only)
 
 ```javascript
 // @grant GM_audio
 
-// Mute tab on script load
-GM_audio.setMute({ isMuted: true });
-
-// Or with async
-(async () => {
-    await GM.audio.setMute({ isMuted: true });
-})();
+if (typeof GM_audio !== "undefined") GM_audio.setMute({ isMuted: true });
+else muteAllMediaElements(); // portable fallback below
 ```
 
-### Mute Toggle with Menu Command
+### Mute Toggle via Menu Command (Tampermonkey only)
 
 ```javascript
 // @grant GM_audio
 // @grant GM_registerMenuCommand
 
-let isMuted = false;
-
+let muted = false;
 async function toggleMute() {
-    isMuted = !isMuted;
-    await GM.audio.setMute({ isMuted });
-    console.log(isMuted ? 'Muted' : 'Unmuted');
+  muted = !muted;
+  await GM.audio.setMute({ isMuted: muted });
 }
-
-GM_registerMenuCommand('Toggle Mute', toggleMute, 'm');
-```
-
-### Audio Activity Monitor
-
-```javascript
-// @grant GM_audio
-
-GM_audio.addStateChangeListener((event) => {
-    if ('audible' in event) {
-        if (event.audible) {
-            console.log('Audio started playing');
-            // Maybe show an indicator
-            showAudioIndicator(true);
-        } else {
-            console.log('Audio stopped');
-            showAudioIndicator(false);
-        }
-    }
-});
-
-function showAudioIndicator(playing) {
-    let indicator = document.getElementById('audio-indicator');
-    if (!indicator) {
-        indicator = document.createElement('div');
-        indicator.id = 'audio-indicator';
-        indicator.style.cssText = `
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            padding: 5px 10px;
-            background: #333;
-            color: white;
-            border-radius: 4px;
-            z-index: 999999;
-        `;
-        document.body.appendChild(indicator);
-    }
-    indicator.textContent = playing ? '🔊 Playing' : '🔇 Silent';
-    indicator.style.display = playing ? 'block' : 'none';
-}
-```
-
-### Auto-Unmute on Specific Pages
-
-```javascript
-// @grant GM_audio
-
-// Unmute when visiting video pages
-if (location.pathname.includes('/video/') || location.pathname.includes('/watch')) {
-    GM_audio.setMute({ isMuted: false }, (error) => {
-        if (!error) {
-            console.log('Auto-unmuted for video page');
-        }
-    });
-}
+GM_registerMenuCommand("Toggle Mute", toggleMute);
 ```
 
 ### Remember Mute Preference
 
+Storage APIs are portable; only the audio calls are Tampermonkey-specific:
+
 ```javascript
 // @grant GM_audio
-// @grant GM_getValue
-// @grant GM_setValue
+// @grant GM.getValue
+// @grant GM.setValue
 
 (async () => {
-    // Restore user's mute preference
-    const wasMuted = GM_getValue('userMutePreference', false);
-    await GM.audio.setMute({ isMuted: wasMuted });
-
-    // Listen for changes
-    await GM.audio.addStateChangeListener((event) => {
-        if ('muted' in event) {
-            // Save preference when user changes it
-            GM_setValue('userMutePreference', !!event.muted);
-        }
-    });
+  const wasMuted = await GM.getValue("userMutePreference", false);
+  if (typeof GM?.audio?.setMute === "function") await GM.audio.setMute({ isMuted: wasMuted });
 })();
 ```
 
@@ -315,21 +149,25 @@ if (location.pathname.includes('/video/') || location.pathname.includes('/watch'
 
 ## Error Handling
 
-```javascript
-// @grant GM_audio
+The error strings shown in older drafts (`not_supported`, `permission_denied`) are **UNVERIFIED** — no official documentation confirms them. Log the raw error value instead of switching on assumed strings:
 
+```javascript
 GM_audio.setMute({ isMuted: true }, (error) => {
-    if (error) {
-        switch (error) {
-            case 'not_supported':
-                console.log('Audio control not supported in this browser');
-                break;
-            case 'permission_denied':
-                console.log('Permission to control audio denied');
-                break;
-            default:
-                console.log('Unknown error:', error);
-        }
-    }
+  if (error) console.error("setMute failed:", error); // inspect actual value
 });
 ```
+
+---
+
+## Portable Alternatives (all managers)
+
+A userscript cannot mute the *tab* outside Tampermonkey, but it can mute the page's media elements — usually the actual goal:
+
+```javascript
+// Works in every manager; re-run after DOM changes or SPA navigation.
+function muteAllMediaElements(muted = true) {
+  document.querySelectorAll("audio, video").forEach((el) => (el.muted = muted));
+}
+```
+
+Limitations vs `GM_audio`: does not change the tab's mute icon, misses WebAudio-only playback, and must be re-applied for dynamically inserted elements. See [managers.md](managers.md) §2 for the full support matrix.

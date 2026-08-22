@@ -1,20 +1,21 @@
 # Debugging Userscripts
 
-How to troubleshoot and fix broken userscripts.
+How to troubleshoot and fix broken userscripts. Per-manager facts follow [managers.md](managers.md); when a concrete manager is shown, **Violentmonkey** is the worked example.
 
 ---
 
 ## Quick Diagnostic Checklist
 
-When a script doesn't work, check these first:
+When a script doesn't work, check these first — consolidated from the sections below:
 
 ```
-[ ] 1. Is the script enabled in your userscript manager's dashboard?
-[ ] 2. Does the @match pattern match the current URL?
-[ ] 3. Are there errors in the browser console? (F12)
-[ ] 4. Are all required @grant statements present?
-[ ] 5. Does @connect include all external domains?
-[ ] 6. Is the element present when the script runs?
+[ ] 1. Is the script enabled in your manager's dashboard? (see Violentmonkey worked example below)
+[ ] 2. Does the @match / @include pattern match the current URL? (log location.href)
+[ ] 3. Are there errors in the console? (F12 on Windows/Linux, Cmd+Opt+J / Cmd+Opt+I on macOS/Safari — filter by script name)
+[ ] 4. Are all required @grant statements present? ("GM_xxx is not defined" = missing @grant)
+[ ] 5. Does @connect include all external domains? (Tampermonkey-enforced; advisory elsewhere)
+[ ] 6. Is the element present when the script runs? (log element, waitForElement if needed)
+[ ] 7. Is @run-at timing correct? (try document-idle or readyState check)
 ```
 
 ---
@@ -23,16 +24,28 @@ When a script doesn't work, check these first:
 
 ### Browser Console (Recommended)
 
-1. Press **F12** to open DevTools
+1. Open DevTools — **F12** (Windows/Linux) or **Cmd+Opt+I** (macOS) / **Cmd+Opt+J** for Console, **Safari: Cmd+Opt+I** → Web Inspector
 2. Go to **Console** tab
 3. Look for red error messages
-4. Filter by "userscript" if needed
+4. Filter by **script name** (type the script name in the Console filter) rather than a magic string
 
-### Userscript Manager Dashboard
+### Userscript Manager Dashboard — Violentmonkey Worked Example
 
-1. Click your userscript manager's icon → **Dashboard**
-2. Look for scripts with error indicators
-3. Click script name → **Editor** to see inline errors
+Violentmonkey is the worked example for concrete UI steps (manager-neutral guidance; other managers follow the Manager × Browser table below).
+
+1. Open the **Violentmonkey Dashboard** — extension options page:
+   - Chrome/Edge: `chrome-extension://<id>/options/index.html#/installed`
+   - Firefox: `moz-extension://<id>/options/index.html#/installed`
+   - Or click the Violentmonkey toolbar icon → **Dashboard**
+2. Look for scripts with error indicators; click script name → **Editor** (CodeMirror modal with **Code / Settings / Storage** tabs) to see inline errors.
+3. **External editing:** serve the file locally and let Violentmonkey track it:
+   ```bash
+   npx http-server -c5 .
+   # open http://localhost:8080/script.user.js in browser, install, then enable "Track external edits" in dashboard
+   ```
+   The dashboard reloads the script on every save. See [managers.md](managers.md) §6 Violentmonkey workflow.
+
+Other managers: Tampermonkey has its own dashboard/editor via toolbar icon; Greasemonkey 4+ uses `about:addons` → Greasemonkey; Safari "Userscripts" app uses Safari → Settings → Extensions. See the Manager × Browser table for debugging entry points.
 
 ---
 
@@ -120,36 +133,66 @@ GM_setValue('key', 'value');  // Works
 
 **Cause:** Using native fetch/XHR instead of GM_xmlhttpRequest.
 
+| Manager | Fix | Notes |
+| --- | --- | --- |
+| Tampermonkey | `GM_xmlhttpRequest` + `// @connect api.example.com` | `@connect` **enforced** — unlisted hosts prompt/block (initial + final URL) |
+| Violentmonkey | `GM_xmlhttpRequest` + `// @connect api.example.com` | `@connect` declared but **not enforced** (still declare for Tampermonkey compat) |
+| Greasemonkey 4+ | `await GM.xmlHttpRequest(...)` | No `@connect` needed; promise-only API |
+| Safari "Userscripts" | `await GM.xmlHttpRequest(...)` | Runs in content world; `unsafeWindow` not available |
+
 ```javascript
 // Error - blocked by CORS
 fetch('https://api.example.com/data');
 
-// Fix - use GM_xmlhttpRequest
+// Fix - use GM_xmlhttpRequest (Tampermonkey/Violentmonkey sync form)
 // @grant GM_xmlhttpRequest
-// @connect api.example.com
+// @connect api.example.com  // TM-enforced; advisory elsewhere
 
 GM_xmlhttpRequest({
     url: 'https://api.example.com/data',
     onload: (r) => console.log(r.responseText)
 });
+
+// Greasemonkey 4+ / Safari — promise form
+// @grant GM.xmlHttpRequest
+// @connect api.example.com
+const response = await GM.xmlHttpRequest({ method: 'GET', url: 'https://api.example.com/data' });
+console.log(response.responseText);
 ```
+
+See [http-requests.md](http-requests.md) for the full option matrix and [managers.md](managers.md) §2 Networking for enforcement.
 
 ### "Content Security Policy" errors
 
 **Cause:** Site's CSP blocks inline scripts.
 
+| Manager | Behaviour | Fix |
+| --- | --- | --- |
+| Violentmonkey | **Respects page CSP** — no header stripping; page-world injection falls back to content world if CSP blocks it | `GM_addElement` helps only where page-world injection succeeds; otherwise design for content-world DOM |
+| Tampermonkey | May **relax/strip CSP headers** in some modes (best-effort, do not rely on it) | `GM_addElement` may bypass CSP in Tampermonkey, but verify per page |
+| Greasemonkey 4+ / Safari | No `GM_addElement` CSP bypass | Use content-world DOM; `GM_addElement` not supported |
+
+Do NOT present `GM_addElement` as a universal bypass.
+
 ```javascript
-// Error - blocked by CSP
+// Error - may be blocked by CSP
 const script = document.createElement('script');
 script.textContent = 'console.log("blocked")';
 document.head.appendChild(script);
 
-// Fix - use GM_addElement
+// Tampermonkey / Violentmonkey — may bypass CSP where page-world injection succeeds
 // @grant GM_addElement
-GM_addElement('script', {
-    textContent: 'console.log("works")'
-});
+if (typeof GM_addElement !== 'undefined') {
+    GM_addElement('script', { textContent: 'console.log("via GM_addElement")' });
+} else {
+    // Greasemonkey/Safari fallback — still subject to CSP
+    const s = document.createElement('script');
+    s.textContent = 'console.log("fallback")';
+    document.head.appendChild(s);
+}
 ```
+
+See [managers.md](managers.md) §4 Sandbox/CSP and [api-dom-ui.md](api-dom-ui.md) for `GM_addElement` support matrix.
 
 ---
 
@@ -186,19 +229,36 @@ console.log('Element HTML:', element?.outerHTML);
 debugger;
 
 // Or set breakpoints in DevTools:
-// 1. F12 → Sources tab
-// 2. Find your script (search for script name)
+// 1. Open DevTools — F12 (Windows/Linux) or Cmd+Opt+I (macOS/Safari)
+// 2. Find your script via the Manager × Browser path below (search for script name)
 // 3. Click line number to set breakpoint
 ```
 
+Per-manager breakpoint path — see the Manager × Browser Decision Table below. Summary:
+- **Violentmonkey (Chrome/Firefox):** Sources → **Violentmonkey** tree; `@inject-into` controls realm.
+- **Tampermonkey Chrome:** Sources → **Content Scripts**; Firefox: `about:debugging` → This Firefox → Tampermonkey → Inspect; console from sandbox appears in page console.
+- **Greasemonkey 4+:** `about:debugging` → Extensions → Inspect.
+- **Safari:** Web Inspector; GM only in content world.
+
 ### 4. Network Tab
 
-For GM_xmlhttpRequest issues:
+For `GM_xmlhttpRequest` / `GM.xmlHttpRequest` issues:
 
-1. F12 → **Network** tab
+1. Open DevTools → **Network** tab (F12 / Cmd+Opt+I → Network)
 2. Look for your request
-3. Check **Headers**, **Response**, **Timing**
-4. Red = failed request
+3. Check **Headers**, **Response**, **Timing** — red = failed
+
+> **Caveat:** `GM_xmlhttpRequest` often runs **out-of-page via the manager** (especially in Tampermonkey/Violentmonkey) and **may NOT appear in the page Network tab**. Rely on `onload`/`onerror`/`ontimeout` logging as the ground truth. Any stronger claim about Network visibility is **UNVERIFIED** — verify against your manager's docs.
+
+```javascript
+GM_xmlhttpRequest({
+    url: 'https://api.example.com/data',
+    onload: (r) => console.log('Success:', r.status, r.responseText.substring(0, 200)),
+    onerror: (e) => console.log('Error:', e),
+    ontimeout: () => console.log('Timeout'),
+    onabort: () => console.log('Aborted')
+});
+```
 
 ### 5. Test @match Pattern
 
@@ -281,48 +341,71 @@ setTimeout(() => {
 
 ## Debugging Storage
 
+| Manager | API to use | Notes |
+| --- | --- | --- |
+| Tampermonkey | `GM_setValue` / `GM_getValue` (sync) **or** `GM.setValue` / `GM.getValue` (promise) | Both forms work |
+| Violentmonkey | `GM_setValue` / `GM_getValue` (sync) **or** `GM.setValue` / `GM.getValue` (promise since 2.12.0) | Both forms work; worked example: Dashboard → script → **Storage** tab |
+| Greasemonkey 4+ | `await GM.setValue` / `await GM.getValue` **only** | Sync `GM_*Value` removed in 4.0; values limited to strings/numbers/booleans — `JSON.stringify` objects |
+| Safari "Userscripts" | `await GM.setValue` / `await GM.getValue` (promise subset) | `GM_listValues` / `GM_deleteValue` via `GM.*` promises where available |
+
 ### Verify Values Are Saved
 
 ```javascript
-// Save
+// Tampermonkey / Violentmonkey — sync
 GM_setValue('test', { foo: 'bar' });
-console.log('Saved');
-
-// Read back immediately
+console.log('Saved (sync)');
 const value = GM_getValue('test');
 console.log('Retrieved:', value);
 console.log('Type:', typeof value);
-
-// List all keys
 const keys = GM_listValues();
+console.log('All keys:', keys);
+```
+
+```javascript
+// Greasemonkey 4+ / Safari — promise (also works in TM/VM)
+await GM.setValue('test', { foo: 'bar' });  // Greasemonkey: await GM.setValue('test', JSON.stringify({foo:'bar'}))
+console.log('Saved (promise)');
+const value = await GM.getValue('test');
+console.log('Retrieved:', value);
+const keys = await GM.listValues();
 console.log('All keys:', keys);
 ```
 
 ### Clear Storage for Fresh Start
 
 ```javascript
-// Delete all stored values
+// Tampermonkey / Violentmonkey — sync
 GM_listValues().forEach(key => {
     console.log('Deleting:', key);
     GM_deleteValue(key);
 });
+
+// Promise — portable (Greasemonkey 4+ / Safari / TM / VM)
+const keys = await GM.listValues();
+for (const key of keys) {
+    console.log('Deleting:', key);
+    await GM.deleteValue(key);
+}
 ```
+
+See [api-storage.md](api-storage.md) for value-type rules and batch helpers (`GM_getValues`/`GM_setValues` since Tampermonkey 5.3+, Violentmonkey since 2.19.1).
 
 ---
 
-## Browser-Specific Debugging
+## Browser-Specific Debugging — Manager × Browser Decision Table
 
-### Chrome DevTools Tips
+| Manager | Browser | How to open script sources / debugger | Console / realm notes |
+| --- | --- | --- | --- |
+| **Violentmonkey** | Chrome / Edge | Add `debugger;` statement → DevTools (F12 / Cmd+Opt+I) → **Sources** → **Violentmonkey** tree | `@inject-into` (`auto`/`page`/`content`) controls realm; console from sandbox appears in page console; **respects page CSP** (no header stripping — falls back to content world if page injection fails) |
+| **Violentmonkey** | Firefox | Same — `debugger;` → DevTools → Sources → **Violentmonkey** tree | Same; Firefox also exposes `wrappedJSObject`/`cloneInto` bridges |
+| **Tampermonkey** | Chrome / Edge (MV3) | DevTools → **Sources** → **Content Scripts** → Tampermonkey | **May relax CSP headers** in some modes (best-effort); `GM_info.sandboxMode` (`js`/`raw`/`dom`) indicates world |
+| **Tampermonkey** | Firefox (MV2) | `about:debugging` → **This Firefox** → **Tampermonkey** → **Inspect** | Console from sandbox appears in page console; MV2-only features differ (`GM_webRequest` Firefox-only) |
+| **Greasemonkey 4+** | Firefox only | `about:debugging` → **This Firefox** → **Extensions** → Inspect (Greasemonkey) | **Async-only APIs** — every `GM_*` is `await GM.*`; `GM_log` removed — use `console.log` |
+| **Safari "Userscripts"** | Safari (macOS/iOS) | **Safari Web Inspector** (Develop → Show Web Inspector; enable Develop menu in Safari → Settings → Advanced) | **GM only in content world**; any `@grant` forces content world; `scriptHandler === "Userscripts"`; `unsafeWindow` absent entirely |
 
-- **Sources** → **Content Scripts** shows userscripts
-- **Application** → **Storage** shows extension data
-- Use **Snippets** to test code quickly
+> **Chrome DevTools-only features:** **Application → Storage** (extension storage) and **Snippets** (quick code test) are Chrome DevTools-only — not available in Firefox or Safari. Use them only when debugging in Chrome.
 
-### Firefox DevTools Tips
-
-- **Debugger** → Search for script name
-- About:debugging → This Firefox → your userscript manager (e.g. Tampermonkey) → Inspect
-- Firefox shows better error messages for cloneInto issues
+Platform keys: **Windows/Linux:** F12, Ctrl+Shift+I (DevTools), Ctrl+Shift+J (Console). **macOS:** Cmd+Opt+I (DevTools), Cmd+Opt+J (Console), Cmd+Opt+C (Inspect). **Safari:** Cmd+Opt+I (Web Inspector).
 
 ---
 
@@ -330,14 +413,17 @@ GM_listValues().forEach(key => {
 
 If you can't solve the issue:
 
-1. **Check the userscript manager's forums/help** - Search for similar issues
-2. **Provide minimal reproduction** - Smallest script that shows the bug
-3. **Include browser/TM version** - Found in GM_info
-4. **Share console errors** - Copy the exact error message
+1. **Check the userscript manager's forums/help** — Search for similar issues
+2. **Provide minimal reproduction** — Smallest script that shows the bug
+3. **Include browser + manager + version** — Found in `GM_info` (see snippet below)
+4. **Share console errors** — Copy the exact error message
 
 ```javascript
 // Get debug info to share
 console.log('Browser:', navigator.userAgent);
-console.log('Manager:', GM_info.scriptHandler, GM_info.version);  // logs the manager name and version
+console.log('Manager:', GM_info.scriptHandler, GM_info.version);  // "Violentmonkey" | "Tampermonkey" | "Greasemonkey" | "Userscripts" + version
 console.log('Script:', GM_info.script.name, GM_info.script.version);
 ```
+
+See [managers.md](managers.md) §5 for runtime detection (`GM_info.scriptHandler` literals: `"Violentmonkey"` / `"Tampermonkey"` / `"Greasemonkey"` / `"Userscripts"`).
+

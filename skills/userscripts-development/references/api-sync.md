@@ -1,21 +1,36 @@
-# Synchronous GM_* API Reference
+# Synchronous GM_* API Reference — Sync UI / Info / Menu / Tab Reference
 
-Documentation for all GM_* synchronous functions.
+This reference covers the synchronous `GM_*` surface for UI, script info, menu, and tab helpers. It is **not** an exhaustive `GM_*` catalogue — storage, networking, web-request, cookies, and richer DOM/UI or tab storage details live in dedicated references. For promise-based `GM.*` equivalents see [api-async.md](api-async.md).
+
+## Scope & Related References
+
+| Topic | Canonical reference | What lives there vs here |
+| --- | --- | --- |
+| Storage (`GM_getValue`/`setValue`/`listValues`, batch `getValues`/`setValues`/`deleteValues`, listeners) | [api-storage.md](api-storage.md) | Full sync + async patterns, batch availability, value-type rules |
+| HTTP (`GM_xmlhttpRequest` / `GM.xmlHttpRequest`) | [http-requests.md](http-requests.md) | Full option matrix, `@connect` enforcement, streaming, abort semantics |
+| Request interception (`GM_webRequest`) | [web-requests.md](web-requests.md) | `@webRequest` header, Firefox MV2-only, VM/GM/Safari support |
+| Cookies (`GM_cookie` / `GM.cookie`) | [api-cookies.md](api-cookies.md) | `list`/`set`/`delete`, filter differences, `partitionKey` support |
+| DOM & UI (`unsafeWindow`, `GM_addStyle`, `GM_addElement` deep dive) | [api-dom-ui.md](api-dom-ui.md) | Canonical `unsafeWindow` grant matrix, CSP bypass details, UI patterns |
+| Tabs & cross-tab (`GM_openInTab` full options, `GM_getTab`/`saveTab`/`getTabs`, `onurlchange`) | [api-tabs.md](api-tabs.md) | Canonical `GM_openInTab` option sets and handles, tab-persistent storage, SPA navigation |
+
+Manager facts below follow [managers.md](managers.md). When a concrete manager is shown, **Violentmonkey** is the worked example. Version numbers are manager-qualified (for example Tampermonkey 5.3+, Violentmonkey since 2.12.0).
 
 ---
 
 ## GM_info
 
-Get information about the script and the userscript manager. No @grant required.
+Get information about the script and the userscript manager. No `@grant` required.
 
 ```javascript
-console.log(GM_info.script.name);        // Script name
-console.log(GM_info.script.version);     // Script version
-console.log(GM_info.scriptHandler);      // "Tampermonkey" (in Tampermonkey) | "Greasemonkey" | "Violentmonkey" | etc. - the literal manager name
-console.log(GM_info.version);            // Userscript manager version
+// Works in every manager (GM_info vs GM.info fallback)
+const info = typeof GM_info !== "undefined" ? GM_info : GM.info;
+console.log(info.script.name);       // Script name
+console.log(info.script.version);    // Script version
+console.log(info.scriptHandler);     // "Tampermonkey" | "Violentmonkey" | "Greasemonkey" | "Userscripts"
+console.log(info.version);           // Manager version
 ```
 
-**Key properties:**
+### Key properties (common subset)
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -23,15 +38,43 @@ console.log(GM_info.version);            // Userscript manager version
 | `script.version` | string | Script version |
 | `script.description` | string | Script description |
 | `script.namespace` | string | Script namespace |
-| `script.matches` | string[] | @match patterns |
-| `script.includes` | string[] | @include patterns |
-| `script.excludes` | string[] | @exclude patterns |
+| `script.matches` | string[] | `@match` patterns |
+| `script.includes` | string[] | `@include` patterns |
+| `script.excludes` | string[] | `@exclude` patterns |
 | `script.grant` | string[] | Granted permissions |
-| `scriptHandler` | string | Manager identifier string (e.g. "Tampermonkey", "Greasemonkey", "Violentmonkey") - this is the exact literal value returned by the API |
-| `version` | string | Userscript manager version |
+| `scriptHandler` | string | Manager identifier — exact literal, see row below |
+| `version` | string | Manager version |
 | `isIncognito` | boolean | Running in private mode |
-| `sandboxMode` | string | 'js', 'raw', or 'dom' |
-| `downloadMode` | string | 'native', 'disabled', or 'browser' |
+| `sandboxMode` | string | `js` \| `raw` \| `dom` (Tampermonkey) |
+| `injectInto` | string | `auto` \| `page` \| `content` (Violentmonkey) |
+| `downloadMode` | string | `native` \| `disabled` \| `browser` |
+
+### scriptHandler literals
+
+| Literal | Manager |
+| --- | --- |
+| `"Tampermonkey"` | Tampermonkey |
+| `"Violentmonkey"` | Violentmonkey |
+| `"Greasemonkey"` | Greasemonkey 4+ |
+| `"Userscripts"` | Safari "Userscripts" app (quoid/userscripts) |
+
+Always compare with exact literals:
+
+```javascript
+const handler = (typeof GM_info !== "undefined" ? GM_info : GM.info).scriptHandler;
+if (handler === "Tampermonkey") { /* TM-only path */ }
+```
+
+### Per-manager field differences
+
+| Manager | Notes |
+| --- | --- |
+| Tampermonkey | Fullest surface. `sandboxMode` (`js` \| `raw` \| `dom`) since Tampermonkey 4.18+. `isIncognito`, `downloadMode`, and extended `script` metadata present. |
+| Violentmonkey | Adds `injectInto` (`auto` \| `page` \| `content`) and `platform` (e.g. `chrome` \| `firefox`). `sandboxMode` is not used — check `injectInto` instead. Otherwise similar breadth to Tampermonkey. |
+| Greasemonkey 4+ | `GM.info` (promise world) with **fewer fields** — `sandboxMode`/`injectInto`/`downloadMode` absent; `script` subset only. No `GM_info` global in the old sync sense. |
+| Safari (Userscripts) | **Subset** — `script` metadata + `scriptHandler === "Userscripts"` + `version`. Sandbox/injection fields absent; any `@grant` forces content-world. |
+
+**Feature-detect guidance:** prefer `typeof GM_info !== "undefined" ? GM_info : GM.info` and test field existence (`if ("injectInto" in info)`, `if ("sandboxMode" in info)`) over `scriptHandler` branching. See [managers.md](managers.md) §5 for the canonical detection snippet. Capability checks (`typeof GM?.getValues === "function"`) are more portable than handler checks when deciding which API to call.
 
 ---
 
@@ -46,50 +89,62 @@ GM_log('Debug message');
 GM_log('User ID: ' + userId);
 ```
 
+Portability: Tampermonkey and Violentmonkey support `GM_log` (alias for `console.log`). Greasemonkey 4+ removed it — use `console.log` there. Safari has no `GM_log`. For portable code prefer `console.log` and reserve `GM_log` for legacy scripts.
+
 ---
 
 ## GM_addStyle(css)
 
-Add CSS styles to the document. Returns the injected style element.
+Add CSS styles to the document.
 
 ```javascript
 // @grant GM_addStyle
 
-// Add styles
-const styleElement = GM_addStyle(`
-    .my-class {
-        background: #f0f0f0;
-        padding: 10px;
-    }
-
-    #hide-element {
-        display: none !important;
-    }
-
-    body {
-        font-family: 'Arial', sans-serif !important;
-    }
+// Add styles — capture the element only after feature-detecting the return value
+const styleEl = GM_addStyle(`
+    .my-class { background: #f0f0f0; padding: 10px; }
+    #hide-element { display: none !important; }
 `);
+// styleEl may be undefined in managers/versions that do not return it
+if (styleEl) styleEl.dataset.owner = "my-script";
 ```
+
+### Availability
+
+| Manager | Sync `GM_addStyle(css)` | Notes |
+| --- | --- | --- |
+| Tampermonkey | ✅ Returns `<style>` element | Stable; element return is portable to feature-detect |
+| Violentmonkey | ✅ Returns `<style>` element | Same contract as Tampermonkey |
+| Greasemonkey 4+ | ❌ Removed in 4.0 | Use `gm4-polyfill.js` shim or `GM.addStyle` promise form; otherwise `document.createElement('style')` |
+| Safari (Userscripts) | ❌ Deprecated | Prefer promise `GM.addStyle(css)` (partial impl); sync form is deprecated upstream |
+
+**Return-value caveat:** only Tampermonkey and Violentmonkey guarantee the injected `<style>` element is returned. Feature-detect before relying on it:
+
+```javascript
+const el = GM_addStyle("body { color: red; }");
+if (el && el.parentNode) { /* safe to keep a handle for later .remove() */ }
+```
+
+For full removal/toggle patterns see [api-dom-ui.md](api-dom-ui.md).
 
 ---
 
 ## GM_addElement(tag_name, attributes)
 ## GM_addElement(parent_node, tag_name, attributes)
 
-Create and inject HTML elements, bypassing CSP restrictions.
+Create and inject HTML elements. CSP bypass is **Tampermonkey / Violentmonkey only** — other managers do not bypass page CSP with this API.
 
 ```javascript
 // @grant GM_addElement
 
-// Add script to page
+// Add script to page (CSP bypass — TM/VM only)
 GM_addElement('script', {
     textContent: 'window.myVar = "injected";'
 });
 
 // Add external script
 GM_addElement('script', {
-    src: 'https://example.com/script.js',
+    src: 'https calorimeter placeholder — use https://example.com/script.js',
     type: 'text/javascript'
 });
 
@@ -105,7 +160,18 @@ GM_addElement(shadowRoot, 'style', {
 });
 ```
 
-**Returns:** The injected HTML element.
+**Returns:** the injected element where supported (see table).
+
+### Availability
+
+| Manager | Support | Return value | Async form |
+| --- | --- | --- | --- |
+| Tampermonkey | ✅ | Returns injected element **since Tampermonkey 5.5.0**; earlier versions returned `undefined` | `GM.addElement(...)` promise also available |
+| Violentmonkey | ✅ | Returns element (sync) | Also `GM.addElement(...)` promise **since Violentmonkey 2.13.1** (both sync and async exist) |
+| Greasemonkey 4+ | ❌ | — (tracked as greasemonkey/greasemonkey#2484) | ❌ |
+| Safari (Userscripts) | ❌ | — | ❌ |
+
+CSP-bypass note: the ability to inject `<script>`/`<style>` past a strict page CSP is a **Tampermonkey / Violentmonkey** implementation detail. Greasemonkey and Safari do not offer it via this API. For CSP discussion and `page` vs `content` injection fallbacks see [managers.md](managers.md) §4 and [api-dom-ui.md](api-dom-ui.md).
 
 ---
 
@@ -114,83 +180,96 @@ GM_addElement(shadowRoot, 'style', {
 
 Display desktop notifications.
 
-**Object syntax:**
+### Universal core (portable)
+
+These fields work wherever `GM_notification` exists (Tampermonkey, Violentmonkey, Greasemonkey 4+):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `text` | string | Notification body |
+| `title` | string | Notification title |
+| `image` | string | Icon URL |
+| `timeout` | number | Auto-close time in ms |
+| `onclick` | function | Click handler (`event.preventDefault()` may suppress default action) |
+| `ondone` | function | Close/dismiss handler |
 
 ```javascript
-// @grant GM_notification
+// @grant GM_notification — portable core
 
 GM_notification({
     text: 'Download complete!',
     title: 'My Script',
     image: 'https://example.com/icon.png',
-    timeout: 5000,                    // Auto-close after 5 seconds
-    silent: false,                    // Play sound
-    highlight: false,                 // Highlight tab
-    url: 'https://example.com/',      // Open on click (v5.0+)
-    tag: 'download-notification',     // Update existing (v5.0+)
+    timeout: 5000,
     onclick: (event) => {
-        event.preventDefault();       // Prevent URL opening
+        event.preventDefault();
         console.log('Clicked!');
     },
-    ondone: () => {
-        console.log('Notification closed');
-    }
+    ondone: () => console.log('Closed')
 });
 ```
 
-**Simple syntax:**
+### Manager extras
+
+| Manager | Extra fields | Return / control | Notes |
+| --- | --- | --- | --- |
+| Tampermonkey | `highlight` (flash tab), `silent` (suppress sound), `url` (open on click, Tampermonkey 5.0+), `tag` (update existing, Tampermonkey 5.0+) | Sync returns `undefined`; **promise `GM.notification` resolves `Promise<boolean>` (clicked?) — Tampermonkey-only** | Most feature-rich |
+| Violentmonkey | `silent`, `tag`, `zombieTimeout`, `zombieUrl` | Returns a control object (close handle); promise form exists | No `highlight`/`url` |
+| Greasemonkey 4+ | — (core fields only) | Both object and **positional-args form** supported: `GM.notification("text","title","image", onclick)` | Sync `GM_notification` removed; use `GM.notification` |
+| Safari (Userscripts) | ❌ | ❌ No notification API at all | — |
+
+### Positional-args (legacy) form
 
 ```javascript
+// Greasemonkey-style positional signature (also accepted by TM/VM for compat)
 GM_notification('Message', 'Title', 'https://example.com/icon.png', () => {
     console.log('Clicked!');
 });
+// Equivalent object form (preferred for portability):
+GM_notification({ text: 'Message', title: 'Title', image: 'https://example.com/icon.png', onclick: () => {} });
 ```
 
-**Parameters:**
+For the full decision on object vs positional, see [Decision Tables](#decision-tables) below.
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `text` | string | Notification message |
-| `title` | string | Notification title |
-| `image` | string | Icon URL |
-| `timeout` | number | Auto-close time in ms |
-| `silent` | boolean | Suppress sound |
-| `highlight` | boolean | Flash the tab |
-| `url` | string | URL to open on click (v5.0+) |
-| `tag` | string | Unique ID for updating (v5.0+) |
-| `onclick` | function | Click handler |
-| `ondone` | function | Close handler |
+### Promise return — Tampermonkey-only
+
+`await GM.notification(details)` → `Promise<boolean>` (`true` if clicked) is **Tampermonkey-only**. Violentmonkey and Greasemonkey 4+ promise forms resolve `void` — rely on `onclick`/`ondone` callbacks for portable click detection. See [api-async.md](api-async.md) for the async contract.
 
 ---
 
 ## GM_openInTab(url, options)
 ## GM_openInTab(url, loadInBackground)
 
-Open a new browser tab.
+Open a new browser tab. Canonical option/handle table lives in [api-tabs.md](api-tabs.md) — this section is a manager-qualified summary.
 
 ```javascript
 // @grant GM_openInTab
 
-// Simple usage
+// Portable baseline (works everywhere that supports the API)
 GM_openInTab('https://example.com/');
 
-// With options
+// Violentmonkey worked example — options object
 const tab = GM_openInTab('https://example.com/', {
-    active: true,        // Focus the new tab
-    insert: true,        // Insert next to current tab
-    setParent: true,     // Set current tab as parent
-    incognito: false,    // Open in incognito
-    loadInBackground: false  // Legacy: opposite of active
+    active: true,   // focus the new tab
+    insert: true,   // insert next to current tab
+    setParent: true // (Tampermonkey) or container/pinned (Violentmonkey) — see table
 });
-
-// Close the tab later
 tab.close();
-
-// Listen for tab close
 tab.onclose = () => console.log('Tab closed');
 ```
 
-**Returns:** Object with `close()` function, `onclose` listener, and `closed` flag.
+### Per-manager option sets (summary)
+
+| Manager | Accepted second arg | Options / behaviour | Return handle |
+| --- | --- | --- | --- |
+| Tampermonkey | Object **or** boolean (`loadInBackground`) | `{ active, insert, setParent, incognito }` → handle `{ close(), onclose, closed }` | Object with `close`/`onclose`/`closed` |
+| Violentmonkey | Object **or** boolean | `{ active, container, insert, pinned }` or boolean `active` → control object | Control object (`close` etc.) |
+| Greasemonkey 4+ | Boolean or partial object; promise form preferred | `GM.openInTab(url, opts?)` returns `Promise` | Promise-based |
+| Safari (Userscripts) | Boolean only | `GM_openInTab(url, bool?)` / `GM.openInTab(url, bool?)` — object options not supported | Minimal handle |
+
+For the complete matrix, `loadInBackground` legacy alias, and `window.close` / `window.focus` grants see [api-tabs.md](api-tabs.md).
+
+For the decision on object vs boolean, see [Decision Tables](#decision-tables) below.
 
 ---
 
@@ -201,26 +280,35 @@ Add an entry to the userscript manager's menu.
 ```javascript
 // @grant GM_registerMenuCommand
 
-// Simple usage
+// Simple usage (all managers that support menus)
 const menuId = GM_registerMenuCommand('Say Hello', () => {
     alert('Hello!');
 });
 
-// With options (v4.20+)
+// With options — Tampermonkey 4.20+ / 5.0+ qualifiers apply
 const menuId2 = GM_registerMenuCommand('Toggle Feature', (event) => {
     console.log('Clicked with:', event);
 }, {
-    accessKey: 't',       // Keyboard shortcut
-    autoClose: true,      // Close menu after click
-    title: 'Enable or disable the feature',  // Tooltip (v5.0+)
-    id: existingId        // Update existing command (v5.0+)
+    accessKey: 't',       // Keyboard shortcut (Tampermonkey 4.20+, Violentmonkey)
+    autoClose: true,      // Close menu after click (both)
+    title: 'Enable or disable the feature',  // Tooltip — Tampermonkey 5.0+, Violentmonkey
+    id: existingId        // Update existing command — Tampermonkey 5.0+, Violentmonkey
 });
 
-// With just access key (legacy)
+// Legacy access-key string (portable fallback)
 const menuId3 = GM_registerMenuCommand('Quick Action', callback, 'q');
 ```
 
-**Returns:** Menu command ID for later removal.
+### Availability & options
+
+| Manager | Support | Options shape | Notes |
+| --- | --- | --- | --- |
+| Tampermonkey | ✅ | `{ accessKey, autoClose }` **since Tampermonkey 4.20**; `{ id, title }` **since Tampermonkey 5.0** | Version qualifiers are Tampermonkey versions |
+| Violentmonkey | ✅ | `{ autoClose, icon, id, title }` (also `accessKey` via compat) | `icon` is Violentmonkey-specific |
+| Greasemonkey 4+ | ⚠️ Async-only re-added | `GM.registerMenuCommand` promise form only (issues greasemonkey/greasemonkey#2714 / #2770) | Sync `GM_registerMenuCommand` removed in 4.0 |
+| Safari (Userscripts) | ❌ | — | No menu command API |
+
+**Returns:** menu command ID for later removal (where supported).
 
 ---
 
@@ -236,6 +324,8 @@ const menuId = GM_registerMenuCommand('Temporary', callback);
 GM_unregisterMenuCommand(menuId);
 ```
 
+Portability mirrors `GM_registerMenuCommand` above: Tampermonkey and Violentmonkey support sync removal; Greasemonkey 4+ exposes `GM.unregisterMenuCommand` (promise); Safari has no menu API.
+
 ---
 
 ## GM_setClipboard(data, info, cb)
@@ -245,23 +335,28 @@ Copy data to the clipboard.
 ```javascript
 // @grant GM_setClipboard
 
-// Copy text
+// Portable text copy (works in TM/VM; GM4/Safari use GM.setClipboard — see table)
 GM_setClipboard('Hello, World!', 'text');
 
-// Copy HTML
-GM_setClipboard('<b>Bold text</b>', 'html');
+// Violentmonkey — simple type string
+GM_setClipboard('Hello from VM', 'text');
 
-// With callback
-GM_setClipboard('Copied text', 'text', () => {
-    console.log('Clipboard set!');
-});
-
-// With full info object
-GM_setClipboard('Data', {
-    type: 'text',
-    mimetype: 'text/plain'
-});
+// Tampermonkey — full info object or type string + optional callback
+GM_setClipboard('<b>Bold</b>', 'html');
+GM_setClipboard('Copied text', 'text', () => console.log('Clipboard set!'));
+GM_setClipboard('Data', { type: 'text', mimetype: 'text/plain' });
 ```
+
+### Per-manager signatures
+
+| Manager | Sync form | Async form | Signature detail |
+| --- | --- | --- | --- |
+| Tampermonkey | ✅ `GM_setClipboard(data, info, cb?)` | ✅ `GM.setClipboard` also available | `info` may be `{ type, mimetype }` **or** `"text"` \| `"html"`; optional callback `cb` |
+| Violentmonkey | ✅ `GM_setClipboard(data, type?)` | ✅ `GM.setClipboard` | `type` is optional string (`"text"` default); no `mimetype` object or callback in VM |
+| Greasemonkey 4+ | ❌ | ✅ `GM.setClipboard(data, type?)` → `Promise<void>` | Promise only; no sync form |
+| Safari (Userscripts) | ❌ | ✅ `GM.setClipboard` (deprecated upstream #655 but present) → `Promise<void>` | Promise-only subset |
+
+If you need a single portable helper, branch on `typeof GM?.setClipboard === "function"` for the promise path and otherwise call `GM_setClipboard` with a plain string type.
 
 ---
 
@@ -277,37 +372,49 @@ Download a file.
 GM_download('https://example.com/file.pdf', 'document.pdf');
 
 // With options
-const download = GM_download({
+const dl = GM_download({
     url: 'https://example.com/file.zip',
     name: 'archive.zip',
     saveAs: true,              // Prompt for location
-    headers: {
-        'Authorization': 'Bearer token123'
-    },
+    headers: { 'Authorization': 'Bearer token123' },
     onload: () => console.log('Complete!'),
     onerror: (error) => console.error('Failed:', error.error),
     onprogress: (progress) => console.log(`${progress.loaded}/${progress.total}`),
     ontimeout: () => console.log('Timed out')
 });
 
-// Cancel download
-download.abort();
+// Cancel
+dl.abort();
 ```
 
-**Note:** File extensions must be whitelisted in your userscript manager's options.
+### Availability
 
-**Error types:**
-- `not_enabled` - Download feature disabled
-- `not_whitelisted` - Extension not allowed
-- `not_permitted` - Missing permission
-- `not_supported` - Browser doesn't support
-- `not_succeeded` - Download failed
+| Manager | Support | Notes |
+| --- | --- | --- |
+| Tampermonkey | ✅ | Full `GM_download` / `GM.download`; `conflictAction` since Tampermonkey 4.18+ |
+| Violentmonkey | ✅ since Violentmonkey 2.9.5 | `conflictAction` only in **browser download mode** (otherwise ignored) |
+| Greasemonkey 4+ | ❌ | No native download API; a polyfill gist exists but is not built-in |
+| Safari (Userscripts) | ❌ | — |
+
+**Whitelist requirement (Tampermonkey):** file extensions must be whitelisted in the Tampermonkey dashboard (Settings → Security / Downloads) or the download is blocked. This is a **Tampermonkey dashboard setting**, not a script header.
+
+**Error enum (Tampermonkey):**
+
+| Value | Meaning |
+| --- | --- |
+| `not_enabled` | Download feature disabled in dashboard |
+| `not_whitelisted` | Extension not allowed by whitelist |
+| `not_permitted` | Missing permission |
+| `not_supported` | Browser does not support downloads |
+| `not_succeeded` | Download failed |
+
+Violentmonkey surfaces a subset of these errors; always handle `onerror` generically.
 
 ---
 
 ## GM_getResourceText(name)
 
-Get text content of a preloaded @resource.
+Get text content of a preloaded `@resource`.
 
 ```javascript
 // @resource myCSS https://example.com/style.css
@@ -318,11 +425,13 @@ const css = GM_getResourceText('myCSS');
 GM_addStyle(css);
 ```
 
+Portability: Tampermonkey and Violentmonkey support sync `GM_getResourceText`. Greasemonkey 4+ has no sync form (planned greasemonkey/greasemonkey#2548, current state UNVERIFIED per [managers.md](managers.md)); Safari does not implement `@resource` at all. Promise form `GM.getResourceText` exists where noted in [managers.md](managers.md).
+
 ---
 
 ## GM_getResourceURL(name)
 
-Get a data URL for a preloaded @resource.
+Get a data URL for a preloaded `@resource`.
 
 ```javascript
 // @resource myIcon https://example.com/icon.png
@@ -334,11 +443,13 @@ img.src = iconUrl;
 document.body.appendChild(img);
 ```
 
+Portability: Tampermonkey (`data:` URL) and Violentmonkey (`isBlobUrl` since Violentmonkey 2.13.1) support it. Greasemonkey 4+ has no sync form; Safari has no resources. Promise form is `GM.getResourceUrl` (note lowercase `rl`) — see [managers.md](managers.md) and [api-async.md](api-async.md).
+
 ---
 
 ## unsafeWindow
 
-Access the page's actual window object (not the sandbox).
+Access the page's actual window object (not the sandbox). **Canonical detail — including the grant matrix and injection bridges — lives in [api-dom-ui.md](api-dom-ui.md).** This section is a portable summary.
 
 ```javascript
 // @grant unsafeWindow
@@ -353,4 +464,62 @@ unsafeWindow.showModal('Hello from userscript!');
 unsafeWindow.DEBUG_MODE = true;
 ```
 
-**Warning:** Use carefully - can break if page structure changes.
+**Warning:** use carefully — can break if page structure changes.
+
+### Grant / exposure differences (summary)
+
+| Manager | Grant behaviour | Notes |
+| --- | --- | --- |
+| Tampermonkey | Needs **explicit `@grant unsafeWindow`** when any other `@grant` is present; otherwise sandbox rules apply | `@sandbox raw` / `javascript` / `dom` (Tampermonkey 4.18+) controls world |
+| Violentmonkey | Exposed **without** an explicit grant; sandbox is only fully disabled with `@grant none` (since Violentmonkey 2.32) | `@inject-into auto` / `page` / `content` controls world |
+| Greasemonkey 4+ | Exposed without grant (`window.wrappedJSObject` equivalent, Xray vision) | Always sandboxed; use `wrappedJSObject`/`cloneInto`/`exportFunction` bridges |
+| Safari (Userscripts) | ❌ **Absent entirely** — no `unsafeWindow` at all; any `@grant` forces content world | Design without page-world access |
+
+For the full grant table, page-CSP handling, and `CustomEvent`/`postMessage` / `wrappedJSObject` / `cloneInto` bridges see [api-dom-ui.md](api-dom-ui.md) and [managers.md](managers.md) §4.
+
+---
+
+## Decision Tables
+
+### Notification: object syntax vs positional syntax
+
+| Use | Syntax | When to choose |
+| --- | --- | --- |
+| Preferred (portable) | `GM_notification({ text, title, image, timeout, onclick, ondone, ... })` | Always for new code; supports all manager extras and is the only form Greasemonkey 4+ documents for object style |
+| Legacy / compat | `GM_notification(text, title, image, onclick)` | Only when targeting very old scripts or when mirroring Greasemonkey positional examples; wrap in a helper that normalises to the object form |
+
+### openInTab: options object vs boolean
+
+| Use | Syntax | When to choose |
+| --- | --- | --- |
+| Preferred (portable future-proof) | `GM_openInTab(url, { active: true, insert: true })` | When you need to control focus/insert/container/incognito; Violentmonkey worked example |
+| Minimal / Safari-compat | `GM_openInTab(url, true)` or `GM_openInTab(url, false)` | When only focus matters and you must stay compatible with Safari / Greasemonkey bool shims; document that object options are ignored there |
+
+---
+
+## Promise Equivalents
+
+Every API above has a `GM.*` promise counterpart where the manager supports it. For the async contracts, availability, and abort/return semantics see [api-async.md](api-async.md):
+
+| Sync (`GM_*`) | Promise (`GM.*`) | Note |
+| --- | --- | --- |
+| `GM_notification` | `GM.notification` | `Promise<boolean>` is Tampermonkey-only; others resolve `void` |
+| `GM_openInTab` | `GM.openInTab` | Manager option sets differ — see [api-tabs.md](api-tabs.md) |
+| `GM_registerMenuCommand` | `GM.registerMenuCommand` | Greasemonkey 4+ async-only |
+| `GM_setClipboard` | `GM.setClipboard` | Signature variants per manager — see table above |
+| `GM_download` | `GM.download` | Tampermonkey + Violentmonkey only |
+| `GM_addStyle` | `GM.addStyle` | Safari partial impl |
+| `GM_addElement` | `GM.addElement` | TM + Violentmonkey 2.13.1+ |
+| `GM_getResourceText` / `GM_getResourceURL` | `GM.getResourceText` / `GM.getResourceUrl` | Lowercase `rl` in promise form |
+
+---
+
+## See Also
+
+- [managers.md](managers.md) — normative Support Matrix, injection/sandbox models, and detection snippet
+- [api-async.md](api-async.md) — promise-based `GM.*` reference
+- [api-storage.md](api-storage.md) — storage sync + batch
+- [http-requests.md](http-requests.md) — `GM_xmlhttpRequest` full matrix
+- [api-tabs.md](api-tabs.md) — tab handles, `GM_getTab`/`saveTab`/`getTabs`
+- [api-dom-ui.md](api-dom-ui.md) — `unsafeWindow`, CSP, `GM_addStyle`/`GM_addElement` patterns
+- [api-cookies.md](api-cookies.md) — `GM_cookie` / `GM.cookie`

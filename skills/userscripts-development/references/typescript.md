@@ -1,6 +1,6 @@
 # TypeScript Userscript Development
 
-Writing userscripts in TypeScript with full type safety. Works across userscript managers; the `@types/tampermonkey` package is the de-facto type definition source for the standard GM_* / GM.* APIs.
+Writing userscripts in TypeScript with full type safety. The `@types/tampermonkey` npm package is the de-facto typings source for the standard `GM_*` / `GM.*` APIs and exports the global namespace `Tampermonkey`. Typings ≠ execution target — they type-check against a manager-agnostic `.user.js` artifact you load in any manager (Violentmonkey worked example below). See `managers.md` for per-manager runtime support.
 
 ---
 
@@ -9,13 +9,22 @@ Writing userscripts in TypeScript with full type safety. Works across userscript
 ### Install Type Definitions
 
 ```bash
-# @types/tampermonkey - npm package name; provides the `Tampermonkey` global namespace
+# @types/tampermonkey — npm package name; provides the `Tampermonkey` global namespace
+# De-facto typings for GM_* AND GM.* across managers
 npm install --save-dev @types/tampermonkey
 # or
 pnpm add -D @types/tampermonkey
 ```
 
-Current version: `@types/tampermonkey@5.0.5` (updated October 2025, maintained on DefinitelyTyped).
+Current at time of writing: 5.0.5 — verify with `npm view @types/tampermonkey version`. Published 2025-10-17, actively maintained on DefinitelyTyped (latest verified 5.5.0 as of 2026-08-20).
+
+**Supplemental / alternative typings:**
+
+| Package | npm name | Version / status | Notes |
+|---------|----------|------------------|-------|
+| Violentmonkey types | `@violentmonkey/types` | 0.3.x (0.3.4 latest) | Complementary; README notes "should be almost same as Tampermonkey, so @types/tampermonkey should also work" |
+| Greasemonkey types | `@types/greasemonkey` | 4.0.7 (2023) | Exists but stale — no recent updates |
+| Hand-rolled | ambient `*.d.ts` | — | Viable for libraries or custom APIs — declare `declare namespace Tampermonkey { ... }` / global `GM_*` as needed |
 
 ### tsconfig.json
 
@@ -36,9 +45,9 @@ Current version: `@types/tampermonkey@5.0.5` (updated October 2025, maintained o
 
 ## Bundler Setup
 
-Any standards-compliant userscript manager requires a single `.user.js` file. Use a bundler to compile TypeScript into one output.
+Any standards-compliant userscript manager requires a single `.user.js` file. Use a bundler to compile TypeScript into one output. The output `.user.js` is manager-agnostic — load the same artifact in Violentmonkey/Tampermonkey/Greasemonkey.
 
-### esbuild (recommended - fastest)
+### esbuild (recommended — fastest)
 
 ```bash
 pnpm add -D esbuild
@@ -54,7 +63,13 @@ pnpm add -D esbuild
 }
 ```
 
+Output `.user.js` is manager-agnostic — load the same artifact in Violentmonkey/Tampermonkey/Greasemonkey. Violentmonkey worked example: build, then drag `dist/script.user.js` into the Violentmonkey dashboard or serve via `npx http-server` and install from `http://localhost:8080/dist/script.user.js` with Track external edits enabled.
+
+For the metadata block with esbuild, prepend a banner file containing `// ==UserScript==` … `// ==/UserScript==` or use an `esbuild --banner` / small prepend script — header generation is not built-in.
+
 ### Vite with vite-plugin-monkey
+
+`vite-plugin-monkey` (maintainer lisonge) is manager-neutral: supports TM, Violentmonkey, Greasemonkey, and ScriptCat; emits a standard `.user.js` with auto-grants derived from the `userscript` config.
 
 ```bash
 pnpm add -D vite vite-plugin-monkey
@@ -79,6 +94,16 @@ export default defineConfig({
   ],
 });
 ```
+
+Output `.user.js` is manager-agnostic — load the same artifact in Violentmonkey/Tampermonkey/Greasemonkey. Violentmonkey worked example: run `pnpm dev`/`vite`, install the dev-server URL, or drag the built `dist/script.user.js` into the dashboard.
+
+### Tooling Decision Table
+
+| Need | Tool | Notes |
+|------|------|-------|
+| Fast single-file build | esbuild (+ banner/meta prepend) | Fastest; you manage the `==UserScript==` header via banner file or prepend step; output `.user.js` is manager-agnostic |
+| Auto-header + dev server | vite-plugin-monkey (lisonge) | Manager-neutral (TM/VM/GM/ScriptCat); auto-generates grants and header; dev server with HMR |
+| Webpack | webpack-monkey (guanss, early-stage 0.2.1) | Early-stage; manager-neutral output; alternative `webpack-tampermonkey` (npm package `webpack-tampermonkey` 2.0.0, 2019) exists and emits a standard `.user.js` — output is manager-agnostic if you use it — but is older/unmaintained; esbuild-banner pattern is the fallback if neither fits |
 
 ---
 
@@ -153,9 +178,11 @@ GM.notification(details: Tampermonkey.NotificationDetails): Promise<boolean>
 
 ## Handling the Userscript Header in TypeScript
 
-The `// ==UserScript==` block must appear in the final compiled output. With most bundlers, put it as a comment at the top of your entry file - esbuild and Vite preserve leading comments.
+The `// ==UserScript==` block must appear in the final compiled output. With most bundlers, put it as a comment at the top of your entry file — esbuild and Vite preserve leading comments.
 
-Alternatively, use `vite-plugin-monkey` or `webpack-tampermonkey` (npm package name) which inject the header automatically from configuration.
+Alternatively, use `vite-plugin-monkey` (lisonge, manager-neutral, supports TM/VM/GM/ScriptCat; emits standard `.user.js` with auto-grants) or `webpack-tampermonkey` (npm package `webpack-tampermonkey` — factual package name, manager-neutral output: standard `.user.js` loadable in any manager) which inject the header automatically from configuration. For webpack, `webpack-monkey` (guanss, early-stage) is the actively referenced alternative; if neither fits, use the esbuild banner/meta-prepend pattern.
+
+Output `.user.js` from any of these tools is manager-agnostic — verify in Violentmonkey by loading the built artifact.
 
 ---
 
@@ -176,7 +203,7 @@ const defaultSettings: Settings = {
     enabled: true,
 };
 
-// Load all settings at once (v5.3+)
+// Load all settings at once (TM 5.3+ / VM 2.19.1+; GM4+/Safari: no batch — see managers.md)
 const settings = await GM.getValues<Settings>(defaultSettings);
 ```
 
@@ -234,7 +261,9 @@ button.click();
 
 ## Notes
 
-- The `@types/tampermonkey` npm package covers both GM_* and GM.* APIs (the `Tampermonkey` namespace is exported globally)
-- `GM_info` is typed as `Tampermonkey.ScriptInfo` and available without `@grant`
-- For `unsafeWindow`, cast carefully: `(unsafeWindow as Window & { myLib: MyLib }).myLib`
-- When using `@grant none`, the sandbox is disabled and `GM_*` functions are unavailable — TypeScript won't catch this at compile time
+- The `@types/tampermonkey` npm package covers both GM_* and GM.* APIs (the `Tampermonkey` global namespace is exported globally) — typings are de-facto for standard APIs across managers, not an execution-target lock
+- `GM_info` is typed as `Tampermonkey.ScriptInfo` and available without `@grant` in all managers
+- For `unsafeWindow`, cast carefully: `(unsafeWindow as Window & { myLib: MyLib }).myLib` — guard with `typeof unsafeWindow !== 'undefined'` (absent in Safari Userscripts regardless of grants; see `managers.md`)
+- When using `@grant none`, the sandbox is disabled and `GM_*`/`GM.*` functions are unavailable — TypeScript won't catch this at compile time; any `@grant` vs `@grant none` semantics differ per manager (see `managers.md` and `common-pitfalls.md`)
+- `@connect` and network APIs are manager-enforced differently (TM strict, VM not enforced, GM ignores); declare domains for TM compatibility
+- Output `.user.js` is manager-agnostic — build once, load in Violentmonkey/Tampermonkey/Greasemonkey/Safari Userscripts (within each manager's supported API subset)

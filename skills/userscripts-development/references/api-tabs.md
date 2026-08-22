@@ -1,14 +1,35 @@
 # Tab API Reference
 
-Documentation for tab management and cross-tab communication.
+Documentation for tab management and cross-tab communication. Per-manager facts follow [managers.md](managers.md); when a concrete manager is shown, **Violentmonkey** is the worked example. Version numbers are manager-qualified (for example Tampermonkey 5.3+, Violentmonkey since 2.12.0).
+
+---
+
+## Conventions
+
+| Form | Status | Managers | Notes |
+| --- | --- | --- | --- |
+| `GM_getTab` / `GM_saveTab` / `GM_getTabs` + `GM_openInTab(url, opts)` (callback / sync) | **Legacy** | Tampermonkey, Violentmonkey | Callback/sync forms are legacy; prefer promise `GM.*` where available |
+| `GM.getTab()` / `GM.saveTab(tab)` / `GM.getTabs()` + `GM.openInTab(url, opts)` (promise) | **Preferred** | Tampermonkey ✅, Violentmonkey ✅ since 2.12.0, Greasemonkey 4+ ⚠️ promise forms only, Safari ❌ except `openInTab`/`closeTab` bool form | Greasemonkey 4+ offers promises **only** — all `GM_*` sync forms were removed in 4.0 |
+| Safari "Userscripts" app | Minimal tab support | `GM_openInTab(url, bool?)` / `GM.openInTab(url, bool?)` and `window.close` bool form only | No `GM_getTab`/`GM_saveTab`/`GM_getTabs` |
+
+> **Greasemonkey 4+:** promise-only. Every example below that uses `GM_getTab(callback)` has a `GM.getTab()` promise equivalent. **Safari:** lacks tab-persistent storage; only `openInTab`/`closeTab` with a boolean argument are available. See [managers.md](managers.md) §2 Tabs and [api-async.md](api-async.md) for promise contracts.
 
 ---
 
 ## Tab-Persistent Storage
 
-### GM_getTab(callback)
+Tab objects persist for the lifetime of the current tab and survive navigations within that tab.
+
+### GM_getTab(callback) — sync (callback), legacy
 
 Get an object that persists for the lifetime of the current tab.
+
+| Manager | Support |
+| --- | --- |
+| Tampermonkey | ✅ sync callback |
+| Violentmonkey | ✅ sync callback |
+| Greasemonkey 4+ | ❌ sync — use `GM.getTab()` promise |
+| Safari "Userscripts" | ❌ |
 
 ```javascript
 // @grant GM_getTab
@@ -17,7 +38,6 @@ GM_getTab(function(tab) {
     console.log('Tab object:', tab);
 
     // Tab object is initially empty {}
-    // Add any data you want
     tab.visitCount = (tab.visitCount || 0) + 1;
     tab.lastVisit = Date.now();
 
@@ -26,30 +46,66 @@ GM_getTab(function(tab) {
 });
 ```
 
-### GM_saveTab(tab, cb)
+**Promise form (preferred):**
 
-Save changes to the tab object.
+```javascript
+// @grant GM.getTab
+// Availability: Tampermonkey ✅, Violentmonkey since 2.12.0, Greasemonkey 4+ ⚠️ promise, Safari ❌
+
+const tab = await GM.getTab();
+tab.visitCount = (tab.visitCount || 0) + 1;
+console.log('Visits:', tab.visitCount);
+```
+
+### GM_saveTab(tab) — sync (callback), legacy
+
+Save changes to the tab object. You must call save after mutating the tab object in the sync form; promise form is `GM.saveTab(tab)`.
+
+| Manager | Support |
+| --- | --- |
+| Tampermonkey | ✅ sync callback `GM_saveTab(tab, cb?)` |
+| Violentmonkey | ✅ sync callback |
+| Greasemonkey 4+ | ❌ sync — use `GM.saveTab(tab)` promise |
+| Safari "Userscripts" | ❌ |
 
 ```javascript
 // @grant GM_saveTab
+// @grant GM_getTab
 
 GM_getTab(function(tab) {
-    // Modify tab data
     tab.userData = {
         preferences: { theme: 'dark' },
         history: ['page1', 'page2']
     };
 
-    // Save changes
     GM_saveTab(tab, function() {
         console.log('Tab data saved');
     });
 });
 ```
 
-### GM_getTabs(callback)
+**Promise form (preferred):**
+
+```javascript
+// @grant GM.saveTab
+// @grant GM.getTab
+
+const tab = await GM.getTab();
+tab.userData = { preferences: { theme: 'dark' } };
+await GM.saveTab(tab);
+console.log('Tab data saved');
+```
+
+### GM_getTabs(callback) — sync (callback), legacy
 
 Get tab objects from all tabs running the script.
+
+| Manager | Support |
+| --- | --- |
+| Tampermonkey | ✅ sync callback |
+| Violentmonkey | ✅ sync callback |
+| Greasemonkey 4+ | ❌ sync — use `GM.getTabs()` promise (⚠️ partial) |
+| Safari "Userscripts" | ❌ |
 
 ```javascript
 // @grant GM_getTabs
@@ -62,100 +118,157 @@ GM_getTabs(function(tabs) {
         console.log(`Tab ${tabId}:`, tabData);
     }
 
-    // Count active tabs
     const tabCount = Object.keys(tabs).length;
     console.log(`Script running in ${tabCount} tabs`);
 });
 ```
 
+**Promise form (preferred):**
+
+```javascript
+// @grant GM.getTabs
+
+const tabs = await GM.getTabs();
+for (const [tabId, tabData] of Object.entries(tabs)) {
+    console.log(`Tab ${tabId}:`, tabData);
+}
+```
+
+See [managers.md](managers.md) §2 Tabs for the normative matrix and [api-async.md](api-async.md) for promise contracts.
+
 ---
 
 ## Window Control
 
-### GM_openInTab(url, options)
+### GM_openInTab(url, options) — canonical
 
-Open a new browser tab.
+Open a new browser tab. This file is the **canonical home** for per-manager option sets; [api-sync.md](api-sync.md) holds only a summary linking here.
+
+| Manager | Accepted second arg | Recognised options | Returned handle |
+| --- | --- | --- | --- |
+| **Tampermonkey** | Object **or** boolean (`loadInBackground` legacy alias, opposite of `active`) | `{ active, insert, setParent, incognito }` | Handle `{ close(), onclose, closed }` — `close()` closes the tab, `onclose` callback, `closed` boolean |
+| **Violentmonkey** | Object **or** boolean (`openInBackground`, opposite of `active`) | `{ active, container, insert, pinned }` or boolean | Control object with `close()`, `onclose`, `closed` (same casing as Tampermonkey) |
+| **Greasemonkey 4+** | Boolean or partial object | boolean / partial options; prefer `GM.openInTab(url, opts?)` promise | `Promise` resolving to handle (where implemented) |
+| **Safari "Userscripts"** | **Boolean only** | `true` = background, `false` = foreground — object options not supported | Minimal handle |
+
+Normalize `closed` / `onclose` casing consistently (lowercase) across examples.
 
 ```javascript
 // @grant GM_openInTab
 
-// Simple - opens in background
+// Portable baseline — works in every manager that supports the API
 GM_openInTab('https://example.com/');
 
-// Open and focus
-GM_openInTab('https://example.com/', { active: true });
-
-// Full options
-const newTab = GM_openInTab('https://example.com/', {
-    active: true,           // Focus the new tab
-    insert: true,           // Insert next to current tab
-    setParent: true,        // Current tab is parent (closing parent closes this)
-    incognito: false,       // Open in private/incognito mode
-    loadInBackground: false // Legacy: opposite of active
+// --- Tampermonkey ---
+const tmTab = GM_openInTab('https://example.com/', {
+    active: true,       // focus the new tab (opposite of loadInBackground)
+    insert: true,       // insert next to current tab
+    setParent: true,    // current tab is parent (closing parent may close this tab)
+    incognito: false    // open in private/incognito mode
 });
 
-// Control the opened tab
-newTab.onclose = function() {
+// --- Violentmonkey (worked example) ---
+const vmTab = GM_openInTab('https://example.com/', {
+    active: true,       // focus the new tab
+    container: 0,       // Firefox container index (Violentmonkey-only)
+    insert: true,       // insert next to current tab
+    pinned: false       // pin the new tab
+});
+// Boolean shorthand also works in Violentmonkey/Tampermonkey:
+GM_openInTab('https://example.com/', true);  // background — same as { active: false }
+
+// --- Greasemonkey 4+ — prefer promise form ---
+// @grant GM.openInTab
+await GM.openInTab('https://example.com/', true);
+
+// --- Safari — boolean only ---
+// @grant GM_openInTab
+GM_openInTab('https://example.com/', false); // false = foreground
+
+// Control the opened tab — same handle shape (Tampermonkey/Violentmonkey)
+tmTab.onclose = function() {
     console.log('New tab was closed');
 };
 
-// Check if closed
-if (newTab.closed) {
+if (tmTab.closed) {
     console.log('Tab is already closed');
 }
 
-// Close programmatically
 setTimeout(() => {
-    newTab.close();
+    tmTab.close();
 }, 5000);
+```
+
+**Promise form (preferred where available):**
+
+```javascript
+// @grant GM.openInTab
+// Availability: Tampermonkey ✅, Violentmonkey since 2.12.0, Greasemonkey 4+ ⚠️ promise, Safari bool-only promise
+
+const handle = await GM.openInTab('https://example.com/', { active: true });
+handle.onclose = () => console.log('closed');
 ```
 
 ### window.close
 
-Close the current tab (requires grant).
+Close the current tab.
+
+| Manager | Grant | Notes |
+| --- | --- | --- |
+| Tampermonkey | **Requires** `// @grant window.close` (Tampermonkey treats `window.close`/`window.focus` as grants) | Last-tab close may still be blocked by the browser |
+| Violentmonkey | Exposed natively — **no grant needed** | Last-tab close may still be blocked |
+| Greasemonkey 4+ | Exposed natively — **no grant needed** | Last-tab close may still be blocked |
+| Safari "Userscripts" | Boolean `openInTab` handle has `close()`; `window.close` bool form | Object options not supported |
 
 ```javascript
+// Tampermonkey — grant required:
 // @grant window.close
+// Violentmonkey / Greasemonkey — no grant needed
 
-// Close after confirmation
 if (confirm('Close this tab?')) {
     window.close();
 }
 
-// Note: Cannot close the last tab in a window (security restriction)
+// Note: Cannot close the last tab in a window (security restriction) — all managers
 ```
 
 ### window.focus
 
 Bring the window to the front.
 
+| Manager | Grant | Notes |
+| --- | --- | --- |
+| Tampermonkey | **Requires** `// @grant window.focus` | Unlike `unsafeWindow.focus()`, this works regardless of browser focus settings |
+| Violentmonkey | Exposed natively — **no grant needed** | — |
+| Greasemonkey 4+ | Exposed natively — **no grant needed** | — |
+| Safari "Userscripts" | No special grant | — |
+
 ```javascript
+// Tampermonkey:
 // @grant window.focus
+// Violentmonkey / Greasemonkey — no grant
 
-// Focus this window/tab
 window.focus();
-
-// Unlike unsafeWindow.focus(), this works regardless of browser settings
 ```
 
 ---
 
 ## URL Change Detection
 
-### window.onurlchange
+### window.onurlchange — Tampermonkey-ONLY
 
-Listen for URL changes in single-page applications (SPAs).
+> **Tampermonkey-ONLY.** Violentmonkey declined this API (issue #1195); Greasemonkey 4+ and Safari "Userscripts" do not implement it. Do not feature-test for `onurlchange` as a portable success path — use the portable fallback below.
+
+When `window.onurlchange` is supported, Tampermonkey exposes it as `null` until granted, then fires a `urlchange` event with `info.url` (the new URL).
 
 ```javascript
-// @grant window.onurlchange
+// @grant window.onurlchange  // Tampermonkey-ONLY grant; ignored elsewhere
 
-// Check if supported
+// Check Tampermonkey support — window.onurlchange === null means available
 if (window.onurlchange === null) {
-    // Feature is supported
     window.addEventListener('urlchange', function(info) {
-        console.log('URL changed to:', info.url);
+        console.log('URL changed to:', info.url);  // info.url — Tampermonkey idiom
 
-        // Re-run modifications for new page
         if (info.url.includes('/profile')) {
             modifyProfilePage();
         } else if (info.url.includes('/settings')) {
@@ -165,24 +278,22 @@ if (window.onurlchange === null) {
 }
 ```
 
-### Comprehensive SPA Handler
+### Comprehensive SPA handler — Tampermonkey onurlchange + portable fallback
 
 ```javascript
-// @grant window.onurlchange
+// @grant window.onurlchange  // Tampermonkey-ONLY; ignored elsewhere
 
 (function() {
     'use strict';
 
-    // Initial page load
     handlePage(location.href);
 
-    // URL changes (SPA navigation)
+    // Tampermonkey-only enhancement
     if (window.onurlchange === null) {
-        window.addEventListener('urlchange', (e) => handlePage(e.url));
+        window.addEventListener('urlchange', (info) => handlePage(info.url));
     }
 
     function handlePage(url) {
-        // Wait for content to load
         setTimeout(() => {
             if (url.includes('/dashboard')) {
                 enhanceDashboard();
@@ -194,21 +305,69 @@ if (window.onurlchange === null) {
 })();
 ```
 
+### Portable History-API interception fallback (all managers)
+
+Use this as the primary portable path. Works in Tampermonkey, Violentmonkey, Greasemonkey 4+, and Safari.
+
+```javascript
+let currentUrl = location.href;
+
+function handleUrlChange() {
+    if (location.href !== currentUrl) {
+        currentUrl = location.href;
+        console.log('URL changed:', currentUrl);
+        onPageChange();
+    }
+}
+
+// Patch history
+const originalPushState = history.pushState;
+const originalReplaceState = history.replaceState;
+
+history.pushState = function (...args) {
+    const result = originalPushState.apply(this, args);
+    handleUrlChange();
+    return result;
+};
+
+history.replaceState = function (...args) {
+    const result = originalReplaceState.apply(this, args);
+    handleUrlChange();
+    return result;
+};
+
+window.addEventListener('popstate', handleUrlChange);
+window.addEventListener('hashchange', handleUrlChange);
+
+function onPageChange() {
+    // Re-run modifications for new route
+    console.log('Handling page:', location.href);
+}
+```
+
+See [patterns.md](patterns.md) (SPA Navigation Handling) for the full portable pattern and [managers.md](managers.md) §2 SPA navigation row.
+
 ---
 
-## Cross-Tab Communication
+## Cross-Tab Communication — canonical
 
-### Using GM_setValue/addValueChangeListener
+> **Canonical reference** for broadcast / registry / leader-election patterns. [api-storage.md](api-storage.md) links here for cross-tab coordination; storage primitives (`GM_setValue` etc.) are documented there.
+
+| Need | Pattern | When to choose |
+| --- | --- | --- |
+| One-shot broadcast to all tabs | `GM_setValue` + `GM_addValueChangeListener` (`remote` check) | Notify all tabs of a settings change or refresh signal |
+| Persistent registry of active tabs | `GM_getTab` / `GM_saveTab` / `GM_getTabs` | Track which tabs have the page open, deduplicate, enumerate |
+| Single actor across tabs (avoid duplicate work) | Leader election (heartbeat + `GM_setValue('leader')`) | Only one tab should poll, sync, or write |
+
+### Using GM_setValue / GM_addValueChangeListener (broadcast)
 
 ```javascript
 // @grant GM_setValue
 // @grant GM_getValue
 // @grant GM_addValueChangeListener
 
-// Unique ID for this tab
 const TAB_ID = Math.random().toString(36).substr(2, 9);
 
-// Broadcast a message to all tabs
 function broadcast(type, data) {
     GM_setValue('broadcast', {
         type: type,
@@ -218,7 +377,6 @@ function broadcast(type, data) {
     });
 }
 
-// Listen for broadcasts
 GM_addValueChangeListener('broadcast', (key, oldVal, newVal, remote) => {
     if (remote && newVal && newVal.sender !== TAB_ID) {
         console.log('Received:', newVal.type, newVal.data);
@@ -240,7 +398,6 @@ function handleMessage(type, data) {
     }
 }
 
-// Usage
 broadcast('SETTINGS_CHANGED', { theme: 'dark' });
 ```
 
@@ -252,7 +409,6 @@ broadcast('SETTINGS_CHANGED', { theme: 'dark' });
 // @grant GM_getTabs
 // @grant GM_addValueChangeListener
 
-// Register this tab
 function registerTab() {
     GM_getTab(tab => {
         tab.id = tab.id || Math.random().toString(36).substr(2, 9);
@@ -262,7 +418,6 @@ function registerTab() {
     });
 }
 
-// Get list of active tabs
 function getActiveTabs(callback) {
     GM_getTabs(tabs => {
         const activeTabs = Object.entries(tabs)
@@ -276,7 +431,6 @@ function getActiveTabs(callback) {
     });
 }
 
-// Check if another tab has the same URL
 function isDuplicateTab(callback) {
     GM_getTab(currentTab => {
         GM_getTabs(allTabs => {
@@ -288,7 +442,6 @@ function isDuplicateTab(callback) {
     });
 }
 
-// Usage
 registerTab();
 isDuplicateTab((isDuplicate, others) => {
     if (isDuplicate) {
@@ -311,16 +464,13 @@ async function electLeader() {
     const leader = GM_getValue('leader', null);
     const now = Date.now();
 
-    // Leader is valid if set within last 5 seconds
     if (leader && now - leader.timestamp < 5000 && leader.id !== TAB_ID) {
         isLeader = false;
         return;
     }
 
-    // Claim leadership
     GM_setValue('leader', { id: TAB_ID, timestamp: now });
 
-    // Wait and verify
     await new Promise(r => setTimeout(r, 100));
 
     const currentLeader = GM_getValue('leader');
@@ -329,21 +479,18 @@ async function electLeader() {
     console.log(isLeader ? 'This tab is the leader' : 'Another tab is leader');
 }
 
-// Heartbeat to maintain leadership
 setInterval(() => {
     if (isLeader) {
         GM_setValue('leader', { id: TAB_ID, timestamp: Date.now() });
     }
 }, 3000);
 
-// Re-elect if leader disappears
 GM_addValueChangeListener('leader', () => {
     setTimeout(electLeader, 100);
 });
 
 electLeader();
 
-// Only leader performs certain actions
 function doLeaderOnlyTask() {
     if (!isLeader) return;
     console.log('Performing leader-only task');
@@ -352,16 +499,30 @@ function doLeaderOnlyTask() {
 
 ---
 
-## Async Versions
+## Async Versions (promise forms — preferred)
 
 ```javascript
-// GM.getTab()
+// @grant GM.getTab
+// @grant GM.saveTab
+// @grant GM.getTabs
+// Availability: Tampermonkey ✅, Violentmonkey since 2.12.0, Greasemonkey 4+ ⚠️ promise, Safari ❌ (except openInTab bool)
+
 const tab = await GM.getTab();
 tab.data = 'value';
-
-// GM.saveTab()
 await GM.saveTab(tab);
 
-// GM.getTabs()
 const tabs = await GM.getTabs();
+
+// GM.openInTab promise — see canonical table above
+const handle = await GM.openInTab('https://example.com/', { active: true });
 ```
+
+---
+
+## See Also
+
+- [managers.md](managers.md) — normative Support Matrix (§2 Tabs, §2 SPA navigation)
+- [api-storage.md](api-storage.md) — storage primitives and listener semantics (`remote` flag)
+- [api-async.md](api-async.md) — promise-based `GM.*` contracts
+- [patterns.md](patterns.md) — portable SPA navigation fallback
+

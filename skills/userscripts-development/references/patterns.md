@@ -1,6 +1,13 @@
 # Common Userscript Patterns
 
-Reusable patterns and templates for common userscript tasks.
+Reusable patterns and templates for common userscript tasks. Guidance is manager-agnostic; manager caveats are called out per pattern (see [managers.md](managers.md) for source of truth).
+
+| Need | Pattern | When | Manager caveat |
+|------|---------|------|----------------|
+| Run after DOM is ready | `readyState` + `DOMContentLoaded` | `@run-at document-start` scripts, or when timing is uncertain | Universal — works in all managers |
+| Run after a specific element appears | `waitForElement` / `MutationObserver` | Dynamic frameworks (React/Vue), lazy-loaded content | Universal; store handle and `.disconnect()` on SPA route change |
+| React to SPA navigation | History-API patch (`pushState`/`replaceState` + `popstate`/`hashchange`) | SPAs that don't reload | Portable — works everywhere; `window.onurlchange` is Tampermonkey-only (see below) |
+| Hide/remove page elements | CSS via `GM_addStyle` / `GM.addStyle` or `element.remove()` | Ads, banners, clutter | `GM_addStyle` absent in Greasemonkey 4+ (use `GM.addStyle` or `createElement('style')` fallback); check `typeof` before calling |
 
 ---
 
@@ -52,7 +59,8 @@ function waitForElement(selector, timeout = 10000) {
     });
 }
 
-// Usage
+// Usage — store the promise; no observer handle to disconnect here (internal)
+// For a persistent observer, keep the return value and call .disconnect() on SPA route change
 waitForElement('#main-content').then(el => {
     console.log('Found element:', el);
 }).catch(err => {
@@ -103,16 +111,18 @@ function observeDOM(targetSelector, callback, options = {}) {
         ...options
     });
 
-    return observer;
+    return observer; // store return value; call .disconnect() on SPA route change
 }
 
-// Usage - watch for new posts
-observeDOM('#feed', (node, action) => {
+// Usage - watch for new posts — store handle for cleanup
+const feedObserver = observeDOM('#feed', (node, action) => {
     if (node.matches('.post')) {
         console.log('New post added:', node);
         processPost(node);
     }
 });
+// Later, e.g. on SPA route change:
+// feedObserver.disconnect();
 ```
 
 ### Debounced Observer
@@ -127,14 +137,15 @@ function observeDOMDebounced(target, callback, delay = 100) {
     });
 
     observer.observe(target, { childList: true, subtree: true });
-    return observer;
+    return observer; // store return value; call .disconnect() when done
 }
 
 // Usage - process changes once they settle
-observeDOMDebounced(document.body, () => {
+const debouncedObserver = observeDOMDebounced(document.body, () => {
     console.log('DOM changes settled');
     processPage();
 });
+// debouncedObserver.disconnect(); // when navigating away or tearing down
 ```
 
 ---
@@ -143,9 +154,18 @@ observeDOMDebounced(document.body, () => {
 
 ### URL Change Detection
 
-```javascript
-// @grant window.onurlchange
+SPAs change URL via `history.pushState`/`replaceState` without a full load. Detection must be manager-agnostic.
 
+| Manager | `window.onurlchange` | Portable fallback | Notes |
+|---------|----------------------|-------------------|-------|
+| Tampermonkey | ✅ (`@grant window.onurlchange`; check `window.onurlchange === null` then `addEventListener('urlchange')`) | History patch works | Only manager implementing this event |
+| Violentmonkey | ❌ declined (issue #1195) | History patch; also `navigation` event or `@violentmonkey/url` (`VM.onNavigate`) | Do not feature-test for `onurlchange` as success path |
+| Greasemonkey 4+ | ❌ | History patch | — |
+| Safari | ❌ | History patch | — |
+
+**Portable primary path — History API interception (works in all managers):**
+
+```javascript
 let currentUrl = location.href;
 
 function handleUrlChange() {
@@ -156,27 +176,37 @@ function handleUrlChange() {
     }
 }
 
-// Method 1: window.onurlchange (if granted)
-if (window.onurlchange === null) {
-    window.addEventListener('urlchange', handleUrlChange);
-}
-
-// Method 2: History API interception
+// Primary portable method — patch history + listen popstate/hashchange
 const originalPushState = history.pushState;
 const originalReplaceState = history.replaceState;
 
-history.pushState = function() {
-    originalPushState.apply(this, arguments);
+history.pushState = function (...args) {
+    const result = originalPushState.apply(this, args);
     handleUrlChange();
+    return result;
 };
 
-history.replaceState = function() {
-    originalReplaceState.apply(this, arguments);
+history.replaceState = function (...args) {
+    const result = originalReplaceState.apply(this, args);
     handleUrlChange();
+    return result;
 };
 
 window.addEventListener('popstate', handleUrlChange);
+window.addEventListener('hashchange', handleUrlChange);
+
+// Optional enhancement — Tampermonkey-only window.onurlchange (feature-detect)
+// Requires: // @grant window.onurlchange  — Tampermonkey only; ignored elsewhere
+if (typeof window.onurlchange !== 'undefined' && window.onurlchange === null) {
+    window.addEventListener('urlchange', (info) => {
+        // info.url is the new URL (Tampermonkey)
+        console.log('URL changed (Tampermonkey onurlchange):', info.url);
+        handleUrlChange();
+    });
+}
 ```
+
+See [managers.md](managers.md) §2 for SPA navigation matrix and Violentmonkey extras (`navigation` event, `@violentmonkey/url`).
 
 ### Route-Based Handlers
 
@@ -236,9 +266,21 @@ function removeElements(selector) {
     document.querySelectorAll(selector).forEach(el => el.remove());
 }
 
-// Hide elements with CSS (faster, reversible)
+// Hide elements with CSS — portable with fallback (see below)
+// @grant GM_addStyle  // for GM_addStyle path; omit or use GM.addStyle for promise form
 function hideElements(selector) {
-    GM_addStyle(`${selector} { display: none !important; }`);
+    const css = `${selector} { display: none !important; }`;
+    if (typeof GM_addStyle !== 'undefined') {
+        GM_addStyle(css);
+    } else if (typeof GM !== 'undefined' && typeof GM.addStyle === 'function') {
+        // Greasemonkey 4+ and modern promise path
+        GM.addStyle(css).catch(() => {});
+    } else {
+        // Fallback — works everywhere, no grant needed
+        const style = document.createElement('style');
+        style.textContent = css;
+        (document.head || document.documentElement).appendChild(style);
+    }
 }
 
 // Usage

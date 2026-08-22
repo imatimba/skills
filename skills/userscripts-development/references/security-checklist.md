@@ -1,12 +1,12 @@
 # Security Checklist for Userscripts
 
-Pre-delivery validation to ensure scripts are secure and well-formed.
+Pre-delivery validation to ensure scripts are secure and well-formed. Per-manager facts follow [managers.md](managers.md); when a concrete manager is shown, **Violentmonkey** is the worked example.
 
 ---
 
 ## Critical Security Checks
 
-These issues can expose users to serious risks.
+These issues can expose users to serious risks. **Preserved at full strength — do not weaken.**
 
 ### 1. No Hardcoded Secrets
 
@@ -61,7 +61,7 @@ element.innerHTML = `Hello, ${escapeHtml(userInput)}!`;
 
 ### 4. HTTPS for External Requests
 
-**Check:** All external URLs use HTTPS.
+**Check:** All external URLs use HTTPS. **Universal MUST — applies in every manager.**
 
 ```javascript
 // DANGEROUS - HTTP can be intercepted
@@ -69,9 +69,11 @@ element.innerHTML = `Hello, ${escapeHtml(userInput)}!`;
 GM_xmlhttpRequest({ url: 'http://api.example.com/data' });
 
 // SAFE - HTTPS encrypted
-// @connect api.example.com
+// @connect api.example.com // TM-enforced; advisory elsewhere
 GM_xmlhttpRequest({ url: 'https://api.example.com/data' });
 ```
+
+The `// @connect` annotation above is **TM-enforced; advisory elsewhere** — see `@connect` Validation (enforced by Tampermonkey only).
 
 ### 5. No eval() or new Function()
 
@@ -116,40 +118,79 @@ setTimeout(() => doSomething(), 1000);
 // @grant GM_xmlhttpRequest
 // @grant GM_notification
 // @grant unsafeWindow
-// @grant GM_download
-// @grant GM_cookie
+// @grant GM_cookie  // TM stable / Violentmonkey since 2.35.1 only — not portable to Greasemonkey 4+ / Safari
 
 // GOOD - only what's needed
 // @grant GM_addStyle
 // (Script only modifies CSS)
 ```
 
-### @connect Validation
+Label `GM_cookie` / `GM.cookie` as **Tampermonkey stable / Violentmonkey since 2.35.1 only** — Greasemonkey 4+ and Safari have no cookie API (see [managers.md](managers.md) §2 Browser/OS integration).
 
-**Check:** All @connect domains are legitimate and expected.
+### @connect Validation (enforced by Tampermonkey only)
+
+**Check:** All `@connect` domains are legitimate and expected. Enforcement is **Tampermonkey-only** — do NOT treat `@connect` as a security boundary outside Tampermonkey.
+
+| Manager | Enforcement | Detail |
+| --- | --- | --- |
+| Tampermonkey | **Strict — prompt/block** | Unlisted hosts trigger user prompt or block; both initial and final URL after redirects are checked |
+| Violentmonkey | Declared but **NOT enforced** | Value recorded but requests allowed even if host not listed |
+| Greasemonkey 4+ | **Ignored** | Directive has no effect |
+| Safari "Userscripts" | **n/a** | Not enforced |
+
+> **Warning:** `@connect` is a Tampermonkey security boundary only. Outside Tampermonkey it is advisory/hygiene — it does **not** restrict requests. Always validate response and scope `@match` regardless of `@connect`.
 
 ```javascript
 // Verify each domain is needed
-// @connect api.example.com      ✓ Main API
-// @connect cdn.example.com      ✓ CDN resources
+// @connect api.example.com      ✓ Main API — TM-enforced; advisory elsewhere
+// @connect cdn.example.com      ✓ CDN resources — TM-enforced; advisory elsewhere
 // @connect tracking.ads.com     ✗ Why is this here?
+```
+
+See [http-requests.md](http-requests.md) for `@connect` syntax and subdomain-wildcard notes; [managers.md](managers.md) §2 Networking for enforcement source of truth.
+
+### unsafeWindow Availability and Grant Matrix
+
+Scattered `unsafeWindow` mentions are consolidated here — canonical matrix (source: [managers.md](managers.md) §2 DOM & UI, §4 Sandbox).
+
+| Manager | `unsafeWindow` available? | Grant behaviour | Notes |
+| --- | --- | --- | --- |
+| Tampermonkey | ✅ | Needs explicit `// @grant unsafeWindow` **when any other `@grant` is present** | Check `GM_info.sandboxMode` |
+| Violentmonkey | ✅ exposed without grant | Exposed even without grant; sandbox **off only with `// @grant none` (since Violentmonkey 2.32)** | `@inject-into auto/page/content` controls world |
+| Greasemonkey 4+ | ✅ (`window.wrappedJSObject` equivalent) | Exposed; Firefox Xray | Use `cloneInto`/`exportFunction` to share |
+| Safari "Userscripts" | ❌ **absent entirely** | Any `@grant` forces content world; no page-world access | Design without `unsafeWindow` on Safari |
+
+**Recommendation — typeof-guard before use:**
+
+```javascript
+// Portable guard — do not assume unsafeWindow exists (Safari has none)
+if (typeof unsafeWindow !== 'undefined' && unsafeWindow !== window) {
+    // Safe to read page vars — still validate/sanitise any data you use
+    const token = unsafeWindow.pageConfig?.token;
+}
+
+// Feature-detect handler if you need manager branching:
+const handler = (typeof GM_info !== "undefined" ? GM_info : GM.info).scriptHandler;
+// "Violentmonkey" | "Tampermonkey" | "Greasemonkey" | "Userscripts"
 ```
 
 ---
 
 ## Code Quality Checks
 
-### 1. IIFE Wrapper
+### 1. IIFE Wrapper — Recommended
 
-**Check:** Script is wrapped to prevent global pollution.
+**Check:** Script is wrapped to prevent global pollution. **Recommended** (not REQUIRED) — managers sandbox scripts; leak risk is mainly under `// @grant none` page-context (Violentmonkey since 2.32, Tampermonkey no-grant vs `none` difference).
 
 ```javascript
-// REQUIRED
+// Recommended — especially important under @grant none (page context)
 (function() {
     'use strict';
     // Script code here
 })();
 ```
+
+Rationale: with a grant sandbox most leaks are contained, but `// @grant none` runs in page context where globals pollute the page and collide with other scripts. Keep the IIFE as hygiene.
 
 ### 2. Error Handling
 
@@ -177,6 +218,8 @@ GM_xmlhttpRequest({
     ontimeout: () => console.error('Request timed out')
 });
 ```
+
+> Core `GM_xmlhttpRequest` is cross-manager; `cookie` / `anonymous` / `fetch` / `stream` options are **Tampermonkey-only** (Violentmonkey supports `anonymous` since 2.10.1 but not the rest — see [http-requests.md](http-requests.md) and [managers.md](managers.md)).
 
 ### 3. Null Checks
 
@@ -265,9 +308,9 @@ Before returning a userscript, verify:
 
 ### Important (Should Pass)
 
-- [ ] Wrapped in IIFE with 'use strict'
+- [ ] Wrapped in IIFE with 'use strict' — **Recommended** (see rationale above; critical only under `@grant none`)
 - [ ] All @grant statements are necessary
-- [ ] @connect includes all external domains
+- [ ] @connect includes all external domains (required for Tampermonkey; advisory elsewhere)
 - [ ] Error handling for async operations
 - [ ] Null checks before DOM manipulation
 
@@ -277,7 +320,7 @@ Before returning a userscript, verify:
 - [ ] MutationObservers are cleaned up
 - [ ] Frequent operations are debounced
 - [ ] Comments explain non-obvious code
-- [ ] Works in both Chrome and Firefox
+- [ ] Tested in target managers (Violentmonkey / Tampermonkey / Greasemonkey / Safari Userscripts)
 
 ---
 
@@ -288,10 +331,10 @@ Immediately question scripts that:
 | Red Flag | Concern |
 |----------|---------|
 | `@match *://*/*` | Why does it need to run everywhere? |
-| `@grant unsafeWindow` | Does it really need page context? |
+| `@grant unsafeWindow` | Does it really need page context? **Check matrix above** — Tampermonkey needs explicit grant, Violentmonkey exposed without grant (sandbox off only with `@grant none` since 2.32), Greasemonkey exposed, **Safari absent entirely** — guard with `typeof unsafeWindow !== 'undefined'` |
 | `eval()` or `new Function()` | Code injection risk |
 | Hardcoded URLs to unknown domains | Data exfiltration? |
-| `@connect *` without explanation | Where is data going? |
+| `@connect *` without explanation | Where is data going? **TM-enforced meaning: allow any host (prompts user) — inert elsewhere** |
 | Minified/obfuscated code | What is it hiding? |
 | Requests to IP addresses | Suspicious destination |
 | localStorage/cookie access without clear purpose | Data harvesting? |
@@ -338,6 +381,8 @@ GM_xmlhttpRequest({
 });
 ```
 
+> Core `GM_xmlhttpRequest` is cross-manager; `cookie` / `anonymous` / `fetch` / `stream` options are **Tampermonkey-only**.
+
 ### Safe DOM Insertion
 
 ```javascript
@@ -347,3 +392,12 @@ div.textContent = userInput;  // Safe - no HTML parsing
 div.className = 'my-class';
 document.body.appendChild(div);
 ```
+
+---
+
+## See Also
+
+- [managers.md](managers.md) — normative Support Matrix and enforcement
+- [http-requests.md](http-requests.md) — `@connect` syntax, option matrix, `GM_xmlhttpRequest` detail
+- [api-dom-ui.md](api-dom-ui.md) — `unsafeWindow` bridges and CSP handling
+

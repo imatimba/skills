@@ -1,97 +1,160 @@
-# Browser Compatibility Guide
+# Cross-Manager & Cross-Browser Compatibility Guide
 
-Cross-browser differences and compatibility matrix for userscripts.
+Cross-manager & cross-browser compatibility for portable userscripts. Primary compatibility is determined by **userscript manager** (TM / VM / GM4+ / Safari Userscripts); browser differences are a secondary caveat. See `managers.md` — verified source of truth — for normative per-manager facts. Anything not confirmed there is marked UNVERIFIED.
 
----
-
-## Browser Support Matrix
-
-| Feature | Chrome | Firefox | Edge | Safari | Opera |
-|---------|--------|---------|------|--------|-------|
-| **Userscript managers** (e.g. Tampermonkey) | ✅ | ✅ | ✅ | ⚠️ Userscripts app | ✅ |
-| **Manifest Version** | V3 | V2 | V3 | N/A | V3 |
-
-### API Compatibility
-
-| API | Chrome | Firefox | Edge | Notes |
-|-----|--------|---------|------|-------|
-| `GM_setValue/getValue` | ✅ | ✅ | ✅ | Universal |
-| `GM_xmlhttpRequest` | ✅ | ✅ | ✅ | Universal |
-| `GM_addStyle` | ✅ | ✅ | ✅ | Universal |
-| `GM_addElement` | ✅ | ✅ | ✅ | Universal |
-| `GM_notification` | ✅ | ✅ | ✅ | Universal |
-| `GM_download` | ✅ | ✅ | ✅ | Universal |
-| `GM_openInTab` | ✅ | ✅ | ✅ | Universal |
-| `GM_registerMenuCommand` | ✅ | ✅ | ✅ | Universal |
-| `GM_cookie` | ✅ | ✅ | ✅ | Universal |
-| `GM_webRequest` | ❌ MV3 | ✅ | ❌ MV3 | Firefox only now |
-| `GM_audio` | ✅ | ✅ | ✅ | v5.0+ |
-| `window.onurlchange` | ✅ | ✅ | ✅ | Universal |
-| `unsafeWindow` | ✅ | ✅ | ✅ | Universal |
-
-### Sandbox & Execution Context
-
-| Feature | Chrome | Firefox | Notes |
-|---------|--------|---------|-------|
-| `@sandbox raw` | ✅ | ✅ | Page context |
-| `@sandbox JavaScript` | ✅ | ✅ USERSCRIPT_WORLD | Firefox has special context |
-| `@sandbox DOM` | ✅ | ✅ | Isolated context |
-| `document-start` timing | ⚠️ | ✅ | Firefox more reliable |
-| `cloneInto` | ❌ | ✅ | Firefox only |
-| `exportFunction` | ❌ | ✅ | Firefox only |
+> **Version preamble:** version numbers are Tampermonkey's unless stated (e.g., `VM 2.35.1`, `GM4+`).
 
 ---
 
-## Manifest V3 Limitations (Chrome/Edge)
+## Managers vs Browsers
 
-Chrome and Edge use Manifest V3, which restricts certain features:
+| Dimension | What determines support | Example |
+|-----------|------------------------|---------|
+| Manager (TM \| VM \| GM4+ \| Safari Userscripts) | Whether a GM API exists at all | `GM_cookie` is TM + VM only; `GM_audio` is TM-only |
+| Browser (Chrome / Firefox / Safari / Edge) | How isolation/CSP/containers/MV2-vs-MV3 behave | `cloneInto` is Firefox Xray only; `GM_webRequest` is Firefox MV2 only |
 
-### What Doesn't Work in MV3
+Violentmonkey worked example: build a standard `.user.js` and load the same artifact in Violentmonkey (dashboard → drag-and-drop) and in Tampermonkey to compare — manager differences surface faster than browser differences.
 
-1. **@webRequest** - Request interception is blocked
-2. **Some background script patterns** - Persistent background pages removed
-3. **Certain CSP bypass methods** - More restricted
+### Platform Reality
 
-### Workarounds
+| Topic | Fact |
+|-------|------|
+| Mobile | VM = full features on Firefox Android (AMO). Chromium mobile is volatile — Kiwi browser archived Jan 2025; verify any Chromium-mobile claim before recommending. |
+| Chrome MV2 → MV3 | Chrome killed MV2 entirely at v138 (mid-2025). The Chrome Web Store build of Tampermonkey is **MV3**; the Firefox build remains MV2. Several capabilities differ between them (notably `GM_webRequest`). |
+| Firefox | Retains MV2; supports `cloneInto`/`exportFunction`/containers. |
+
+---
+
+## API Compatibility (by Manager)
+
+Legend: ✅ supported · ⚠️ partial/experimental · ❌ absent. Versions are that manager's own.
+
+### Storage
+
+| API | TM | VM | GM4+ | Safari Userscripts | Notes |
+|-----|----|----|------|-------------------|-------|
+| `GM_setValue` / `GM_getValue` / `GM_deleteValue` / `GM_listValues` (sync) | ✅ | ✅ | ❌ removed in 4.0 | ❌ (promise-only) | GM4+ = `GM.*` promises only; Safari = promise subset |
+| `GM.setValue` / `getValue` / `deleteValue` / `listValues` (promise) | ✅ | ✅ since 2.12.0 | ✅ only form | ✅ (`getValue`/`setValue`/`listValues`/`deleteValue`) | Safari subset verified |
+| Value types | JSON-serialisable incl. objects | JSON-serialisable (no DOM nodes/cycles) | **Strings/numbers/booleans ONLY** — `JSON.stringify` objects yourself | JSON-serialisable (promise subset) | `managers.md` — storage-type limits are manager-enforced, not browser-enforced |
+| Batch `GM_getValues` / `GM_setValues` / `GM_deleteValues` (+ `GM.*` promise forms) | ✅ TM 5.3+ | ✅ VM 2.19.1+ | ❌ | ❌ | Include `deleteValues` |
+| `GM_cookie` / `GM.cookie` | ✅ stable; `partitionKey` 5.2+, httpOnly beta-gated | ✅ since VM 2.35.1; httpOnly needs both global + per-script toggles | ❌ | ❌ |  |
+
+### Networking
+
+| API | TM | VM | GM4+ | Safari Userscripts | Notes |
+|-----|----|----|------|-------------------|-------|
+| `GM_xmlhttpRequest` (callback) | ✅ returns `{abort}` | ✅ returns control | ❌ | ❌ (promise-only) | Safari verified: promise-only `GM.xmlHttpRequest` |
+| `GM.xmlHttpRequest` (promise) | ✅ (capital H) | ✅ since 2.18.3 | ✅ | ✅ custom promise + `abort` | Shapes differ — feature-detect |
+| `GM_addStyle` | ✅ sync returns `<style>` | ✅ sync returns `<style>` | ❌ removed in 4.0 (polyfill `gm4-polyfill.js`) | ❌ deprecated / partial `GM.addStyle` only |  |
+| `GM.addStyle` (promise) | ✅ | ✅ since 2.12.0 | ❌ polyfill only | ✅ partial impl | Safari verified: partial `addStyle` |
+| `GM_notification` / `GM.notification` | ✅ | ✅ | ✅ (`GM.notification` promise) | ❌ | GM = `GM.notification` promise form |
+| `GM_download` / `GM.download` | ✅ | ✅ | ❌ (gist polyfill) | ❌ |  |
+| `GM_openInTab` / `GM.openInTab` | ✅ | ✅ | ⚠️ bool/partial opts | ✅ bool arg only (verified) | Safari verified: `openInTab`/`closeTab` |
+
+### DOM & Injection
+
+| API | TM | VM | GM4+ | Safari Userscripts | Notes |
+|-----|----|----|------|-------------------|-------|
+| `GM_addElement` / `GM.addElement` | ✅ sync + promise | ✅ sync + promise | ❌ (issue #2484) | ❌ | CSP handling differs — see § Sandbox |
+| `unsafeWindow` | ✅ needs explicit `@grant unsafeWindow` when other grants exist | ✅ exposed without grant; sandbox off only with `@grant none` (VM ≥2.32) | ✅ (`wrappedJSObject` equiv.) | ❌ **none at all** | Any `@grant` ⇒ Safari forced content world |
+| `GM_webRequest` + `@webRequest` | ⚠️ experimental, **Firefox MV2 only**; broken TM Chrome MV3 5.2+ (issue #2209) | ❌ wontfix (issue #583) | ❌ | ❌ | NOT a browser-capability row — manager + manifest matter |
+| `GM_audio` (`setMute`/`getState`/`addStateChangeListener`) | ⚠️ **experimental, TM 5.4+** (beta 5.3.6230); current tab only | ❌ | ❌ | ❌ | NOT universal; not 5.0 |
+
+### SPA Navigation & Metadata
+
+| Feature | TM | VM | GM4+ | Safari Userscripts | Notes |
+|---------|----|----|------|-------------------|-------|
+| `window.onurlchange` (`@grant window.onurlchange`) | ✅ `addEventListener('urlchange', info => info.url)` | ❌ declined (issue #1195) | ❌ | ❌ | Portable fallback: patch `history.pushState`/`replaceState` + `popstate`/`hashchange` (see snippet below); VM also has `@violentmonkey/url` / `VM.onNavigate` |
+| `@run-at` defaults | `document-idle` | `document-end` | `document-end` | `document-end` | TM idle vs others end — see pitfalls in `common-pitfalls.md` |
+| `@sandbox` | `raw` / `javascript` / `dom` (TM 4.18+) | n/a — uses `@inject-into` | n/a (always sandboxed) | n/a — uses `@inject-into` | VM/Safari: `@inject-into auto/page/content` |
+| `@run-in` | `normal-tabs` / `incognito-tabs` / `container-id-N` (TM 5.3+) | ignored (parsed-but-ignored) | ignored | ignored | Firefox containers otherwise unreachable |
+
+---
+
+## Sandbox & Execution Context (Manager-First)
+
+| Aspect | TM | VM | GM4+ | Safari Userscripts |
+|--------|----|----|------|-------------------|
+| Isolation directive | `@sandbox raw` (page world, default) / `javascript` / `dom` (isolated) | `@inject-into auto` (default; tries page, falls back to content) / `page` / `content` | Always sandboxed (Xray vision in Firefox) | Any `@grant` ⇒ forced content world |
+| Page-CSP handling | May strip/relax CSP headers in some modes — **do NOT rely on it** | **Respects page CSP** — falls back to content-world injection if page injection fails; no header stripping | Subject to Firefox sandbox rules | Content world only |
+| Reaching page JS from content world | `unsafeWindow` (guard: `typeof unsafeWindow !== 'undefined'`) | Chrome: bridge via `CustomEvent`/`postMessage` or `GM_addElement` data-URI trick; Firefox: `wrappedJSObject`/`cloneInto`/`exportFunction` | Firefox Xray: `wrappedJSObject`/`cloneInto`/`exportFunction` | Not possible — design without page-world access |
+| `GM_info` fields | `sandboxMode: 'js'|'raw'|'dom'` (4.18+) | `injectInto: 'auto'|'page'|'content'` (`GM_info.injectInto`) | n/a | `scriptHandler === "Userscripts"` |
+
+> MV3 workaround guard: always test `typeof unsafeWindow !== 'undefined'` before use — Safari has no `unsafeWindow` at all, so unguarded `unsafeWindow.fetch` patches crash there. See snippet below.
+
+---
+
+## Manifest V3 Limitations (Framed by Manager)
+
+Chrome/Edge store builds are MV3; Firefox remains MV2. The restriction is manager-build + browser, not "browser capability" alone.
+
+| Feature | TM MV3 (Chrome) | TM MV2 (Firefox) | VM (Chrome/Firefox) | Notes |
+|---------|-----------------|------------------|---------------------|-------|
+| `@webRequest` / `GM_webRequest` | ❌ broken 5.2+ (issue #2209) | ✅ experimental | ❌ wontfix everywhere | VM declined universally |
+| Persistent background pages | ❌ removed in MV3 | ✅ | n/a (different architecture) |  |
+| CSP bypass | More restricted in MV3 | Best-effort relaxation | VM respects CSP regardless | Never rely on TM stripping |
+
+### Workarounds (Guarded)
 
 ```javascript
-// Instead of @webRequest, use page-level interception
-// @grant unsafeWindow
+// Guard unsafeWindow — Safari has none; check before patching
+if (typeof unsafeWindow !== 'undefined' && unsafeWindow.fetch) {
+    const originalFetch = unsafeWindow.fetch;
+    // @grant unsafeWindow required in TM when other grants exist
+    unsafeWindow.fetch = function(...args) {
+        console.log('Intercepted fetch:', args[0]);
+        return originalFetch.apply(this, args);
+    };
+}
 
-// Intercept fetch
-const originalFetch = unsafeWindow.fetch;
-unsafeWindow.fetch = function(...args) {
-    console.log('Intercepted fetch:', args[0]);
-    return originalFetch.apply(this, args);
-};
+// XMLHttpRequest interception — same guard
+if (typeof unsafeWindow !== 'undefined' && unsafeWindow.XMLHttpRequest) {
+    const originalOpen = unsafeWindow.XMLHttpRequest.prototype.open;
+    unsafeWindow.XMLHttpRequest.prototype.open = function(method, url) {
+        console.log('Intercepted XHR:', method, url);
+        return originalOpen.apply(this, arguments);
+    };
+}
 
-// Intercept XMLHttpRequest
-const originalOpen = unsafeWindow.XMLHttpRequest.prototype.open;
-unsafeWindow.XMLHttpRequest.prototype.open = function(method, url) {
-    console.log('Intercepted XHR:', method, url);
-    return originalOpen.apply(this, arguments);
-};
+// SPA navigation portable fallback (TM-only window.onurlchange is NOT portable)
+function onNavigate(callback) {
+    // TM-only fast path capability check
+    if (typeof window !== 'undefined' && window.onurlchange === null) {
+        window.addEventListener('urlchange', e => callback(e.url));
+        return;
+    }
+    // Portable fallback
+    const wrap = (fn) => function(...args) {
+        const ret = fn.apply(this, args);
+        window.dispatchEvent(new Event('locationchange'));
+        return ret;
+    };
+    history.pushState = wrap(history.pushState);
+    history.replaceState = wrap(history.replaceState);
+    window.addEventListener('popstate', () => callback(location.href));
+    window.addEventListener('hashchange', () => callback(location.href));
+    window.addEventListener('locationchange', () => callback(location.href));
+    // VM-specific: also available via `VM.onNavigate` from @violentmonkey/url
+}
 ```
 
 ---
 
-## Firefox-Specific Features
+## Firefox-Specific Bridges (Browser-Scoped, Manager-Filtered)
 
-### cloneInto and exportFunction
-
-Firefox's USERSCRIPT_WORLD requires special functions to share data with the page.
+`cloneInto` / `exportFunction` are **Firefox Xray** features, not manager features. They apply to GM4+ and TM-on-Firefox when running in the Firefox USERSCRIPT_WORLD. They do not exist in Chromium.
 
 ```javascript
 // Share object with page (Firefox)
 function shareWithPage(name, value) {
     if (typeof cloneInto !== 'undefined') {
-        // Firefox - must use cloneInto
+        // Firefox Xray — must use cloneInto
         unsafeWindow[name] = cloneInto(value, unsafeWindow, {
             cloneFunctions: true
         });
     } else {
-        // Chrome - direct assignment works
-        unsafeWindow[name] = value;
+        // Chromium — direct assignment (guard Safari)
+        if (typeof unsafeWindow !== 'undefined') unsafeWindow[name] = value;
     }
 }
 
@@ -101,85 +164,76 @@ function exportToPage(name, fn) {
         // Firefox
         unsafeWindow[name] = exportFunction(fn, unsafeWindow);
     } else {
-        // Chrome
-        unsafeWindow[name] = fn;
+        if (typeof unsafeWindow !== 'undefined') unsafeWindow[name] = fn;
     }
 }
-
-// Usage
-shareWithPage('myData', { count: 42, items: ['a', 'b'] });
-exportToPage('myFunction', (arg) => console.log('Called with:', arg));
 ```
 
-### Firefox Containers
+**Firefox containers:** the stable, manager-agnostic Firefox mechanism is contextual identities. TM's unrelated `@run-in container-id-N` (TM 5.3+) is a TM-only metadata directive for targeting containers — do not conflate with `GM_info.container` or generic Firefox container tabs. Verify per manager before using `@run-in`.
 
-Firefox supports container tabs for privacy isolation.
+---
+
+## Safari Userscripts App — Neutral Per-Manager Comparison
+
+Safari uses the third-party "Userscripts" app (by quoid); Tampermonkey on Safari is a separate paid app. The comparison below is neutral per-manager, not "Safari vs Tampermonkey (reference)".
+
+| Aspect | Safari Userscripts (quoid) | TM | VM | GM4+ | Notes |
+|--------|---------------------------|----|----|------|-------|
+| Installation | Mac App Store → Safari → Extensions → Always Allow | Extension store | Extension store | Extension store |  |
+| Script handler literal | `GM_info.scriptHandler === "Userscripts"` | `"Tampermonkey"` | `"Violentmonkey"` | `"Greasemonkey"` | Branch by capability, not name (see `managers.md`) |
+| Supported GM subset (verified) | `GM.addStyle` (partial) · `GM.getValue`/`setValue`/`listValues`/`deleteValue` (promise) · `GM.xmlHttpRequest` (promise, custom + `abort`) · `GM.openInTab`/`closeTab` (bool arg) · `GM.setClipboard` (deprecated #655) · `GM.info` (`GM_info`) | Full per § API | Full per § API | Promise-only filtered set | Everything else — including `unsafeWindow`, menu commands (`GM_registerMenuCommand`), notifications, cookies (`GM_cookie`), `GM_addElement`, `GM_webRequest`, `GM_audio` — is ❌ on Safari |
+| Unsupported (verified ❌) | `unsafeWindow` (NONE, even with grants) · `GM_notification` · `GM_cookie` · `GM_download` · `GM_webRequest` · `GM_audio` · `window.onurlchange` · `GM_addElement` (full) · menu commands | — | — | — |  |
+| Execution model | Any `@grant` ⇒ forced content world (isolated); no page-world access | `@sandbox` selectable | `@inject-into` selectable | Always sandboxed | Design Safari scripts without page-world access |
+| Auto-update | Manual | Automatic | Automatic | Automatic |  |
+
+Writing Safari-compatible scripts:
 
 ```javascript
-// @run-in container-id-2
-// @run-in container-id-3
+// Detect via capability, not UA — but handler literal is "Userscripts" when needed
+const handler = (typeof GM_info !== "undefined" ? GM_info : GM.info)?.scriptHandler;
 
-// Get container ID at runtime
-console.log('Container:', GM_info.container);
-// { id: "2", name: "Personal" }
+// Use only widely-supported promise APIs
+// @grant GM.getValue
+// @grant GM.setValue
+// @grant GM.xmlHttpRequest
+
+// Feature-detect before use
+if (typeof GM !== 'undefined' && GM.xmlHttpRequest) {
+    await GM.xmlHttpRequest({ method: 'GET', url: 'https://example.com/data' });
+}
 ```
 
 ---
 
-## Safari Support
+## Cross-Manager Best Practices
 
-Safari uses a third-party app called "Userscripts" (Tampermonkey itself is not available on Safari).
-
-### Key Differences
-
-| Feature | Safari Userscripts | Tampermonkey (reference implementation) |
-|---------|-------------------|--------------|
-| Installation | Mac App Store | Browser extension |
-| @grant support | Limited | Full |
-| GM_* APIs | Subset | Full |
-| Auto-update | Manual | Automatic |
-
-### Writing Safari-Compatible Scripts
-
-```javascript
-// Check if running in Safari Userscripts app
-const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-
-// Use only widely-supported APIs
-// @grant GM_getValue
-// @grant GM_setValue
-// @grant GM_xmlhttpRequest
-
-// Avoid Safari-incompatible features
-// @grant GM_webRequest  // May not work
-// @grant GM_audio       // May not work
-```
-
----
-
-## Cross-Browser Best Practices
-
-### 1. Feature Detection
+### 1. Feature Detection (Prefer Over Handler Checks)
 
 ```javascript
 // Check if API exists before using
-if (typeof GM_notification !== 'undefined') {
-    GM_notification('Hello!');
+if (typeof GM_notification !== 'undefined' || (typeof GM !== 'undefined' && GM.notification)) {
+    (GM.notification ?? GM_notification)({ text: 'Hello!' });
 } else {
     alert('Hello!');  // Fallback
 }
 
-// Check for Firefox-specific features
-const isFirefox = typeof cloneInto !== 'undefined';
+// Check for Firefox-specific bridges
+const isFirefoxXray = typeof cloneInto !== 'undefined';
+
+// Capability checks over scriptHandler
+const canBatch = typeof GM !== 'undefined' && typeof GM.getValues === 'function';
+const canCookie = typeof GM_cookie !== 'undefined' || (typeof GM !== 'undefined' && GM.cookie);
 ```
 
 ### 2. Graceful Degradation
 
 ```javascript
-// Provide fallbacks for unsupported features
+// Provide fallbacks for unsupported managers
 async function showNotification(message) {
     if (typeof GM_notification !== 'undefined') {
         GM_notification({ text: message });
+    } else if (typeof GM !== 'undefined' && GM.notification) {
+        await GM.notification({ text: message });
     } else if ('Notification' in window && Notification.permission === 'granted') {
         new Notification(message);
     } else {
@@ -188,90 +242,105 @@ async function showNotification(message) {
 }
 ```
 
-### 3. Avoid Browser-Specific Code
+### 3. Avoid Browser-Sniffing
 
 ```javascript
-// Wrong - breaks in other browsers
+// Wrong — manager, not browser, determines GM support
 if (navigator.userAgent.includes('Firefox')) {
     // Firefox-specific code
 }
 
-// Right - feature detection
+// Right — feature / manager capability detection
 if (typeof exportFunction !== 'undefined') {
     // Use exportFunction
+} else if (typeof unsafeWindow !== 'undefined') {
+    // Use unsafeWindow bridge
 } else {
-    // Use alternative
+    // Safari — no page-world access; design around it
 }
 ```
 
-### 4. Test in Multiple Browsers
+### 4. Test in Multiple Managers First
 
-Before releasing a script:
+Before releasing a script (manager-first matrix; Violentmonkey first as owner default):
 
-1. ✅ Test in Chrome (most common)
-2. ✅ Test in Firefox (second most common)
-3. ✅ Test in Edge (uses same engine as Chrome)
-4. ⚠️ Test in Safari if targeting Mac users
+| Step | Manager | What to verify |
+|------|---------|----------------|
+| 1 | Violentmonkey (Chrome + Firefox) | Install/enable, storage types (objects ok), batch APIs (2.19.1+), CSP respects page (test `GM_addElement` fallback), `unsafeWindow` exposed |
+| 2 | Tampermonkey (Chrome MV3 + Firefox MV2) | Same + `GM_cookie` stable, `GM_audio` 5.4 experimental only, `window.onurlchange` TM-only, `@sandbox`/`@run-in` |
+| 3 | Greasemonkey 4+ (Firefox) | Promise-only APIs, primitives-only storage (stringify objects), no `GM_addStyle`/`GM_log`, `GM.notification` shape |
+| 4 | Safari Userscripts (macOS/iOS 15.1+) | Promise subset only, no `unsafeWindow`, any `@grant` ⇒ content world; test that fallbacks don't crash |
 
 ---
 
-## Browser-Specific Bugs & Workarounds
+## Manager-Aware Bugs & Workarounds
 
-### Chrome: document-start Timing
+### `@run-at` Timing & Ready State
 
-Chrome's document-start isn't always reliable.
+`@run-at` defaults differ by manager: TM = `document-idle`, VM/GM4+/Safari = `document-end`. Relying on defaults causes cross-manager drift.
 
 ```javascript
-// @run-at document-start
+// Robust: wait for readyState regardless of manager default
+function onReady(callback) {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', callback, { once: true });
+    } else {
+        callback();
+    }
+}
+// Or explicit metadata: // @run-at document-end
+```
 
-// May not run early enough - add fallback
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-} else {
-    init();  // Already loaded
+### CSP: `GM_addElement` Is Not Universal
+
+- **TM:** may strip/relax CSP headers in some modes — do NOT rely on it.
+- **VM:** respects page CSP; if page-world injection fails, VM falls back to content-world injection.
+- **GM4+/Safari:** limited; no `GM_addElement` on GM4+/Safari.
+
+Test in VM to surface CSP issues that TM silently hides. See `common-pitfalls.md` Pitfall 5.
+
+### Manager-Sniffing Storage Types
+
+```javascript
+// GM4+ stores only strings/numbers/booleans — stringify objects yourself
+const isGM4 = (typeof GM_info !== "undefined" ? GM_info : GM.info)?.scriptHandler === "Greasemonkey";
+// Better: capability check
+try {
+    await GM.setValue('testObj', { a: 1 });
+    const v = await GM.getValue('testObj');
+    if (typeof v !== 'object') throw new Error('no object storage');
+} catch {
+    await GM.setValue('testObj', JSON.stringify({ a: 1 }));
 }
 ```
 
-### Firefox: Strict CSP Sites
-
-Some sites have strict CSP that even the userscript manager can't bypass.
-
-```javascript
-// If GM_addElement fails, try @require instead
-// @require https://example.com/library.js
-
-// Or inject via unsafeWindow
-unsafeWindow.eval('console.log("injected")');  // Last resort
-```
-
-### Edge: Extension Sync Issues
-
-Edge sometimes doesn't sync your userscript manager's settings between devices.
-
-**Workaround:** Export/import settings manually between devices.
-
 ---
 
-## Version Requirements
+## Version Requirements (Manager-Qualified)
 
-Some features require specific minimum versions of your userscript manager (the following table uses Tampermonkey version numbers as a reference):
+Version numbers are Tampermonkey's unless stated; GM4+/Safari have no version-gated equivalents for many rows (marked ❌).
 
-| Feature | Minimum Version (Tampermonkey reference) |
-|---------|-----------------------------------------|
-| `GM.* async APIs` | 4.0+ |
-| `GM_audio` | 5.0+ |
-| `@tag` | 5.0+ |
-| `GM_notification.tag` | 5.0+ |
-| `@run-in` | 5.3+ |
-| `GM_setValues/getValues` | 5.3+ |
+| Feature | Minimum Version |
+|---------|-----------------|
+| `GM.*` async promise APIs (capital-G `GM.*`) | TM 4.x-era additions; GM4+ = promises ONLY (sync `GM_*` removed) |
+| `GM_audio` (`setMute`/`getState`/`addStateChangeListener`) | **TM 5.4+ (experimental)** — not 5.0, not universal |
+| `@tag` / `GM_notification.tag` | TM 5.0+ |
+| Batch `GM_getValues` / `GM_setValues` / `GM_deleteValues` (sync & promise) | **TM 5.3+ / VM 2.19.1+**; GM4+/Safari ❌ |
+| `@run-in` (`normal-tabs`/`incognito-tabs`/`container-id-N`) | **TM 5.3+** (TM-only; ignored elsewhere) |
+| `@sandbox` (`raw`/`javascript`/`dom`) | **TM 4.18+** (TM-only; VM/Safari use `@inject-into`) |
+| `GM_cookie` (`GM_cookie` / `GM.cookie` with `partitionKey`) | **TM stable / VM 2.35.1+**; GM4+/Safari ❌; TM `partitionKey` 5.2+, httpOnly beta-gated |
+| `GM_addElement` return value (element) | TM 5.5.0+; VM since early 2.x |
 
 ```javascript
-// Check the manager version
-const version = GM_info.version;
+// Check the manager version — version is that manager's own
+const version = (typeof GM_info !== "undefined" ? GM_info : GM.info)?.version;
 console.log('Manager version:', version);
 
 // Feature detection is safer than version checking
-if (typeof GM_audio !== 'undefined') {
-    // Use GM_audio
+if (typeof GM_audio !== 'undefined' || (typeof GM !== 'undefined' && GM.audio)) {
+    // TM 5.4+ only
+}
+if (typeof GM !== 'undefined' && GM.getValues) {
+    // Batch available (TM 5.3+ / VM 2.19.1+)
 }
 ```
