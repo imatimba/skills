@@ -4,10 +4,12 @@ description: "Trigger: userscript, Violentmonkey, Tampermonkey, Greasemonkey, us
 license: MIT
 metadata:
   author: imatimba
-  version: 2.0.0
+  version: 2.1.0
 ---
 
 # Userscript Development
+
+> **This file is a router.** The binding rules live in its references. Acting on a step without reading that reference is acting without the skill.
 
 ## Activation Contract
 
@@ -38,14 +40,31 @@ Do NOT use for Selenium/Puppeteer/Playwright automation, browser extensions (Web
 
 Any fork not listed here: check [managers.md](references/managers.md) first.
 
+### Touch → Reference Routing
+
+Before writing code in an area, READ its reference first — no exceptions:
+
+| Touch | Read first |
+| --- | --- |
+| Claim manager support | [managers.md](references/managers.md) §2 API Support Matrix |
+| Write `@match`/`@include` or URL logic | [url-matching.md](references/url-matching.md) |
+| Persist settings/storage | [api-storage.md](references/api-storage.md) |
+| Make cross-origin requests | [http-requests.md](references/http-requests.md) + common-pitfalls.md Pitfall 2 |
+| Insert data into the DOM | [api-dom-ui.md](references/api-dom-ui.md) + security-checklist.md §3 |
+| Watch mutations/elements (Observer) | [patterns.md](references/patterns.md) (Mutation Observation) + common-pitfalls.md Pitfalls 7–8 |
+| Handle SPA navigation | patterns.md (SPA Navigation) + api-tabs.md (`onurlchange`) |
+| Call ANY `GM.*`/`GM_*` API | its api-*.md / http-requests.md page — never write the call from memory |
+| Debug a failing script | debugging.md + full common-pitfalls.md scan |
+
 ## Execution Steps
 
-1. **Scope**: derive `@match`/`@exclude` ([url-matching.md](references/url-matching.md)); set `@run-at` explicitly.
-2. **Permissions**: minimal `@grant` set; know the sandbox model ([sandbox-modes.md](references/sandbox-modes.md); VM `@inject-into`, TM `@sandbox`).
-3. **Headers**: build from [header-reference.md](references/header-reference.md) (starter templates at top).
-4. **Implement** via [patterns.md](references/patterns.md); guard manager-specific calls with feature detection.
-5. **Verify**: Pre-Delivery Gates + [security-checklist.md](references/security-checklist.md). TypeScript/bundler work: [typescript.md](references/typescript.md).
-6. **Deliver** per Output Contract.
+1. **Read FIRST**: load [managers.md](references/managers.md) before any other step — every later step assumes it.
+2. **Scope**: Read [url-matching.md](references/url-matching.md) before deriving `@match`/`@exclude`; set `@run-at` explicitly.
+3. **Permissions**: Read [sandbox-modes.md](references/sandbox-modes.md) before choosing `@grant` or injection directives (VM `@inject-into`, TM `@sandbox`).
+4. **Headers**: Read [header-reference.md](references/header-reference.md) (starter templates at top) before writing any header.
+5. **Implement**: Read [patterns.md](references/patterns.md) before writing script logic; apply the Touch → Reference Routing table for every area touched; guard manager-specific calls with feature detection.
+6. **Verify**: run Pre-Delivery Gates; read [security-checklist.md](references/security-checklist.md) against the final code. TypeScript/bundler work: [typescript.md](references/typescript.md).
+7. **Deliver** per Output Contract.
 
 ## Output Contract
 
@@ -60,7 +79,14 @@ Every delivered userscript includes:
 
 ## Pre-Delivery Gates
 
-All MUST pass before returning code:
+All MUST pass before returning code.
+
+**Process gates** — prove the reads happened:
+
+- [ ] [common-pitfalls.md](references/common-pitfalls.md) sections covering every API/pattern touched were read THIS task.
+- [ ] security-checklist.md was checked against the FINAL code, not from memory.
+
+**Artifact gates:**
 
 - [ ] Scoped `@match`; HTTPS resources; no secrets; DOM input sanitised.
 - [ ] Every manager-specific API labeled AND `typeof`-guarded.
@@ -69,8 +95,8 @@ All MUST pass before returning code:
 
 ## References
 
-**Core:** [managers.md](references/managers.md) (per-manager matrix, sandbox/CSP, workflows — load FIRST) · [header-reference.md](references/header-reference.md) · [url-matching.md](references/url-matching.md) · [sandbox-modes.md](references/sandbox-modes.md) · [patterns.md](references/patterns.md)
+Core: [managers.md](references/managers.md) · [header-reference.md](references/header-reference.md) · [url-matching.md](references/url-matching.md) · [sandbox-modes.md](references/sandbox-modes.md) · [patterns.md](references/patterns.md)
 
-**APIs:** [api-sync.md](references/api-sync.md) · [api-async.md](references/api-async.md) (preferred) · [api-storage.md](references/api-storage.md) · [http-requests.md](references/http-requests.md) · [web-requests.md](references/web-requests.md) · [api-cookies.md](references/api-cookies.md) · [api-dom-ui.md](references/api-dom-ui.md) · [api-tabs.md](references/api-tabs.md) · [api-audio.md](references/api-audio.md)
+APIs: [api-sync.md](references/api-sync.md) · [api-async.md](references/api-async.md) (preferred) · [api-storage.md](references/api-storage.md) · [http-requests.md](references/http-requests.md) · [web-requests.md](references/web-requests.md) · [api-cookies.md](references/api-cookies.md) · [api-dom-ui.md](references/api-dom-ui.md) · [api-tabs.md](references/api-tabs.md) · [api-audio.md](references/api-audio.md)
 
-**Quality & tooling:** [common-pitfalls.md](references/common-pitfalls.md) · [debugging.md](references/debugging.md) · [browser-compatibility.md](references/browser-compatibility.md) · [security-checklist.md](references/security-checklist.md) · [version-numbering.md](references/version-numbering.md) · [typescript.md](references/typescript.md)
+Quality & tooling: [common-pitfalls.md](references/common-pitfalls.md) · [debugging.md](references/debugging.md) · [browser-compatibility.md](references/browser-compatibility.md) · [security-checklist.md](references/security-checklist.md) · [version-numbering.md](references/version-numbering.md) · [typescript.md](references/typescript.md)
