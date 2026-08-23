@@ -4,7 +4,7 @@ description: "Trigger: userscript, Violentmonkey, Tampermonkey, Greasemonkey, us
 license: MIT
 metadata:
   author: imatimba
-  version: 2.1.0
+  version: 2.2.0
 ---
 
 # Userscript Development
@@ -23,7 +23,7 @@ Do NOT use for Selenium/Puppeteer/Playwright automation, browser extensions (Web
 2. **Prefer `GM.*` promise APIs** — Greasemonkey 4+ ships ONLY those (sync `GM_*` removed; storage limited to strings/numbers/booleans).
 3. **Never invent APIs, signatures, or version numbers.** Unverifiable claims stay marked UNVERIFIED.
 4. **Scope tightly:** specific `@match` (never `*://*/*`), declared `@connect` per cross-origin host (enforced by TM only), HTTPS-only URLs, no embedded secrets, sanitise data before DOM insertion.
-5. **Violentmonkey is the worked example** for concrete UI/workflow steps; other managers appear as labeled table rows.
+5. **Violentmonkey is the UI-workflow example** (FOSS, stable dashboard) for install/dashboard steps only — this implies nothing about API precedence. Other managers appear as labeled table rows; tier-2 divergences live in [manager-compat.md](references/manager-compat.md).
 6. Preserve existing behaviour when editing a user's script; relabel rather than erase manager-specific knowledge.
 
 ## Decision Gates
@@ -47,6 +47,7 @@ Before writing code in an area, READ its reference first — no exceptions:
 | Touch | Read first |
 | --- | --- |
 | Claim manager support | [managers.md](references/managers.md) §2 API Support Matrix |
+| Target a tier-2 manager (ScriptCat/AdGuard/FireMonkey/mobile) | [manager-compat.md](references/manager-compat.md) |
 | Write `@match`/`@include` or URL logic | [url-matching.md](references/url-matching.md) |
 | Persist settings/storage | [api-storage.md](references/api-storage.md) |
 | Make cross-origin requests | [http-requests.md](references/http-requests.md) + common-pitfalls.md Pitfall 2 |
@@ -72,7 +73,7 @@ Every delivered userscript includes:
 
 1. 1–2 sentence explanation.
 2. Complete script with ALL headers in one code block.
-3. Install steps naming the target manager (default Violentmonkey: Dashboard → ➕ → paste, or drag/serve the `.user.js`).
+3. Install steps naming the TARGET manager; if the user never specified one, ask which manager they use instead of assuming.
 4. Safe customisation points (selectors, timeouts, domains).
 5. Every `@grant` with one-line justification.
 6. Explicit per-manager notes for anything not portable.
@@ -95,7 +96,7 @@ All MUST pass before returning code.
 
 ## References
 
-Core: [managers.md](references/managers.md) · [header-reference.md](references/header-reference.md) · [url-matching.md](references/url-matching.md) · [sandbox-modes.md](references/sandbox-modes.md) · [patterns.md](references/patterns.md)
+Core: [managers.md](references/managers.md) · [manager-compat.md](references/manager-compat.md) · [header-reference.md](references/header-reference.md) · [url-matching.md](references/url-matching.md) · [sandbox-modes.md](references/sandbox-modes.md) · [patterns.md](references/patterns.md)
 
 APIs: [api-sync.md](references/api-sync.md) · [api-async.md](references/api-async.md) (preferred) · [api-storage.md](references/api-storage.md) · [http-requests.md](references/http-requests.md) · [web-requests.md](references/web-requests.md) · [api-cookies.md](references/api-cookies.md) · [api-dom-ui.md](references/api-dom-ui.md) · [api-tabs.md](references/api-tabs.md) · [api-audio.md](references/api-audio.md)
 

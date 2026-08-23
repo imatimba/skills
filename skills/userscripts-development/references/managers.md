@@ -2,7 +2,7 @@
 
 Per-manager facts for writing portable userscripts. Normative guidance stays manager-neutral; when a concrete manager must be exemplified, use **Violentmonkey** (the skill owner's manager). Every manager-specific fact below is labeled. Anything not confirmed against official docs is marked **UNVERIFIED** — do not present it as fact.
 
-Managers covered: **TM** = Tampermonkey · **VM** = Violentmonkey · **GM4+** = Greasemonkey 4 and later · **Safari** = Safari "Userscripts" app (quoid/userscripts). Other managers exist (ScriptCat, FireMonkey, OrangeMonkey) — verify against their own docs before claiming support.
+Managers covered: **TM** = Tampermonkey · **VM** = Violentmonkey · **GM4+** = Greasemonkey 4 and later · **Safari** = Safari "Userscripts" app (quoid/userscripts). Other managers (ScriptCat, AdGuard, FireMonkey, mobile, OrangeMonkey) are tier-2 — see [manager-compat.md](manager-compat.md) for divergences; verify against their own docs before claiming support.
 
 ---
 
