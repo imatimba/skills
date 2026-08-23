@@ -4,7 +4,7 @@ description: "Trigger: userscript, Violentmonkey, Tampermonkey, Greasemonkey, us
 license: MIT
 metadata:
   author: imatimba
-  version: 2.2.0
+  version: 2.3.0
 ---
 
 # Userscript Development
@@ -100,4 +100,4 @@ Core: [managers.md](references/managers.md) · [manager-compat.md](references/ma
 
 APIs: [api-sync.md](references/api-sync.md) · [api-async.md](references/api-async.md) (preferred) · [api-storage.md](references/api-storage.md) · [http-requests.md](references/http-requests.md) · [web-requests.md](references/web-requests.md) · [api-cookies.md](references/api-cookies.md) · [api-dom-ui.md](references/api-dom-ui.md) · [api-tabs.md](references/api-tabs.md) · [api-audio.md](references/api-audio.md)
 
-Quality & tooling: [common-pitfalls.md](references/common-pitfalls.md) · [debugging.md](references/debugging.md) · [browser-compatibility.md](references/browser-compatibility.md) · [security-checklist.md](references/security-checklist.md) · [version-numbering.md](references/version-numbering.md) · [typescript.md](references/typescript.md)
+Quality & tooling: [common-pitfalls.md](references/common-pitfalls.md) · [publishing.md](references/publishing.md) · [debugging.md](references/debugging.md) · [testing.md](references/testing.md) · [browser-compatibility.md](references/browser-compatibility.md) · [security-checklist.md](references/security-checklist.md) · [version-numbering.md](references/version-numbering.md) · [typescript.md](references/typescript.md)

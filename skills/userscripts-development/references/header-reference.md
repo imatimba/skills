@@ -216,6 +216,19 @@ Exclude URLs even if matched by @match or @include.
 // @exclude      https://example.com/api/*
 ```
 
+### @exclude-match — Violentmonkey-only (unsupported in Tampermonkey)
+
+Match-pattern exclusion — Violentmonkey documents it as the recommended companion to `@match` (preferred over `@include` / `@exclude`).
+
+```javascript
+// @match          https://example.com/*
+// @exclude-match  https://example.com/admin/*
+```
+
+Matching logic (Violentmonkey): a script runs if **any** `@match` or `@include` rule matches **and** no `@exclude-match` or `@exclude` rule matches. Tampermonkey does not parse `@exclude-match` (parser.js only handles `@exclude`; issue Tampermonkey/tampermonkey#2161 reports `"@exclude-match" is not a valid userscript header`). Use `@exclude` for Tampermonkey-compat exclusion.
+
+Verify: violentmonkey.github.io/api/metadata-block · violentmonkey.github.io/api/matching
+
 ---
 
 ## Execution Control
@@ -233,6 +246,8 @@ When to inject the script.
 | `context-menu` | Inject when clicked in browser context menu | **Tampermonkey only** |
 
 Defaults: Tampermonkey `document-idle`; Violentmonkey, Greasemonkey 4+, and Safari `document-end`. Set explicitly to avoid cross-manager drift. See [managers.md](managers.md) §3.
+
+> **Greasemonkey 4 note:** only `document-end` is guaranteed; `document-body` is an invalid enum and `context-menu` / `document-idle` may be treated as `document-end` or ignored — verify per Greasemonkey docs.
 
 ```javascript
 // @run-at       document-start
@@ -461,6 +476,70 @@ URL to download updates from. Use `none` to disable.
 // @downloadURL  none
 ```
 
+### @installURL — legacy alias of @downloadURL
+
+Legacy alias of `@downloadURL` (Greasemonkey wiki). Greasy Fork strips `@installURL` on publish (like `@updateURL` / `@downloadURL` it is rewritten to point at Greasy Fork).
+
+```javascript
+// @installURL   https://example.com/script.user.js  // legacy — prefer @downloadURL
+```
+
+---
+
+## Catalog-enforced headers
+
+Parsed and displayed by catalogs, mostly ignored by managers — the manager installs the script regardless, but the catalog surfaces these for listing, compliance, and donation UI.
+
+### @license
+
+SPDX name or free-form license. **REQUIRED by OpenUserJS ToS** — if absent, OpenUserJS treats it as implied MIT. Prefer an SPDX identifier (`MIT`, `GPL-3.0-only`, `Apache-2.0`).
+
+```javascript
+// @license      MIT
+// @license      GPL-3.0-only
+```
+
+### @compatible / @incompatible
+
+Browser compatibility hints displayed on Greasy Fork. Format `browser [comment]` — recognized browsers `firefox`, `chrome`, `opera`, `safari`, `edge`, `brave`.
+
+```javascript
+// @compatible   firefox Must disable pop-up blocker
+// @incompatible safari Broken since FF 23
+```
+
+Verify: greasyfork.org/en/help/meta-keys
+
+### @contributionURL / @contributionAmount
+
+Donation page and suggested amount (Scriptish origin), shown on Greasy Fork feedback pages.
+
+```javascript
+// @contributionURL    https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=you@example.com&item_name=Greasy+Fork+donation
+// @contributionAmount 5.00
+```
+
+### @antifeature
+
+Disclose monetisation / author-benefiting behaviour. Greasy Fork requires it; managers largely ignore it.
+
+```javascript
+// @antifeature  ads We show advertisements
+// @antifeature  tracking Analytics included
+// @antifeature:de ads Wir zeigen Werbung an  // :locale i18n variant
+```
+
+| Type | Catalog enforcement | Notes |
+|------|---------------------|-------|
+| `ads` | Tampermonkey docs + Greasy Fork | Advertisements |
+| `tracking` | Tampermonkey docs + Greasy Fork | Analytics / user tracking |
+| `miner` | Tampermonkey docs + Greasy Fork | Crypto mining / resource use |
+| `payment` | Greasy Fork only | Requires payment for full functionality |
+| `membership` | Greasy Fork only | Requires membership / account |
+| `referral-link` | Greasy Fork only | Affiliate / referral links |
+
+Verify: tampermonkey.net/documentation.php?q=antifeature · greasyfork.org/en/help/antifeatures
+
 ---
 
 ## Web Request Interception
@@ -504,6 +583,17 @@ Inject script without wrapper/sandbox (for Scriptlets).
 // @unwrap
 ```
 
+### @top-level-await — Violentmonkey since 2.19.2
+
+Enables top-level `await` in the userscript. **Incompatible with `@unwrap`** (no wrapper to make async). Violentmonkey adds an async wrapper around the script when this header is present.
+
+```javascript
+// @top-level-await
+// await waitForElement('#app');
+```
+
+Verify: violentmonkey.github.io/api/metadata-block#top-level-await
+
 ---
 
 ## Subresource Integrity (SRI)
@@ -517,14 +607,21 @@ Ensure external resources haven't been tampered with.
 - MD5 (native)
 - SHA-1, SHA-384, SHA-512 (require window.crypto)
 
+**Hash placement:** pin every `@require` / `@resource` with a suffix `#sha256=...` (primary) or `#md5=...` (acceptable). Multiple hashes are comma- or semicolon-separated; the last currently supported hash wins. Hex or base64 encoding accepted.
+
 **Formats:**
 - Hex: `#sha256=e3b0c44298fc1c149...`
 - Base64: `#sha256-47DEQpj8HBSa+/TImW...`
 
 ```javascript
-// Single hash
+// Single hash — primary SHA-256
 // @require      https://example.com/lib.js#sha256=abc123def456...
 
-// Multiple hashes (last supported one used)
+// MD5 fallback + SHA-256 (last supported wins)
 // @require      https://example.com/lib.js#md5=abc,sha256=def
+
+// Semicolon separator also allowed
+// @require      https://example.com/lib.js#md5=abc;sha256=def
 ```
+
+Source: tampermonkey.net/documentation.php?q=sri. Greasy Fork allows arbitrary `@require` URLs **with** a valid SRI hash and monitors mismatches (greasyfork.org/en/help/external-scripts).

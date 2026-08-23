@@ -395,9 +395,36 @@ document.body.appendChild(div);
 
 ---
 
+## Supply Chain & External Code
+
+Every `@require` / `@resource` is code you ship but do not host — treat it as supply chain.
+
+### Pin with SRI
+
+- Pin **every** `@require` / `@resource` with an SRI hash suffix: `#sha256=...` (primary) or `#md5=...` (acceptable). Example: `// @require https://cdn.example.com/lib.js#sha256=abc123...`
+- Tampermonkey verifies **SHA-256** and **MD5** natively; **SHA-1 / SHA-384 / SHA-512** require `window.crypto` at install time.
+- Multiple hashes: comma- or semicolon-separated, last supported wins (`#md5=...,sha256=...` → `sha256` used). Hex **or** base64 encoding accepted. Source: tampermonkey.net documentation.php?q=sri.
+- Prefer fewer externals. Review every external URL **before every version bump** — managers silently re-fetch `@require` / `@resource` on update.
+
+### Catalog context
+
+- **Greasy Fork:** arbitrary `@require` URLs are allowed **with** a valid SRI hash and are monitored for mismatches; CDN allowlist and GF-hosted libraries (syncable from GitHub) are the other allowlisted paths. See Greasy Fork external-scripts rules. Verify: greasyfork.org — github.com/JasonBarnabe/greasyfork issue 1070 for mismatch monitoring.
+- **OpenUserJS:** requires an OSI-approved `@license` and safe-harbors reviewed code (reviewed scripts marked as such on the catalog).
+
+### Incident-derived rules
+
+- **Feb 2025 — compromised author account:** popular WME scripts injected card-skimming after account takeover → treat account security (2FA) as part of supply chain; enable 2FA on Greasy Fork / OpenUserJS / GitHub and use strong, unique passwords.
+- **2019 — Greasy Fork shared library compromised:** password reuse let an attacker harvest wallet keys from a popular library → never trust a library because it is popular; pin with SRI, audit the source, and prefer well-maintained, narrow-scoped dependencies.
+
+Verify: greasyfork.org · openuserjs.org · tampermonkey.net
+
+---
+
 ## See Also
 
 - [managers.md](managers.md) — normative Support Matrix and enforcement
 - [http-requests.md](http-requests.md) — `@connect` syntax, option matrix, `GM_xmlhttpRequest` detail
 - [api-dom-ui.md](api-dom-ui.md) — `unsafeWindow` bridges and CSP handling
+- [header-reference.md](header-reference.md) — SRI hash format, `@require` / `@resource`
+- [publishing.md](publishing.md) — catalog publish & update rules
 

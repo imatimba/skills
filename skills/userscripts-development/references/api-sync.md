@@ -45,9 +45,13 @@ console.log(info.version);           // Manager version
 | `scriptHandler` | string | Manager identifier — exact literal, see row below |
 | `version` | string | Manager version |
 | `isIncognito` | boolean | Running in private mode |
-| `sandboxMode` | string | `js` \| `raw` \| `dom` (Tampermonkey) |
+| `sandboxMode` | string | `js` \| `raw` \| `dom` (Tampermonkey 4.18+) |
 | `injectInto` | string | `auto` \| `page` \| `content` (Violentmonkey) |
 | `downloadMode` | string | `native` \| `disabled` \| `browser` |
+| `container` | object | **Tampermonkey-only since 5.3+ Firefox only** — `{ id: string, name?: string }` (Firefox container) |
+| `isFirstPartyIsolation` | boolean | **Tampermonkey-only** — Firefox First-Party Isolation flag |
+| `userAgentData` | object | **Tampermonkey-only since 4.19+** — `UADataValues` (`brands`, `mobile`, `platform`, `architecture`, `bitness`) |
+| `script.options` | object | **Tampermonkey-only** — run-time options (`check_for_updates`, `comment`, `sandbox`, `noframes`, `run_at`, `run_in` since 5.3+, `unwrap`, `override` with `use_*/orig_*`/`merge_*`) |
 
 ### scriptHandler literals
 
@@ -391,10 +395,19 @@ dl.abort();
 
 | Manager | Support | Notes |
 | --- | --- | --- |
-| Tampermonkey | ✅ | Full `GM_download` / `GM.download`; `conflictAction` since Tampermonkey 4.18+ |
+| Tampermonkey | ✅ | Full `GM_download` / `GM.download`; `conflictAction` since Tampermonkey 4.18+; `url` accepts `Blob`/`File` since Tampermonkey 5.4.6226+; `anonymous` option since Tampermonkey 5.5.0 |
 | Violentmonkey | ✅ since Violentmonkey 2.9.5 | `conflictAction` only in **browser download mode** (otherwise ignored) |
 | Greasemonkey 4+ | ❌ | No native download API; a polyfill gist exists but is not built-in |
 | Safari (Userscripts) | ❌ | — |
+
+**Tampermonkey-only extensions (confirmed via documentation.php?q=GM_download and changelog):**
+
+| Detail | Support | Notes |
+|--------|---------|-------|
+| `url` as `Blob` / `File` | Tampermonkey-only since 5.4.6226+ (changelog 5.4.0) | `url` may be a string URL **or** a `Blob`/`File` object |
+| `anonymous` | Tampermonkey-only since 5.5.0 | Don't send cookies; uses initiator tab's cookie store (changelog "GM_download now uses the initiator tab’s cookie store and got an anonymous option") |
+
+Verify: tampermonkey.net/documentation.php?q=GM_download · tampermonkey.net/changelog.php
 
 **Whitelist requirement (Tampermonkey):** file extensions must be whitelisted in the Tampermonkey dashboard (Settings → Security / Downloads) or the download is blocked. This is a **Tampermonkey dashboard setting**, not a script header.
 
