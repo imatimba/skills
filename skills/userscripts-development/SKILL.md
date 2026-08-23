@@ -11,7 +11,7 @@ metadata:
 
 ## Activation Contract
 
-Load when the user mentions userscripts or any userscript manager (Violentmonkey, Tampermonkey, Greasemonkey, ScriptCat, Safari "Userscripts" app), `.user.js` files, metadata headers (`@match`, `@grant`, `@run-at`), or GM APIs — or wants JS/CSS running in a page: modify pages, hide elements, auto-fill forms, scrape data, shortcuts, request interception, SPA navigation.
+Load when the user mentions userscripts or any userscript manager (Violentmonkey, Tampermonkey, Greasemonkey, ScriptCat, Safari "Userscripts" app), `.user.js` files, metadata headers (`@match`, `@grant`, `@run-at`), or GM APIs; when they want JS/CSS running in a page: modify pages, hide elements, auto-fill forms, scrape data, shortcuts, request interception, SPA navigation; or when they want an EXISTING userscript improved — debugged, fixed, extended, refactored, or ported between managers.
 
 Do NOT use for Selenium/Puppeteer/Playwright automation, browser extensions (WebExtensions/MV3), or server-side scripts.
 
