@@ -12,7 +12,7 @@ Documentation for `GM_webRequest` — intercept and modify browser requests befo
 
 | Manager + browser | `GM_webRequest` support | Notes |
 | --- | --- | --- |
-| Tampermonkey + Firefox MV2 | ✅ experimental | Requires `@grant GM_webRequest` + `@webRequest` header; may change at any time |
+| Tampermonkey + Firefox MV2 | ✅ experimental | Requires `@grant GM_webRequest` to call `GM_webRequest(rules, listener)` OR `@webRequest` header for declarative pre-load rules (both only for pre-load + runtime listener); may change at any time |
 | Tampermonkey + Chrome/Edge MV3 | ❌ broken | Broken since Tampermonkey 5.2+ — see Tampermonkey issue #2209 |
 | Violentmonkey (any browser) | ❌ wontfix | Declined — see Violentmonkey issue #583; `typeof GM_webRequest === 'undefined'` always |
 | Greasemonkey 4+ | ❌ absent | No implementation |
@@ -123,7 +123,7 @@ Defines what to do when a URL matches (Tampermonkey DSL).
 |----------|------|-------------|
 | `action` | string | `'cancel'` to block |
 | `action.cancel` | boolean | Block the request |
-| `action.redirect` | string/object | Redirect destination |
+| `action.redirect` | string/object | Redirect destination — target URL must be covered by `@match`/`@include` |
 
 ```javascript
 // Tampermonkey syntax — cancel (block) the request

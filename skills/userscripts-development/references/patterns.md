@@ -7,7 +7,7 @@ Reusable patterns and templates for common userscript tasks. Guidance is manager
 | Run after DOM is ready | `readyState` + `DOMContentLoaded` | `@run-at document-start` scripts, or when timing is uncertain | Universal — works in all managers |
 | Run after a specific element appears | `waitForElement` / `MutationObserver` | Dynamic frameworks (React/Vue), lazy-loaded content | Universal; store handle and `.disconnect()` on SPA route change |
 | React to SPA navigation | History-API patch (`pushState`/`replaceState` + `popstate`/`hashchange`) | SPAs that don't reload | Portable — works everywhere; `window.onurlchange` is Tampermonkey-only (see below) |
-| Hide/remove page elements | CSS via `GM_addStyle` / `GM.addStyle` or `element.remove()` | Ads, banners, clutter | `GM_addStyle` absent in Greasemonkey 4+ (use `GM.addStyle` or `createElement('style')` fallback); check `typeof` before calling |
+| Hide/remove page elements | CSS via `GM_addStyle` / `GM.addStyle` or `element.remove()` | Ads, banners, clutter | `GM_addStyle` absent in Greasemonkey 4+ (no `GM.addStyle` either — use `gm-addstyle` polyfill or `createElement('style')` fallback); check `typeof` before calling |
 
 ---
 
@@ -159,7 +159,7 @@ SPAs change URL via `history.pushState`/`replaceState` without a full load. Dete
 | Manager | `window.onurlchange` | Portable fallback | Notes |
 |---------|----------------------|-------------------|-------|
 | Tampermonkey | ✅ (`@grant window.onurlchange`; check `window.onurlchange === null` then `addEventListener('urlchange')`) | History patch works | Only manager implementing this event |
-| Violentmonkey | ❌ declined (issue #1195) | History patch; also `navigation` event or `@violentmonkey/url` (`VM.onNavigate`) | Do not feature-test for `onurlchange` as success path |
+| Violentmonkey | ❌ declined (issue #1195) | History patch; also browser Navigation API (`window.navigation` `navigate` event, Baseline 2026 limited) or `@violentmonkey/url` (`VM.onNavigate`) | Do not feature-test for `onurlchange` as success path |
 | Greasemonkey 4+ | ❌ | History patch | — |
 | Safari | ❌ | History patch | — |
 
@@ -206,7 +206,7 @@ if (typeof window.onurlchange !== 'undefined' && window.onurlchange === null) {
 }
 ```
 
-See [managers.md](managers.md) §2 for SPA navigation matrix and Violentmonkey extras (`navigation` event, `@violentmonkey/url`).
+See [managers.md](managers.md) §2 for SPA navigation matrix and alternatives (browser Navigation API `window.navigation`, `@violentmonkey/url` `VM.onNavigate`).
 
 ### Route-Based Handlers
 
@@ -273,10 +273,10 @@ function hideElements(selector) {
     if (typeof GM_addStyle !== 'undefined') {
         GM_addStyle(css);
     } else if (typeof GM !== 'undefined' && typeof GM.addStyle === 'function') {
-        // Greasemonkey 4+ and modern promise path
-        GM.addStyle(css).catch(() => {});
+        // Violentmonkey/Tampermonkey promise path (Greasemonkey 4 removed GM_addStyle entirely with no GM.addStyle)
+        GM.addStyle(css);
     } else {
-        // Fallback — works everywhere, no grant needed
+        // Fallback — works everywhere, no grant needed (or use gm-addstyle polyfill)
         const style = document.createElement('style');
         style.textContent = css;
         (document.head || document.documentElement).appendChild(style);

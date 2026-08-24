@@ -158,27 +158,32 @@ interface ApiResponse {
 // Script info
 // `Tampermonkey.*` are the TypeScript types exported by the @types/tampermonkey package
 GM_info: Tampermonkey.ScriptInfo
-GM_info.script: Tampermonkey.ScriptMetaStr
-GM_info.sandboxMode: 'raw' | 'javascript' | 'dom'
+GM_info.script: Tampermonkey.ScriptMetadata
+GM_info.scriptMetaStr: string | null
+GM_info.sandboxMode: 'raw' | 'js' | 'dom'
 
-// Storage (generic type parameter)
+// Storage
 GM.getValue<T>(key: string, defaultValue: T): Promise<T>
-GM.setValue<T>(key: string, value: T): Promise<void>
-GM.getValues<T extends Record<string, unknown>>(defaults: T): Promise<T>
-GM.setValues(values: Record<string, unknown>): Promise<void>
+GM.setValue(key: string, value: any): Promise<void> // not generic; sync GM_setValue uses Tampermonkey.StorageValue
+// Batch storage — in @types/tampermonkey typed only as sync globals (not GM.*):
+// GM_getValues<T extends Record<string, unknown>>(defaults: T): T
+// GM_setValues(values: Record<string, unknown>): void
+// GM_deleteValues(...names: string[]): void
+// Runtime also exposes promise forms GM.getValues/GM.setValues (TM 5.3+/VM 2.19.1+), untyped in DT
 
-// HTTP request
-GM.xmlHttpRequest(details: Tampermonkey.Request): Promise<Tampermonkey.Response<unknown>>
+// HTTP request — returns PromiseWithAbort (Promise & { abort(): void }), generic TContext
+GM.xmlHttpRequest<TContext>(details: Tampermonkey.Request<TContext>): Tampermonkey.PromiseWithAbort<Tampermonkey.Response<TContext>>
 
-// Notification
-GM.notification(details: Tampermonkey.NotificationDetails): Promise<boolean>
+// Notification — two overloads, optional ondone callback
+GM.notification(text: string, title?: string, image?: string, ondone?: () => void): Promise<void>
+GM.notification(details: Tampermonkey.NotificationDetails, ondone?: () => void): Promise<void>
 ```
 
 ---
 
 ## Handling the Userscript Header in TypeScript
 
-The `// ==UserScript==` block must appear in the final compiled output. With most bundlers, put it as a comment at the top of your entry file — esbuild and Vite preserve leading comments.
+The `// ==UserScript==` block must appear in the final compiled output. Do NOT rely on bundlers preserving a leading `// ==UserScript==` comment — esbuild and Vite do not guarantee this through bundling. Instead use `esbuild --banner:js` (or a prepend/banner file) or `vite-plugin-monkey` header injection to emit the block.
 
 Alternatively, use `vite-plugin-monkey` (lisonge, manager-neutral, supports TM/VM/GM/ScriptCat; emits standard `.user.js` with auto-grants) or `webpack-tampermonkey` (npm package `webpack-tampermonkey` — factual package name, manager-neutral output: standard `.user.js` loadable in any manager) which inject the header automatically from configuration. For webpack, `webpack-monkey` (guanss, early-stage) is the actively referenced alternative; if neither fits, use the esbuild banner/meta-prepend pattern.
 
@@ -203,8 +208,10 @@ const defaultSettings: Settings = {
     enabled: true,
 };
 
-// Load all settings at once (TM 5.3+ / VM 2.19.1+; GM4+/Safari: no batch — see managers.md)
-const settings = await GM.getValues<Settings>(defaultSettings);
+// Load all settings at once — batch runtime: TM 5.3+/VM 2.19.1+; typed in DT as GM_getValues sync global (see Key Type Definitions)
+// Runtime promise form (untyped in DT): await (GM as any).getValues(defaultSettings)
+// Typed sync form: GM_getValues<Settings>(defaultSettings)
+const settings = GM_getValues<Settings>(defaultSettings);
 ```
 
 ### Type-Safe Cross-Origin Fetch

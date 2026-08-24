@@ -401,7 +401,7 @@ Every `@require` / `@resource` is code you ship but do not host — treat it as 
 
 ### Pin with SRI
 
-- Pin **every** `@require` / `@resource` with an SRI hash suffix: `#sha256=...` (primary) or `#md5=...` (acceptable). Example: `// @require https://cdn.example.com/lib.js#sha256=abc123...`
+- Pin **every** `@require` / `@resource` with an SRI hash suffix: `#sha256=...` (minimum; SHA-256/SHA-384/SHA-512 per W3C SRI). `#md5=...` is cryptographically broken — legacy/migration-only, supported by Tampermonkey for backward compat only. Example: `// @require https://cdn.example.com/lib.js#sha256=abc123...`
 - Tampermonkey verifies **SHA-256** and **MD5** natively; **SHA-1 / SHA-384 / SHA-512** require `window.crypto` at install time.
 - Multiple hashes: comma- or semicolon-separated, last supported wins (`#md5=...,sha256=...` → `sha256` used). Hex **or** base64 encoding accepted. Source: tampermonkey.net documentation.php?q=sri.
 - Prefer fewer externals. Review every external URL **before every version bump** — managers silently re-fetch `@require` / `@resource` on update.

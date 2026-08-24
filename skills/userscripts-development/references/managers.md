@@ -36,7 +36,7 @@ Legend: ✅ supported · ⚠️ partial/experimental · ❌ absent. Versions are
 
 | API | TM | VM | GM4+ | Safari |
 | --- | --- | --- | --- | --- |
-| `GM_xmlhttpRequest` (callback) | ✅ returns `{abort}` | ✅ returns control | ❌ | ❌ (promise-only) |
+| `GM_xmlhttpRequest` (callback) | ✅ returns `{abort}` | ✅ returns control | ❌ | ✅ legacy `GM_xmlhttpRequest(details)` alias returning `{abort}` (primary is `GM.xmlHttpRequest` custom Promise + `abort`) |
 | `GM.xmlHttpRequest` (promise) | ✅ (capital H) | ✅ since 2.18.3 | ✅ | ✅ custom promise + `abort` |
 | `@connect` enforcement | **Strict** — unlisted hosts prompt/block (initial + final URL) | Declared but **NOT enforced** (requests allowed) | Ignored/not used | Not enforced |
 | `anonymous` (drop cookies) | ✅ | ✅ since 2.10.1 | ❌ | ❌ |
@@ -91,7 +91,7 @@ Legend: ✅ supported · ⚠️ partial/experimental · ❌ absent. Versions are
 | Directive | portable? | Differences |
 | --- | --- | --- |
 | `@run-at` | core values yes | `document-start` all; `document-end` all (**default in GM/VM/Safari**); `document-idle` all (**default in TM only**); `document-body` TM + VM (2.12.10+), invalid enum in GM4, ignored by Safari; `context-menu` **TM-only** |
-| `@include` / `@exclude` | yes | Glob + `/regex/` (case-insensitive) everywhere; no `@include` ⇒ matches everything (except Safari requires ≥1 rule); Safari plans regex removal — prefer `@match` + runtime URL test |
+| `@include` / `@exclude` | yes | Glob + `/regex/` (case-insensitive) everywhere; no `@include` ⇒ matches everything (except Safari requires ≥1 rule); quoid/Userscripts plans to deprecate `@include`/`@exclude` entirely (issue #650) — prefer `@match` + runtime URL test |
 | `@match` | yes | Chrome match-pattern grammar everywhere; VM adds extensions since 2.10.4 (`.tld`, wildcards in extra host positions like `https://*.example.*/*`) |
 | `@connect` | declare anyway | Enforced strictly by TM only; VM does not enforce; GM ignores; Safari n/a |
 | `@run-in normal-tabs/incognito-tabs/container-id-N` | ❌ TM-only 5.3+ | Parsed-but-ignored elsewhere; Firefox containers otherwise unreachable |
@@ -144,7 +144,7 @@ const canMuteTab = typeof GM_audio !== "undefined" || typeof GM?.audio !== "unde
 ### Tampermonkey (brief)
 
 - Own dashboard/editor via toolbar icon; settings modes from Simple to Advanced (many TM-only toggles live under Advanced).
-- Chrome store build is **MV3** (Chrome killed MV2 entirely at v138, mid-2025); Firefox build remains MV2. Several capabilities differ between them (`GM_webRequest` is MV2/Firefox-only).
+- Chrome store build is **MV3** (Chrome 138 — Jul 24 2025 — disabled MV2 for all users, no re-enable; enterprise `ExtensionManifestV2Availability` removed at Chrome 139; final Chrome Web Store MV2 removal Aug 31 2026 per [MV2 deprecation timeline](https://developer.chrome.com/docs/extensions/develop/migrate/mv2-deprecation-timeline)); Firefox build remains MV2. Several capabilities differ between them (`GM_webRequest` is MV2/Firefox-only).
 - **Tampermonkey v5.4.1+ injection permission**: users must allow script injection per-site or globally (dashboard → Settings → Script Injection). Scripts cannot bypass this; surface it in troubleshooting.
 - Firefox debugging: `about:debugging` → This Firefox → Tampermonkey → Inspect.
 

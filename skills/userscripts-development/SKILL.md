@@ -31,7 +31,7 @@ Do NOT use for Selenium/Puppeteer/Playwright automation, browser extensions (Web
 | Need | Portable default | Manager caveat |
 | --- | --- | --- |
 | Persistent settings | `await GM.getValue/setValue` | GM4+: primitives only; batch `GM.getValues/setValues`: TM 5.3+/VM 2.19.1+ |
-| Cross-origin request | `GM.xmlHttpRequest` (+ legacy `GM_xmlhttpRequest`) | `@connect` enforced by TM only; `stream`/`anonymous`/`cookie` options TM-only |
+| Cross-origin request | `GM.xmlHttpRequest` (+ legacy `GM_xmlhttpRequest`) | `@connect` enforced by TM only; `stream`/`cookie` TM-only; `anonymous` also VM since 2.10.1 |
 | Inject CSS | `GM.addStyle`; fallback `createElement('style')` | Sync `GM_addStyle`: TM/VM only (removed in GM4) |
 | SPA navigation | History-API interception (`pushState`/`replaceState` patch + `popstate`) | `window.onurlchange`: Tampermonkey-only |
 | Page context | `unsafeWindow` behind `typeof` guard | Absent in Safari app |

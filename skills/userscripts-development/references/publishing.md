@@ -16,13 +16,13 @@ Greasy Fork enforces code inspectability and update integrity:
   - Non-executable loads (JSON, CSS) are exempt.
 - **Rewrite on publish:** Greasy Fork rewrites `@updateURL` / `@downloadURL` to point at Greasy Fork and strips `@installURL`; inserts `@version` / `@namespace` if missing.
 - **Integrity checks:** warns on SRI hash mismatch and on version decrement.
-- **Account:** 2FA required for authors (2025 rollout).
+- **Account:** 2FA required for password-based logins (2025 phased rollout; OAuth via Google/GitHub/GitLab exempt if password removed — greasyfork.org discussion #268441).
 
 Verify: greasyfork.org
 
 ## Publishing to OpenUserJS
 
-- **License:** OSI-approved `@license` REQUIRED; if absent, OpenUserJS treats it as implied MIT (per ToS). Use an SPDX identifier (`MIT`, `GPL-3.0-only`, etc.).
+- **License:** OSI-approved `@license` REQUIRED; server now rejects new scripts/updates (incl. GitHub webhook pushes) lacking an OSI-approved SPDX `@license` (openuserjs.org/announcements/Licensing_enforcement) — implied MIT per ToS applies to legacy scripts only. Use an SPDX identifier (`MIT`, `GPL-3.0-only`, etc.).
 - **Update URL:** point `@updateURL` at the `.meta.js` variant, not the full `.user.js` — pointing at `.user.js` can flip the update engine to `FAIL` state.
 - **GitHub import:** webhook available to sync from a GitHub repo.
 - **Size cap:** ~500 KiB hosted cap per script.

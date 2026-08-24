@@ -257,7 +257,7 @@ try {
 | --- | --- | --- |
 | Tampermonkey | Control object with `abort()` on the returned handle | Sync `GM_xmlhttpRequest` also returns `{ abort }` |
 | Violentmonkey | Control object with `abort()` | Since promise form added in Violentmonkey 2.18.3 |
-| Greasemonkey 4+ | Promise-attached `abort` | Greasemonkey promise carries `abort()` on the promise itself |
+| Greasemonkey 4+ | `undefined` per wiki (`GM.xmlHttpRequest` “Returns undefined”) — no documented abort control; feature-detect `abort()` if present | Wiki documents `Returns undefined`; do not rely on abort |
 | Safari (Userscripts) | Custom promise with `abort` | Safari-specific promise shape; still `request.abort()` when present — feature-detect before calling |
 
 For the full option matrix (`anonymous`, `cookie`, `responseType: 'stream'`, `redirect`, `proxy`, `@connect` enforcement, `response` shape) see [http-requests.md](http-requests.md) — that file is canonical.
@@ -268,7 +268,7 @@ For the full option matrix (`anonymous`, `cookie`, `responseType: 'stream'`, `re
 
 ### GM.notification(details)
 
-**`Promise<boolean>` is Tampermonkey-only.** Violentmonkey and Greasemonkey 4+ promises resolve `void` — rely on `onclick`/`ondone` callbacks for click detection. Safari has no notification API.
+**`Promise<boolean>` is Tampermonkey-only.** Violentmonkey returns `VMScriptGMNotificationControl` (`{ remove(): Promise<void> }`) — not `Promise<void>`; Greasemonkey 4+ promises resolve `void` — rely on `onclick`/`ondone` callbacks for click detection. Safari has no notification API.
 
 ```javascript
 // @grant GM.notification
@@ -293,7 +293,7 @@ if (handler === "Tampermonkey") {
 | Manager | `await GM.notification(...)` resolves to | Extras |
 | --- | --- | --- |
 | Tampermonkey | `boolean` — `true` if clicked, `false` otherwise | `highlight`, `silent`, `url`/`tag` since Tampermonkey 5.0+ |
-| Violentmonkey | `void` — use `onclick`/`ondone` | `silent`, `tag`, `zombieTimeout`, `zombieUrl`; returns control |
+| Violentmonkey | `VMScriptGMNotificationControl` — `{ remove(): Promise<void> }` control object (not `Promise<void>`) — use `onclick`/`ondone` | `silent`, `tag`, `zombieTimeout`, `zombieUrl`; returns control |
 | Greasemonkey 4+ | `void` — use callbacks; also supports positional args | Core fields only |
 | Safari | ❌ No notification API | — |
 
@@ -306,9 +306,9 @@ Per-manager signatures mirror [api-sync.md](api-sync.md). Prefer manager-qualifi
 | Manager | Promise signature | Notes |
 | --- | --- | --- |
 | Tampermonkey | `GM.setClipboard(data, { type, mimetype } \| "text" \| "html") → Promise<void>` | Accepts object or string; callback form is sync-only |
-| Violentmonkey | `GM.setClipboard(data, type?) → Promise<void>` | `type` optional string, defaults to `"text"` |
-| Greasemonkey 4+ | `GM.setClipboard(data, type?) → Promise<void>` | Same as Violentmonkey promise shape |
-| Safari | `GM.setClipboard(data, type?) → Promise<void>` | Deprecated upstream #655 but present in promise subset |
+| Violentmonkey | `GM.setClipboard(data, type?) → void` (synchronous — types show `(data, type?) => void`) | `type` optional string, defaults to `"text"` |
+| Greasemonkey 4+ | `GM.setClipboard(data, type?) → undefined` | Returns `undefined` per wiki |
+| Safari | `GM.setClipboard(data, type?) → Promise<void>` | Deprecated upstream #655 but present in promise subset; only Tampermonkey’s promise form reliably returns `Promise<void>` |
 
 ```javascript
 // @grant GM.setClipboard
@@ -331,8 +331,8 @@ Sync vs promise duality — canonical handles and option sets live in [api-tabs.
 
 | Form | API | Managers |
 | --- | --- | --- |
-| Sync callback | `GM_getTab(cb)` / `GM_saveTab(tab, cb)` / `GM_getTabs(cb)` / `GM_openInTab(url, opts)` | Tampermonkey + Violentmonkey |
-| Promise | `GM.getTab()` / `GM.saveTab(tab)` / `GM.getTabs()` / `GM.openInTab(url, opts)` | Tampermonkey + Violentmonkey since 2.12.0; Greasemonkey 4+ promise forms; Safari `openInTab` promise (bool arg only) |
+| Sync callback | `GM_getTab(cb)` / `GM_saveTab(tab, cb)` / `GM_getTabs(cb)` / `GM_openInTab(url, opts)` | Tampermonkey (Violentmonkey does not implement tab storage — use `GM_setValue` + `GM_addValueChangeListener`) |
+| Promise | `GM.getTab()` / `GM.saveTab(tab)` / `GM.getTabs()` / `GM.openInTab(url, opts)` | Tampermonkey; Safari Userscripts `GM.getTab`/`GM.saveTab` promise only (no `GM.getTabs`; deprecation planned v5→v6 per quoid/userscripts#667); Violentmonkey ❌ tab storage not implemented; Greasemonkey 4+ ❌ tab storage not implemented |
 
 ### GM.getTab()
 
@@ -364,7 +364,7 @@ for (const [tabId, tabData] of Object.entries(tabs)) {
 }
 ```
 
-Portability: `GM.getTab`/`saveTab`/`getTabs` promises are available in Tampermonkey and Violentmonkey since 2.12.0, and as promise forms in Greasemonkey 4+ (where noted as partial). Safari has no `getTab`/`saveTab`/`getTabs` — only `openInTab` (bool arg). `GM_openInTab` option sets differ per manager — see [api-tabs.md](api-tabs.md) and the summary in [api-sync.md](api-sync.md).
+Portability: `GM.getTab`/`saveTab`/`getTabs` promises are available in Tampermonkey; Safari Userscripts provides `GM.getTab`/`GM.saveTab` promise only (persistent while tab open; no `GM.getTabs`; deprecation planned v5→v6 per quoid/userscripts#667); Violentmonkey does not implement tab storage (absent from https://violentmonkey.github.io/api/gm/, declined in issue #1120) — use `GM_setValue` + `GM_addValueChangeListener`; Greasemonkey 4+ does not implement `GM_getTab`/`GM_saveTab`/`GM_getTabs` at all (wiki API list omits them). `GM_openInTab` option sets differ per manager — see [api-tabs.md](api-tabs.md) and the summary in [api-sync.md](api-sync.md).
 
 ---
 

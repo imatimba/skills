@@ -58,7 +58,7 @@ Chrome match-pattern grammar applies in all managers. Violentmonkey ≥2.10.4 ex
 | `https://*.example.*/*` | ❌ | ✅ (two host wildcards) | foo.example.com, bar.example.co.uk | — |
 | `https://*example.com/*` | ❌ | ✅ (wildcard not at dot boundary) | example.com, myexample.com | — |
 
-\* Base `*.example.com` typically matches one subdomain level; behaviour for nested subdomains varies — test per manager.
+* Base `*.example.com` matches the host plus subdomains at any depth per spec (MDN: `*://*.mozilla.org/*` matches `a.b.mozilla.org`).
 
 **Takeaway:** For maximum portability, stay within base Chrome grammar in `@match` and use `@include` for TLD wildcards (or add explicit `@match` lines per TLD). Use the Violentmonkey superset only when targeting Violentmonkey.
 
@@ -96,11 +96,11 @@ More flexible but less secure than @match. Supports glob patterns and regex.
 // Multiple wildcards
 // @include *://*.example.com/*
 
-// Match any TLD — works in ALL managers via @include glob
+// Match any TLD — Greasemonkey + Violentmonkey via @include glob (Tampermonkey regressed per issue #1818; Safari deprecating @include per quoid#650)
 // @include https://example.*/*
 // Equivalent Violentmonkey ≥2.10.4 @match: https://example.*/*
 
-// Any subdomain + any TLD — @include glob in all managers
+// Any subdomain + any TLD — Greasemonkey + Violentmonkey via @include glob (Tampermonkey regressed per issue #1818; Safari deprecating @include per quoid#650)
 // @include https://*.example.*/*
 // Equivalent Violentmonkey ≥2.10.4 @match: https://*.example.*/*
 ```
@@ -125,8 +125,8 @@ Wrap in forward slashes:
 | Feature | @match | @include |
 |---------|--------|----------|
 | Security | Stricter | More permissive |
-| Regex support | No | Yes (wrapped in `/.../`; Safari plans removal — prefer `@match` + runtime test) |
-| TLD wildcards | Base: No — only Violentmonkey ≥2.10.4 superset (`example.*`) | Yes — `example.*` in all managers |
+| Regex support | No | Yes (wrapped in `/.../`; quoid/userscripts plans to deprecate `@include`/`@exclude` entirely per issue #650 — prefer `@match` + runtime test) |
+| TLD wildcards | Base: No — only Violentmonkey ≥2.10.4 superset (`example.*`) | Yes — `example.*` in Greasemonkey + Violentmonkey (Tampermonkey regressed per issue #1818; Safari deprecating @include entirely per quoid#650) |
 | Extra host wildcards (`*.example.*`, `*example.com`) | Base: No — Violentmonkey ≥2.10.4 only | Yes via glob in all managers |
 | Recommended | Yes | Legacy |
 
@@ -286,8 +286,10 @@ patterns.forEach(pattern => {
 
 ### Mistake 4: Too Broad
 
+`*://*/*` matches only `http`/`https`/`ws` URLs — `<all_urls>` is the pattern covering all supported schemes. Either is overly broad (security risk, performance hit):
+
 ```javascript
-// WRONG - runs on every site (security risk, performance hit)
+// WRONG - runs on every http/https/ws site (<all_urls> covers all supported schemes)
 // @match *://*/*
 
 // RIGHT - be specific
@@ -296,14 +298,15 @@ patterns.forEach(pattern => {
 
 ### Mistake 5: Query Parameters
 
-`@match` doesn't match query strings reliably — the match-pattern spec ignores `?` and `#`:
+Base match-pattern spec matches the URL path **plus** the query string (MDN: path matched against "URL path plus the URL query string... includes the `?`"); fragments (`#`) are ignored. Violentmonkey diverges — it ignores query + hash entirely when matching `@match`/`@include` globs. Use a runtime check or regex `@include` where supported if you need query-aware gating.
 
 ```javascript
-// This won't reliably match https://example.com/page?id=123
+// Base spec: path includes query string, so this CAN match https://example.com/page?id=123
+// Violentmonkey diverges — it ignores query+hash, so test per manager
 // @match https://example.com/page?*
 
 // Workaround — regex in @include (supported in Tampermonkey, Violentmonkey, Greasemonkey 4+)
-// Safari plans to remove regex support in @include/@exclude — prefer @match + runtime URL check there
+// quoid/userscripts plans to deprecate @include/@exclude entirely (issue #650) — prefer @match + runtime URL check for Safari
 // @include /^https:\/\/example\.com\/page\?/
 // Runtime fallback (portable):
 if (!location.href.includes('?id=')) return;
@@ -377,4 +380,4 @@ More URL patterns introduce more matching work at navigation time (heuristic):
 // @include /^https:\/\/(site1|site2|site3)\.com/
 ```
 
-If you need to cover many hosts, prefer wildcards or a single `@include` regex over dozens of individual `@match` lines — but verify per manager, as regex-in-`@include` is slated for removal in Safari.
+If you need to cover many hosts, prefer wildcards or a single `@include` regex over dozens of individual `@match` lines — but verify per manager, as quoid/userscripts plans to deprecate `@include`/`@exclude` entirely (issue #650).

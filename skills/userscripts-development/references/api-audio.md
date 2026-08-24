@@ -73,9 +73,9 @@ const state = await GM.audio.getState();
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `isMuted` | boolean | Whether the tab is currently muted |
-| `muteReason` | string | Why it was muted: `user` \| `capture` \| `extension` |
-| `isAudible` | boolean | Whether the tab is currently playing sound |
+| `isMuted` | `boolean \| undefined` (optional) | Whether the tab is currently muted |
+| `muteReason` | `string \| undefined` (optional — only present when muted) | Why it was muted: `user` \| `capture` \| `extension` |
+| `isAudible` | `boolean \| undefined` (optional) | Whether the tab is currently playing sound |
 
 > The mute-reason enum mirrors Chrome's `tabs.MutedInfoReason` values (`user`, `capture`, `extension`) — treat it as Tampermonkey's mapping of that browser concept.
 

@@ -8,11 +8,11 @@ Documentation for tab management and cross-tab communication. Per-manager facts 
 
 | Form | Status | Managers | Notes |
 | --- | --- | --- | --- |
-| `GM_getTab` / `GM_saveTab` / `GM_getTabs` + `GM_openInTab(url, opts)` (callback / sync) | **Legacy** | Tampermonkey, Violentmonkey | Callback/sync forms are legacy; prefer promise `GM.*` where available |
-| `GM.getTab()` / `GM.saveTab(tab)` / `GM.getTabs()` + `GM.openInTab(url, opts)` (promise) | **Preferred** | Tampermonkey ✅, Violentmonkey ✅ since 2.12.0, Greasemonkey 4+ ⚠️ promise forms only, Safari ❌ except `openInTab`/`closeTab` bool form | Greasemonkey 4+ offers promises **only** — all `GM_*` sync forms were removed in 4.0 |
-| Safari "Userscripts" app | Minimal tab support | `GM_openInTab(url, bool?)` / `GM.openInTab(url, bool?)` and `window.close` bool form only | No `GM_getTab`/`GM_saveTab`/`GM_getTabs` |
+| `GM_getTab` / `GM_saveTab` / `GM_getTabs` + `GM_openInTab(url, opts)` (callback / sync) | **Legacy** | Tampermonkey | Callback/sync forms are legacy; prefer promise `GM.*` where available (Violentmonkey does **not** implement `GM_getTab`/`GM_saveTab`/`GM_getTabs` at all — use `GM_setValue` + `GM_addValueChangeListener` for cross-tab persistence) |
+| `GM.getTab()` / `GM.saveTab(tab)` / `GM.getTabs()` + `GM.openInTab(url, opts)` (promise) | **Preferred** | Tampermonkey ✅, Greasemonkey 4+ ⚠️ promise forms only (tab storage absent — see below), Safari Userscripts `GM.getTab`/`GM.saveTab` ✅ promise (tab-persistent while tab open; no `GM.getTabs`; deprecation planned v5→v6 per quoid/userscripts#667) | Greasemonkey 4+ offers promises **only** — all `GM_*` sync forms were removed in 4.0; Violentmonkey does **not** implement `GM_getTab`/`GM_saveTab`/`GM_getTabs` (absent from https://violentmonkey.github.io/api/gm/, declined in issue #1120) |
+| Safari "Userscripts" app | Minimal tab support | `GM_openInTab(url, bool?)` / `GM.openInTab(url, bool?)` and `window.close` bool form, plus `GM.getTab():Promise<Any>` / `GM.saveTab(tabObj):Promise` (persistent while tab open; no legacy `GM_*` sync forms, no `GM.getTabs`; deprecation planned v5→v6 per quoid/userscripts#667) | No `GM_getTabs`; legacy `GM_*` sync forms absent |
 
-> **Greasemonkey 4+:** promise-only. Every example below that uses `GM_getTab(callback)` has a `GM.getTab()` promise equivalent. **Safari:** lacks tab-persistent storage; only `openInTab`/`closeTab` with a boolean argument are available. See [managers.md](managers.md) §2 Tabs and [api-async.md](api-async.md) for promise contracts.
+> **Greasemonkey 4+:** promise-only. Every example below that uses `GM_getTab(callback)` has a `GM.getTab()` promise equivalent. **Safari Userscripts:** provides `GM.getTab():Promise<Any>` and `GM.saveTab(tabObj):Promise` (persistent while tab open; no legacy `GM_*` sync forms, no `GM.getTabs`; deprecation planned v5→v6 per quoid/userscripts#667) plus `openInTab`/`closeTab` with a boolean argument. **Violentmonkey:** does not implement `GM_getTab`/`GM_saveTab`/`GM_getTabs` at all — use `GM_setValue` + `GM_addValueChangeListener` for cross-tab persistence. See [managers.md](managers.md) §2 Tabs and [api-async.md](api-async.md) for promise contracts.
 
 ---
 
@@ -27,9 +27,9 @@ Get an object that persists for the lifetime of the current tab.
 | Manager | Support |
 | --- | --- |
 | Tampermonkey | ✅ sync callback |
-| Violentmonkey | ✅ sync callback |
-| Greasemonkey 4+ | ❌ sync — use `GM.getTab()` promise |
-| Safari "Userscripts" | ❌ |
+| Violentmonkey | ❌ not implemented (absent from https://violentmonkey.github.io/api/gm/, declined in issue #1120) — use `GM_setValue` + `GM_addValueChangeListener` |
+| Greasemonkey 4+ | ❌ sync — use `GM.getTab()` promise (where implemented; tab storage absent in Greasemonkey — see below) |
+| Safari "Userscripts" | ✅ `GM.getTab():Promise<Any>` promise (no `GM_getTab` sync; persistent while tab open) |
 
 ```javascript
 // @grant GM_getTab
@@ -50,7 +50,7 @@ GM_getTab(function(tab) {
 
 ```javascript
 // @grant GM.getTab
-// Availability: Tampermonkey ✅, Violentmonkey since 2.12.0, Greasemonkey 4+ ⚠️ promise, Safari ❌
+// Availability: Tampermonkey ✅, Safari Userscripts ✅ promise (`GM.getTab():Promise<Any>` persistent while tab open; no `GM.getTabs`; deprecation planned v5→v6 per quoid/userscripts#667); Violentmonkey ❌ not implemented; Greasemonkey 4+ ❌ tab storage not implemented
 
 const tab = await GM.getTab();
 tab.visitCount = (tab.visitCount || 0) + 1;
@@ -64,9 +64,9 @@ Save changes to the tab object. You must call save after mutating the tab object
 | Manager | Support |
 | --- | --- |
 | Tampermonkey | ✅ sync callback `GM_saveTab(tab, cb?)` |
-| Violentmonkey | ✅ sync callback |
-| Greasemonkey 4+ | ❌ sync — use `GM.saveTab(tab)` promise |
-| Safari "Userscripts" | ❌ |
+| Violentmonkey | ❌ not implemented (absent from https://violentmonkey.github.io/api/gm/, declined in issue #1120) — use `GM_setValue` + `GM_addValueChangeListener` |
+| Greasemonkey 4+ | ❌ sync — use `GM.saveTab(tab)` promise (where implemented; tab storage absent in Greasemonkey — see below) |
+| Safari "Userscripts" | ✅ `GM.saveTab(tabObj):Promise` promise (no `GM_saveTab` sync; persistent while tab open) |
 
 ```javascript
 // @grant GM_saveTab
@@ -103,9 +103,9 @@ Get tab objects from all tabs running the script.
 | Manager | Support |
 | --- | --- |
 | Tampermonkey | ✅ sync callback |
-| Violentmonkey | ✅ sync callback |
-| Greasemonkey 4+ | ❌ sync — use `GM.getTabs()` promise (⚠️ partial) |
-| Safari "Userscripts" | ❌ |
+| Violentmonkey | ❌ not implemented (absent from https://violentmonkey.github.io/api/gm/, declined in issue #1120) — use `GM_setValue` + `GM_addValueChangeListener` |
+| Greasemonkey 4+ | ❌ sync — use `GM.getTabs()` promise (⚠️ partial; tab storage absent in Greasemonkey — see below) |
+| Safari "Userscripts" | ❌ not implemented (no `GM.getTabs`; `GM.getTab`/`GM.saveTab` promise only) |
 
 ```javascript
 // @grant GM_getTabs
@@ -127,6 +127,7 @@ GM_getTabs(function(tabs) {
 
 ```javascript
 // @grant GM.getTabs
+// Availability: Tampermonkey ✅; Violentmonkey ❌ not implemented — use GM_setValue + GM_addValueChangeListener; Greasemonkey 4+ ❌ not implemented; Safari ❌ (no GM.getTabs)
 
 const tabs = await GM.getTabs();
 for (const [tabId, tabData] of Object.entries(tabs)) {
@@ -146,9 +147,9 @@ Open a new browser tab. This file is the **canonical home** for per-manager opti
 
 | Manager | Accepted second arg | Recognised options | Returned handle |
 | --- | --- | --- | --- |
-| **Tampermonkey** | Object **or** boolean (`loadInBackground` legacy alias, opposite of `active`) | `{ active, insert, setParent, incognito }` | Handle `{ close(), onclose, closed }` — `close()` closes the tab, `onclose` callback, `closed` boolean |
+| **Tampermonkey** | Object **or** boolean (`loadInBackground` legacy alias, opposite of `active`) | `{ active, insert (integer position, default false), setParent, incognito }` | Handle `{ close(), focus(), onclose, closed }` — `close()` closes the tab, `focus()` brings it to front (changelog “Add a focus method to the return value of GM_openInTab”), `onclose` callback, `closed` boolean |
 | **Violentmonkey** | Object **or** boolean (`openInBackground`, opposite of `active`) | `{ active, container, insert, pinned }` or boolean | Control object with `close()`, `onclose`, `closed` (same casing as Tampermonkey) |
-| **Greasemonkey 4+** | Boolean or partial object | boolean / partial options; prefer `GM.openInTab(url, opts?)` promise | `Promise` resolving to handle (where implemented) |
+| **Greasemonkey 4+** | Boolean or partial object | boolean / partial options; prefer `GM.openInTab(url, opts?)` promise | `undefined` (https://wiki.greasespot.net/GM.openInTab — no Promise/handle; handle/close semantics are Tampermonkey/Violentmonkey extensions) |
 | **Safari "Userscripts"** | **Boolean only** | `true` = background, `false` = foreground — object options not supported | Minimal handle |
 
 Normalize `closed` / `onclose` casing consistently (lowercase) across examples.
@@ -162,7 +163,7 @@ GM_openInTab('https://example.com/');
 // --- Tampermonkey ---
 const tmTab = GM_openInTab('https://example.com/', {
     active: true,       // focus the new tab (opposite of loadInBackground)
-    insert: true,       // insert next to current tab
+    insert: 2,          // integer position (default false), not boolean — e.g. 2 inserts at position 2
     setParent: true,    // current tab is parent (closing parent may close this tab)
     incognito: false    // open in private/incognito mode
 });
@@ -171,7 +172,7 @@ const tmTab = GM_openInTab('https://example.com/', {
 const vmTab = GM_openInTab('https://example.com/', {
     active: true,       // focus the new tab
     container: 0,       // Firefox container index (Violentmonkey-only)
-    insert: true,       // insert next to current tab
+    insert: true,       // Violentmonkey insert as boolean (Tampermonkey `insert` is integer position, default false)
     pinned: false       // pin the new tab
 });
 // Boolean shorthand also works in Violentmonkey/Tampermonkey:
@@ -185,7 +186,7 @@ await GM.openInTab('https://example.com/', true);
 // @grant GM_openInTab
 GM_openInTab('https://example.com/', false); // false = foreground
 
-// Control the opened tab — same handle shape (Tampermonkey/Violentmonkey)
+// Control the opened tab — same handle shape (Tampermonkey/Violentmonkey) — Tampermonkey handle also exposes focus()
 tmTab.onclose = function() {
     console.log('New tab was closed');
 };
@@ -215,9 +216,9 @@ Close the current tab.
 
 | Manager | Grant | Notes |
 | --- | --- | --- |
-| Tampermonkey | **Requires** `// @grant window.close` (Tampermonkey treats `window.close`/`window.focus` as grants) | Last-tab close may still be blocked by the browser |
-| Violentmonkey | Exposed natively — **no grant needed** | Last-tab close may still be blocked |
-| Greasemonkey 4+ | Exposed natively — **no grant needed** | Last-tab close may still be blocked |
+| Tampermonkey | **Requires** `// @grant window.close` (Tampermonkey treats `window.close` as a grant) | Last-tab close may still be blocked by the browser |
+| Violentmonkey | `window.focus` exposed without grant (issue #1195); `window.close` exposed natively — **no grant needed** | Last-tab close may still be blocked |
+| Greasemonkey 4+ | No privileged grant — standard `window.close()` restrictions apply (cannot close non-script-opened tabs; not a Greasemonkey grant) | Last-tab close may still be blocked |
 | Safari "Userscripts" | Boolean `openInTab` handle has `close()`; `window.close` bool form | Object options not supported |
 
 ```javascript
@@ -239,8 +240,8 @@ Bring the window to the front.
 | Manager | Grant | Notes |
 | --- | --- | --- |
 | Tampermonkey | **Requires** `// @grant window.focus` | Unlike `unsafeWindow.focus()`, this works regardless of browser focus settings |
-| Violentmonkey | Exposed natively — **no grant needed** | — |
-| Greasemonkey 4+ | Exposed natively — **no grant needed** | — |
+| Violentmonkey | Exposed natively — **no grant needed** (provides `window.focus` without grant per issue #1195) | — |
+| Greasemonkey 4+ | No privileged grant — standard `window.focus()` (not a Greasemonkey grant) | — |
 | Safari "Userscripts" | No special grant | — |
 
 ```javascript
@@ -505,7 +506,7 @@ function doLeaderOnlyTask() {
 // @grant GM.getTab
 // @grant GM.saveTab
 // @grant GM.getTabs
-// Availability: Tampermonkey ✅, Violentmonkey since 2.12.0, Greasemonkey 4+ ⚠️ promise, Safari ❌ (except openInTab bool)
+// Availability: Tampermonkey ✅; Safari Userscripts ✅ `GM.getTab`/`GM.saveTab` promise (no `GM.getTabs`; deprecation planned v5→v6 per quoid/userscripts#667); Violentmonkey ❌ not implemented; Greasemonkey 4+ ❌ not implemented
 
 const tab = await GM.getTab();
 tab.data = 'value';

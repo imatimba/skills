@@ -215,7 +215,7 @@ GM_addElement('script', {
 | Manager | CSP handling | What `GM_addElement` does | How to verify |
 |---------|--------------|---------------------------|---------------|
 | TM | May strip/relax CSP headers in some modes — **do NOT rely on it** | Bypasses in best-effort modes | Test in VM to surface the real CSP |
-| VM | **Respects page CSP** — falls back to content-world injection if page-world injection fails; no header stripping | Respects CSP; graceful fallback | **Test in VM** — if it works there, it will work in TM; the reverse is not true |
+| VM | **Respects page CSP** — no header stripping; `@inject-into auto` falls back to content-world if page-world injection fails (auto-mode behavior, not `GM_addElement` itself) | Respects CSP; graceful fallback | **Test in VM** — if it works there, it will work in TM; the reverse is not true |
 | GM4+ | Subject to Firefox sandbox; `GM_addElement` ❌ (issue #2484) | No `GM_addElement` — use `@require` or Xray bridges | Verify in GM4+ console |
 | Safari Userscripts | Content world only; `GM_addElement` ❌ | No bypass possible | Design without page-world access |
 
@@ -295,14 +295,17 @@ observer.observe(document.body ?? document.documentElement, { childList: true, s
 function teardown() { observer.disconnect(); }
 // Prefer explicit teardown hooks over beforeunload:
 // - SPA: hook history navigation (see Pitfall 3 fallback)
-// - Page lifecycle: use `pagehide` or explicit router hooks where available
+// - Page lifecycle: prefer `visibilitychange` (most reliable, incl. mobile), then `pagehide` (bfcache-compatible but not reliably fired on mobile per MDN), then explicit router hooks
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') teardown();
+});
 window.addEventListener('pagehide', teardown, { once: true });
 
 // Or disconnect on page unload as best-effort fallback (may not fire in bfcache/SPAs)
 window.addEventListener('beforeunload', () => observer.disconnect());
 ```
 
-> **bfcache/SPA note:** `beforeunload` is unreliable — bfcache restores pages without firing it, and SPAs navigate without unloading. Prefer explicit teardown (observer.disconnect on navigation detection) and `pagehide` over `beforeunload`.
+> **bfcache/SPA note:** `beforeunload` is unreliable — bfcache restores pages without firing it, and SPAs navigate without unloading. `pagehide` fixes bfcache compatibility but is also "not reliably fired... especially on mobile" (MDN `pagehide` event). Prefer `visibilitychange` as the primary teardown signal, then `pagehide` as next-best, with explicit navigation hooks as the SPA fallback.
 
 ---
 

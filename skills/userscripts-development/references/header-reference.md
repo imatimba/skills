@@ -123,7 +123,6 @@ Link to the script's homepage (all are aliases).
 
 ```javascript
 // @homepage     https://github.com/user/repo
-// @supportURL   https://github.com/user/repo/issues
 ```
 
 ### @supportURL
@@ -225,7 +224,7 @@ Match-pattern exclusion — Violentmonkey documents it as the recommended compan
 // @exclude-match  https://example.com/admin/*
 ```
 
-Matching logic (Violentmonkey): a script runs if **any** `@match` or `@include` rule matches **and** no `@exclude-match` or `@exclude` rule matches. Tampermonkey does not parse `@exclude-match` (parser.js only handles `@exclude`; issue Tampermonkey/tampermonkey#2161 reports `"@exclude-match" is not a valid userscript header`). Use `@exclude` for Tampermonkey-compat exclusion.
+Matching logic (Violentmonkey per violentmonkey.github.io/api/matching): `@exclude`/`@exclude-match` checked first — if matched, script doesn't run; otherwise, if any `@match` is defined, `@include` is ignored and script runs only if a `@match` rule matches (`@include` is fallback only when no `@match` defined). Tampermonkey does not parse `@exclude-match` (parser.js only handles `@exclude`; issue Tampermonkey/tampermonkey#2161 reports `"@exclude-match" is not a valid userscript header`). Use `@exclude` for Tampermonkey-compat exclusion.
 
 Verify: violentmonkey.github.io/api/metadata-block · violentmonkey.github.io/api/matching
 
@@ -478,7 +477,7 @@ URL to download updates from. Use `none` to disable.
 
 ### @installURL — legacy alias of @downloadURL
 
-Legacy alias of `@downloadURL` (Greasemonkey wiki). Greasy Fork strips `@installURL` on publish (like `@updateURL` / `@downloadURL` it is rewritten to point at Greasy Fork).
+Legacy alias of `@downloadURL` (Greasemonkey wiki). Greasy Fork strips `@updateURL`/`@downloadURL`/`@installURL` on publish (installed scripts only update from Greasy Fork).
 
 ```javascript
 // @installURL   https://example.com/script.user.js  // legacy — prefer @downloadURL
@@ -492,7 +491,7 @@ Parsed and displayed by catalogs, mostly ignored by managers — the manager ins
 
 ### @license
 
-SPDX name or free-form license. **REQUIRED by OpenUserJS ToS** — if absent, OpenUserJS treats it as implied MIT. Prefer an SPDX identifier (`MIT`, `GPL-3.0-only`, `Apache-2.0`).
+SPDX name or free-form license. **REQUIRED by OpenUserJS ToS** — historically if absent OpenUserJS treated it as implied MIT, but since the Licensing_enforcement announcement (openuserjs.org/announcements/Licensing_enforcement) the server rejects new scripts/updates lacking an OSI-approved SPDX `@license`. Greasy Fork does not require `@license` (greasyfork.org/en/help/meta-keys). Prefer an SPDX identifier (`MIT`, `GPL-3.0-only`, `Apache-2.0`).
 
 ```javascript
 // @license      MIT
@@ -529,14 +528,14 @@ Disclose monetisation / author-benefiting behaviour. Greasy Fork requires it; ma
 // @antifeature:de ads Wir zeigen Werbung an  // :locale i18n variant
 ```
 
-| Type | Catalog enforcement | Notes |
+| Type | Documented / Enforced | Notes |
 |------|---------------------|-------|
-| `ads` | Tampermonkey docs + Greasy Fork | Advertisements |
-| `tracking` | Tampermonkey docs + Greasy Fork | Analytics / user tracking |
-| `miner` | Tampermonkey docs + Greasy Fork | Crypto mining / resource use |
-| `payment` | Greasy Fork only | Requires payment for full functionality |
-| `membership` | Greasy Fork only | Requires membership / account |
-| `referral-link` | Greasy Fork only | Affiliate / referral links |
+| `ads` | Documented by Tampermonkey, enforced by Greasy Fork | Advertisements |
+| `tracking` | Documented by Tampermonkey, enforced by Greasy Fork | Analytics / user tracking |
+| `miner` | Documented by Tampermonkey, enforced by Greasy Fork | Crypto mining / resource use |
+| `payment` | Greasy Fork only (enforced; not documented by Tampermonkey) | Requires payment for full functionality |
+| `membership` | Greasy Fork only (enforced; not documented by Tampermonkey) | Requires membership / account |
+| `referral-link` | Greasy Fork only (enforced; not documented by Tampermonkey) | Affiliate / referral links |
 
 Verify: tampermonkey.net/documentation.php?q=antifeature · greasyfork.org/en/help/antifeatures
 

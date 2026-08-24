@@ -20,7 +20,7 @@ Source of truth: `managers.md` §2 Storage. Gaps = UNVERIFIED — do not assume.
 | --- | --- | --- |
 | Tampermonkey | Structured-clone-ish with JSON fallback | Objects/arrays work; `Date`/`Map`/`Set` need manual conversion (see Handling Non-Serialisable Data). |
 | Violentmonkey | JSON-serialisable | No DOM nodes or circular references. Use `JSON.stringify`/`parse` patterns for complex types. |
-| Greasemonkey 4+ | **Strings, numbers, booleans ONLY** | `JSON.stringify` objects yourself before `GM.setValue`; `JSON.parse` on read. |
+| Greasemonkey 4+ | **Strings, booleans, and integers ONLY** (floats excluded — wiki: “Strings, booleans, and integers”) | `JSON.stringify` objects yourself before `GM.setValue`; `JSON.parse` on read. |
 | Safari "Userscripts" app | JSON-serialisable | Promise-only API. |
 
 > **Violentmonkey worked example:** install a script with `// @grant GM_setValue` / `GM_getValue`, open the Violentmonkey Dashboard → your script → **Storage** tab to inspect keys, or query via DevTools console on any matched page with `await GM.getValue('key')`.
@@ -31,7 +31,7 @@ Source of truth: `managers.md` §2 Storage. Gaps = UNVERIFIED — do not assume.
 
 ### GM_setValue(key, value)
 
-Store a value.
+Store a value. **Note:** Greasemonkey 4+ has **no** sync `GM_*` forms — Promise-only `GM.setValue`/`GM.getValue` (see Async Versions below).
 
 ```javascript
 // @grant GM_setValue
@@ -417,13 +417,13 @@ console.log(`You've visited this page ${visitCount} times`);
 | null | ✅ Portable | Prefer `null` over `undefined` for missing-value sentinel. |
 | undefined | ⚠️ Manager-dependent | Round-trip not guaranteed — some managers drop the key or coerce to `null`. **Recommend `null` instead.** |
 | Infinity / NaN | ⚠️ Manager-dependent | JSON cannot represent them; managers that JSON-serialise may coerce to `null` or drop. **Recommend null-safe primitives or string encoding.** |
-| object | ⚠️ Manager-dependent | Tampermonkey: structured-clone-ish with JSON fallback; Violentmonkey/Safari: JSON-serialisable; Greasemonkey 4+: **must `JSON.stringify` yourself**. No DOM nodes or cycles. |
+| object | ⚠️ Manager-dependent | Tampermonkey: structured-clone-ish with JSON fallback; Violentmonkey/Safari: JSON-serialisable; Greasemonkey 4+: **must `JSON.stringify` yourself** (integers-only primitive store). No DOM nodes or cycles. |
 | array | ⚠️ Manager-dependent | Same as object. |
 | Date | Manual | Stored as string — `toISOString()` on write, `new Date()` on read. |
 | Map/Set | Manual | Convert to array/object first (see below). |
 | Function / Symbol | ❌ | Cannot be serialised. |
 
-> **Caution — undefined / Infinity / NaN:** their round-trip is manager-dependent. Tampermonkey's structured-clone path may preserve some, but Violentmonkey's JSON path and Greasemonkey 4+ string/number/boolean-only store will not. **Recommend:** use `null` to represent absence, and encode `Infinity`/`NaN` as strings (e.g., `"Infinity"`, `"NaN"`) or avoid storing them.
+> **Caution — undefined / Infinity / NaN:** their round-trip is manager-dependent. Tampermonkey's structured-clone path may preserve some, but Violentmonkey's JSON path and Greasemonkey 4+ string/boolean/integer-only store will not. **Recommend:** use `null` to represent absence, and encode `Infinity`/`NaN` as strings (e.g., `"Infinity"`, `"NaN"`) or avoid storing them.
 
 ### Handling Non-Serialisable Data
 

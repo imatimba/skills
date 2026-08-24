@@ -31,13 +31,13 @@ Script runs in an isolated context, separate from the page.
 - **Implemented as:** Tampermonkey `@sandbox DOM` or Violentmonkey/Safari `@inject-into content` (isolated/content world). Safari forces this world whenever any `@grant` is present. Greasemonkey 4+ always uses a sandboxed isolated world (Xray vision).
 - **Pros:** Protected from page scripts; can't be detected easily; safer execution.
 - **Cons:** Cannot directly access page variables — requires `unsafeWindow` bridge (unavailable in Safari) or DOM-only approach; some page APIs need explicit bridging.
-- **Clarification on `unsafeWindow` vs page vars:** In an isolated world, `window` is the sandbox's window, not the page's. Page variables (`window.pageVariable`) are `undefined` without a bridge. `unsafeWindow` (where available — Tampermonkey with explicit `@grant unsafeWindow`, Violentmonkey without grant before 2.32 and with grant handling after, Greasemonkey 4+ via `wrappedJSObject`) provides a reference to the page's `window`. In Safari, `unsafeWindow` does not exist — design DOM-only.
+- **Clarification on `unsafeWindow` vs page vars:** In an isolated world, `window` is the sandbox's window, not the page's. Page variables (`window.pageVariable`) are `undefined` without a bridge. `unsafeWindow` (where available — Tampermonkey with explicit `@grant unsafeWindow`, Violentmonkey without grant before 2.32 and with grant handling after, Greasemonkey 4+ provides `unsafeWindow` but it is Xray-wrapped — page-defined properties require `window.wrappedJSObject`, sharing requires `cloneInto`/`exportFunction` per [MDN Sharing objects with page scripts](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Sharing_objects_with_page_scripts)) provides a reference to the page's `window`. In Safari, `unsafeWindow` does not exist — design DOM-only.
 
-### USERSCRIPT_WORLD (Firefox Only)
+### USERSCRIPT_WORLD (Tampermonkey `JavaScript` — Firefox Only; Chrome platform `USER_SCRIPT` separate)
 
 Special context created for userscripts, with enhanced capabilities.
 
-- **Implemented as:** Firefox-only world used by Tampermonkey `@sandbox JavaScript` and Greasemonkey 4+ internals; Violentmonkey on Firefox can also surface it. Chrome/Safari do not implement this world.
+- **Implemented as:** Tampermonkey's `@sandbox JavaScript` creates a Firefox-only `USERSCRIPT_WORLD` (falls back to `raw` on other browsers) and Greasemonkey 4+ internals run in a Firefox sandboxed world. Chrome 120+ separately exposes a platform-level `USER_SCRIPT` world via the `chrome.userScripts` API (`ExecutionWorld.MAIN` | `USER_SCRIPT`; `USER_SCRIPT` exempt from page CSP) which is NOT controlled by `@sandbox`/`@inject-into`. Safari/WebKit exposes no equivalent userscript world.
 - **Pros:** Bypasses CSP; better isolation than MAIN_WORLD; supports `document-start` timing reliably in Firefox.
 - **Cons:** Firefox only; need `cloneInto`/`exportFunction` for page communication.
 

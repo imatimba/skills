@@ -6,7 +6,7 @@ A tier-2 manager is one whose divergence from the portable baseline (TM/VM/GM4+/
 
 ## ScriptCat
 
-ScriptCat — Chromium + Edge + Firefox desktop (MV2); no mobile.
+ScriptCat — Chromium + Edge + Firefox desktop (MV3, historically MV2); no mobile. Current builds are MV3 (`background.service_worker` + `chrome.userScripts.register` per `docs/ARCHITECTURE.md`).
 
 | Area | ScriptCat divergence |
 | --- | --- |

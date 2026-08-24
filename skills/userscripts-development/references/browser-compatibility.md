@@ -20,7 +20,7 @@ Violentmonkey worked example: build a standard `.user.js` and load the same arti
 | Topic | Fact |
 |-------|------|
 | Mobile | VM = full features on Firefox Android (AMO). Chromium mobile is volatile — Kiwi browser archived Jan 2025; verify any Chromium-mobile claim before recommending. |
-| Chrome MV2 → MV3 | Chrome killed MV2 entirely at v138 (mid-2025). The Chrome Web Store build of Tampermonkey is **MV3**; the Firefox build remains MV2. Several capabilities differ between them (notably `GM_webRequest`). |
+| Chrome MV2 → MV3 | Chrome 138 (Jul 24 2025) disabled MV2 for all users (no re-enable); enterprise `ExtensionManifestV2Availability` policy removed at Chrome 139; final Chrome Web Store MV2 removal Aug 31 2026 ([MV2 deprecation timeline](https://developer.chrome.com/docs/extensions/develop/migrate/mv2-deprecation-timeline)). The Chrome Web Store build of Tampermonkey is **MV3**; the Firefox build remains MV2. Several capabilities differ between them (notably `GM_webRequest`). |
 | Firefox | Retains MV2; supports `cloneInto`/`exportFunction`/containers. |
 
 ---
@@ -37,13 +37,13 @@ Legend: ✅ supported · ⚠️ partial/experimental · ❌ absent. Versions are
 | `GM.setValue` / `getValue` / `deleteValue` / `listValues` (promise) | ✅ | ✅ since 2.12.0 | ✅ only form | ✅ (`getValue`/`setValue`/`listValues`/`deleteValue`) | Safari subset verified |
 | Value types | JSON-serialisable incl. objects | JSON-serialisable (no DOM nodes/cycles) | **Strings/numbers/booleans ONLY** — `JSON.stringify` objects yourself | JSON-serialisable (promise subset) | `managers.md` — storage-type limits are manager-enforced, not browser-enforced |
 | Batch `GM_getValues` / `GM_setValues` / `GM_deleteValues` (+ `GM.*` promise forms) | ✅ TM 5.3+ | ✅ VM 2.19.1+ | ❌ | ❌ | Include `deleteValues` |
-| `GM_cookie` / `GM.cookie` | ✅ stable; `partitionKey` 5.2+, httpOnly beta-gated | ✅ since VM 2.35.1; httpOnly needs both global + per-script toggles | ❌ | ❌ |  |
+| `GM_cookie` / `GM.cookie` | ✅ stable; `partitionKey` 5.2+ (TM-only), httpOnly beta-gated | ✅ since VM 2.35.1 (no `partitionKey` yet — TM 5.2+ only; VM 2.35.1 release notes "no partitionKey yet"); httpOnly needs both global + per-script toggles | ❌ | ❌ | `partitionKey` is Tampermonkey 5.2+ only |
 
 ### Networking
 
 | API | TM | VM | GM4+ | Safari Userscripts | Notes |
 |-----|----|----|------|-------------------|-------|
-| `GM_xmlhttpRequest` (callback) | ✅ returns `{abort}` | ✅ returns control | ❌ | ❌ (promise-only) | Safari verified: promise-only `GM.xmlHttpRequest` |
+| `GM_xmlhttpRequest` (callback) | ✅ returns `{abort}` | ✅ returns control | ❌ | ✅ legacy `GM_xmlhttpRequest(details)` alias returning `{abort}` (primary is `GM.xmlHttpRequest` custom Promise + `abort`) | Safari exposes both `GM.xmlHttpRequest` (custom Promise + `abort`) and legacy `GM_xmlhttpRequest` alias ([quoid/userscripts README API section](https://github.com/quoid/userscripts#api)) |
 | `GM.xmlHttpRequest` (promise) | ✅ (capital H) | ✅ since 2.18.3 | ✅ | ✅ custom promise + `abort` | Shapes differ — feature-detect |
 | `GM_addStyle` | ✅ sync returns `<style>` | ✅ sync returns `<style>` | ❌ removed in 4.0 (polyfill `gm4-polyfill.js`) | ❌ deprecated / partial `GM.addStyle` only |  |
 | `GM.addStyle` (promise) | ✅ | ✅ since 2.12.0 | ❌ polyfill only | ✅ partial impl | Safari verified: partial `addStyle` |

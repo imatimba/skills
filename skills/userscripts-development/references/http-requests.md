@@ -84,11 +84,11 @@ Standard options work in all four managers (Tampermonkey, Violentmonkey, Greasem
 | `method` | `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `PATCH` |
 | `url` | String URL |
 | `headers` | Object of request headers |
-| `data` | `String`, `Blob`, `File`, `FormData`, `URLSearchParams`, `ArrayBuffer`, `UInt8Array` — binary `ArrayBuffer`/`UInt8Array` bodies are Tampermonkey 5.4+ portable nuance; basic string/FormData works everywhere |
+| `data` | `String` — all managers; `Blob`, `File`, `FormData`, `URLSearchParams`, `ArrayBuffer`, `UInt8Array` — Tampermonkey / Violentmonkey / Safari only (Greasemonkey 4+ supports `String` only per wiki.greasespot.net/GM.xmlHttpRequest: "data String Optional") |
 | `timeout` | Milliseconds; triggers `ontimeout` |
 | `onload`, `onerror`, `onabort`, `ontimeout` | Callbacks |
 | `onprogress` | Download progress (`lengthComputable`, `loaded`, `total`) |
-| `responseType` `arraybuffer` \| `blob` \| `json` \| `text` | Text/json/blob/arraybuffer in all managers; see deltas below for stream/document |
+| `responseType` `arraybuffer` \| `blob` \| `json` \| `text` (`text` is implicit default) | `text`/`json`/`blob`/`arraybuffer` in all managers; Tampermonkey enumerates `arraybuffer`, `blob`, `json`, `stream` (`text` is implicit default) — see deltas below for `stream`/`document` |
 | `overrideMimeType`, `context`, `user`, `password` | Widely supported (verify `user`/`password` per manager docs if critical) |
 | `onreadystatechange` | Ready-state changes |
 
@@ -123,7 +123,7 @@ Must be guarded or documented as Tampermonkey-only. Versions are Tampermonkey ve
 
 | Option | Support |
 | --- | --- |
-| `responseType: 'ms-stream'` | Unique to Greasemonkey (Microsoft streaming) |
+| `responseType` | `""`, `arraybuffer`, `blob`, `document`, `json`, `text`, `ms-stream` — includes `document` and `ms-stream` (Tampermonkey uses `stream` instead) |
 | `binary: true` | ✅ compat |
 | `anonymous`, `cookie`, `cookiePartition`, `redirect`, `proxy`, `stream` | ❌ absent |
 
@@ -152,7 +152,7 @@ GM_xmlhttpRequest({
         'Authorization': 'Bearer token123',
         'X-Custom-Header': 'value'
     },
-    data: 'request body',              // String, Blob, File, FormData, URLSearchParams, ArrayBuffer, UInt8Array (Tampermonkey 5.4+ for ArrayBuffer/UInt8Array direct)
+    data: 'request body',              // String — all managers; Blob, File, FormData, URLSearchParams, ArrayBuffer, UInt8Array — Tampermonkey / Violentmonkey / Safari only (Greasemonkey 4+ supports String only)
 
     // Request modifiers
     timeout: 30000,                    // Timeout in milliseconds — standard
@@ -171,7 +171,7 @@ GM_xmlhttpRequest({
     },
 
     // Response handling
-    responseType: 'json',              // arraybuffer, blob, json, text — standard; Tampermonkey 5.4+ adds 'stream'; Greasemonkey uses 'ms-stream' instead
+    responseType: 'json',              // arraybuffer, blob, json, text — standard (text is implicit default; Tampermonkey documents arraybuffer, blob, json, stream); Greasemonkey supports "", arraybuffer, blob, document, json, text, ms-stream
     overrideMimeType: 'text/plain',    // Override response MIME type — standard
 
     // Redirect handling
@@ -271,7 +271,10 @@ Best practice (portable, Tampermonkey-compatible, good hygiene):
 
 ### Aborting Requests
 
+Tampermonkey / Violentmonkey / Safari only — `GM_xmlhttpRequest` returns a control object with `.abort()`; Greasemonkey 4+ documents `undefined` as the return value (wiki.greasespot.net/GM.xmlHttpRequest), so `request.abort()` is not portable there.
+
 ```javascript
+// Tampermonkey / Violentmonkey / Safari only — Greasemonkey 4+ returns undefined
 const request = GM_xmlhttpRequest({
     method: 'GET',
     url: 'https://api.example.com/large-file',
@@ -279,7 +282,7 @@ const request = GM_xmlhttpRequest({
     onabort: () => console.log('Aborted')
 });
 
-// Cancel after 5 seconds
+// Cancel after 5 seconds (Tampermonkey / Violentmonkey / Safari only)
 setTimeout(() => request.abort(), 5000);
 ```
 

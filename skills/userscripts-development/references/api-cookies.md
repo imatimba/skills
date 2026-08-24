@@ -98,8 +98,8 @@ Each element returned by `list` has:
 | `domain` | string | Tampermonkey, Violentmonkey | Domain (e.g., `".example.com"`) |
 | `path` | string | Tampermonkey, Violentmonkey | Path (e.g., `"/"`) |
 | `secure` | boolean | Tampermonkey, Violentmonkey | HTTPS only |
-| `httpOnly` | boolean | Tampermonkey, Violentmonkey | Not accessible via `document.cookie`; httpOnly handling is beta-gated (see Set section) |
-| `sameSite` | `"strict"` \| `"lax"` \| `"none"` | Tampermonkey, Violentmonkey | SameSite attribute |
+| `httpOnly` | boolean | Tampermonkey, Violentmonkey | Not accessible via `document.cookie`; httpOnly handling is gated (Tampermonkey: Advanced → Security toggle since stable 5.3.1+; Violentmonkey: global + per-script toggles — see Set section) |
+| `sameSite` | `"strict"` \| `"lax"` \| `"no_restriction"` \| `"unspecified"` | Tampermonkey, Violentmonkey | SameSite attribute (MDN `cookies.SameSiteStatus` — there is no `"none"`; Tampermonkey issues #2070/#465: using `"none"` hangs/message-port-closed; `no_restriction` requires `secure: true`) |
 | `session` | boolean | Tampermonkey, Violentmonkey | `true` if session cookie (no `expirationDate`) |
 | `expirationDate` | number | Tampermonkey, Violentmonkey | Unix timestamp **in seconds since epoch** (not ms) |
 | `hostOnly` | boolean | Tampermonkey, Violentmonkey | Exact domain match only |
@@ -167,8 +167,8 @@ GM_cookie.set({
 
     // Optional — security
     secure: true,                         // HTTPS only
-    httpOnly: true,                       // BETA-GATED — see note below
-    sameSite: 'strict',                   // "strict", "lax", "none"
+    httpOnly: true,                       // gated — Tampermonkey: Advanced → Security toggle (since stable 5.3.1+); Violentmonkey: global + per-script toggles — see note below
+    sameSite: 'strict',                   // "strict", "lax", "no_restriction", "unspecified" — there is no "none" ("no_restriction" requires secure: true)
 
     // Optional — expiry (seconds since epoch — both managers)
     expirationDate: Math.floor(Date.now() / 1000) + 86400,  // 24 hours
@@ -186,8 +186,8 @@ GM_cookie.set({
 await GM.cookie.set({ name: 'x', value: 'y', url: 'https://example.com/' });
 ```
 
-> **httpOnly — beta-gated in BOTH managers (resolves contradiction with earlier overview):**
-> - **Tampermonkey:** enable Config Mode **Advanced** → Security → allow httpOnly cookies.
+> **httpOnly — gated in BOTH managers (resolves contradiction with earlier overview):**
+> - **Tampermonkey:** enable Config Mode **Advanced** → Security → allow httpOnly cookies (no longer “BETA only” as of stable 5.3.1+).
 > - **Violentmonkey:** needs **BOTH** the global httpOnly toggle **and** the per-script toggle enabled.
 > - Without these toggles, `httpOnly: true` is ignored or errors. `managers.md` §2 Cookies row is the source of truth.
 
@@ -411,8 +411,11 @@ async function checkSessionSecurity() {
             if (!cookie.httpOnly) {
                 issues.push(`${cookie.name}: Not httpOnly (accessible via JS)`);
             }
-            if (cookie.sameSite === 'none' && !cookie.secure) {
-                issues.push(`${cookie.name}: SameSite=None without Secure`);
+            if (cookie.sameSite === 'no_restriction' && !cookie.secure) {
+                issues.push(`${cookie.name}: SameSite=no_restriction without Secure (and SameSite=None pairing requires Secure)`);
+            }
+            if (cookie.sameSite === 'unspecified') {
+                issues.push(`${cookie.name}: SameSite unspecified — consider explicit lax/strict/no_restriction`);
             }
         }
     }
@@ -443,9 +446,9 @@ function setDocumentCookie(name, value, { days = 7, path = '/', secure = true, s
 
 ## Security Considerations
 
-1. **Access Control**: Tampermonkey checks `@match`/`@include` access to the target URL before allowing cookie operations; Violentmonkey declares `@connect`-like host scope similarly. See `managers.md` §2.
+1. **Access Control**: Tampermonkey checks `@match`/`@include` access to the target URL before allowing cookie operations; Violentmonkey derives cookie access from `@match`/`@include` host permissions (not `@connect` — `@connect` governs `GM_xmlhttpRequest` only). See `managers.md` §2.
 
-2. **httpOnly Cookies**: Beta-gated in **both** managers — Tampermonkey: Advanced → Security toggle; Violentmonkey: global + per-script toggles. Most session cookies are `httpOnly` — without the toggles you cannot read/set them.
+2. **httpOnly Cookies**: Gated in **both** managers — Tampermonkey: Advanced → Security toggle (since stable 5.3.1+; no longer “BETA only”); Violentmonkey: global + per-script toggles. `partitionKey` remains Tampermonkey 5.2+ only. Most session cookies are `httpOnly` — without the toggles you cannot read/set them.
 
 3. **Secure Flag**: Always set `secure: true` for sensitive cookies.
 

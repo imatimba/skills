@@ -9,7 +9,7 @@ Documentation for DOM manipulation and UI-related functions. **Canonical referen
 | Need | Use | Notes |
 | --- | --- | --- |
 | Inject CSS | `GM_addStyle(css)` / `GM.addStyle(css)` | Portable style injection; prefer over manual `<style>` where supported (see support matrix below). |
-| Inject element that may be blocked by CSP (script/style/link) | `GM_addElement(tag, attrs)` / `GM_addElement(parent, tag, attrs)` — Tampermonkey & Violentmonkey only | Bypasses CSP in TM/VM **only**; Violentmonkey otherwise **respects** page CSP and falls back to content-world injection (no header stripping). Greasemonkey #2484 & Safari: not supported — fall back to `document.createElement`. |
+| Inject element that may be blocked by CSP (script/style/link) | `GM_addElement(tag, attrs)` / `GM_addElement(parent, tag, attrs)` — Tampermonkey & Violentmonkey only | Tampermonkey: best-effort CSP-header relaxation (not universal, Firefox may need header-modifying extension); Violentmonkey respects page CSP and falls back to content-world injection (`@inject-into auto`). Greasemonkey #2484 & Safari: not supported — fall back to `document.createElement`. |
 | Read or call page JavaScript variables/functions | `unsafeWindow` | **Not available in Safari "Userscripts" app at all**; grant matrix below. If you only manipulate DOM, use `document` instead. |
 
 Source of truth: `managers.md` §2 DOM & UI, §4 Sandbox/Injection. Cross-reference: `browser-compatibility.md`.
@@ -155,7 +155,7 @@ function addStyleFallback(css) {
     if (typeof GM !== 'undefined' && typeof GM.addStyle === 'function') return GM.addStyle(css);
     const el = document.createElement('style');
     el.textContent = css;
-    document.documentElement.appendChild(el);
+    (document.head || document.documentElement).appendChild(el); // VM auto-parents style into head
     return el;
 }
 ```
@@ -277,7 +277,10 @@ function addElementFallback(parentOrTag, tagOrAttrs, maybeAttrs) {
     const tag = hasParent ? tagOrAttrs : parentOrTag;
     const attrs = hasParent ? maybeAttrs : tagOrAttrs;
     const el = document.createElement(tag);
-    Object.assign(el, attrs);
+    for (const [k, v] of Object.entries(attrs)) {
+        if (k === 'textContent') el.textContent = v;
+        else el.setAttribute(k, v); // class vs className, style-string vs CSSStyleDeclaration: use attribute
+    }
     parent.appendChild(el);
     return el;
 }
@@ -362,6 +365,10 @@ showToast('Settings saved!');
 
 ```javascript
 function makeDraggable(el){
+    // Initial positioning: clear right and ensure top/left are explicit before dragging
+    el.style.right = 'auto';
+    if (!el.style.top) el.style.top = el.offsetTop + 'px';
+    if (!el.style.left) el.style.left = el.offsetLeft + 'px';
     const header=el.querySelector('.panel-header')||el; header.style.cursor='move';
     let x=0,y=0, sx=0,sy=0;
     header.onmousedown=e=>{e.preventDefault(); sx=e.clientX; sy=e.clientY; document.onmousemove=drag; document.onmouseup=()=>{document.onmousemove=null; document.onmouseup=null;}};

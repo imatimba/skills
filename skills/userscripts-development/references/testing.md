@@ -45,7 +45,7 @@ Do not unit-test manager-owned behaviour — it requires a real manager:
 
 - Install / update flow (`@updateURL`, `@downloadURL`, `.user.js` MIME handling)
 - Real CSP interaction or injection-world fallback (`@inject-into`, `@sandbox`)
-- `GM_download`, `GM_notification`, `GM_tabs` side-effects beyond their mock contracts
+- `GM_download`, `GM_notification`, `GM_openInTab` / `GM_getTab`/`GM_saveTab`/`GM_getTabs` side-effects beyond their mock contracts (`GM_openInTab` is Violentmonkey-supported; tab-storage family is Tampermonkey-only, declined in Violentmonkey #1120)
 - Cross-origin `GM.xmlHttpRequest` enforcement (`@connect` prompts in Tampermonkey)
 
 For those, do a manual smoke run in the target manager (Violentmonkey as worked example: load the built `.user.js` via dashboard or `http://localhost:8080/script.user.js` with Track external edits).
