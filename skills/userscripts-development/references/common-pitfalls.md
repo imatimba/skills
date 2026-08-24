@@ -127,6 +127,8 @@ Additional guards:
 | Unhandled async failure | `init().catch(e => …)` — don't drop the rejection |
 | SPA navigation (no universal `onurlchange`) | History patch (`pushState`/`replaceState` + `popstate`/`hashchange`) or `VM.onNavigate`; `window.onurlchange` is TM-only |
 
+> **Navigation API (modern alternative, as of 2026-08-24):** Chromium 102+ (Chrome/Edge) implements `window.navigation` with `navigate` / `navigatesuccess` / `navigateerror` events as a structured replacement for the history patch (verified via MDN Navigation API — `Navigation.navigate()`, `NavigationTransition`). Firefox and Safari do not yet implement it (as of 2026-08-24), so feature-detect before using: `if (window.navigation) navigation.addEventListener('navigatesuccess', handler); else /* history patch fallback */`. See MDN Navigation API: https://developer.mozilla.org/en-US/docs/Web/API/Navigation_API
+
 ---
 
 ## Pitfall 4: Blocking Async Operations
@@ -221,6 +223,8 @@ GM_addElement('script', {
 
 **Best practice:** Test CSP-sensitive injection in Violentmonkey first — TM may hide the CSP failure by stripping headers. If VM works, you have a truly portable solution.
 
+> **Style CSP also blocks styles (verified 2026-08-24 via MDN CSP):** `style-src` (and `default-src` fallback) blocks inline `<style>` elements just as `script-src` blocks `<script>`. The same bypass applies — use `GM_addElement('style', { textContent: '...' })` where supported (TM/VM) to circumvent `style-src` restrictions. VM docs describe `GM_addElement` as "circumventing a strict Content-Security-Policy that forbids adding inline code *or style*" (https://violentmonkey.github.io/api/gm/). Where `GM_addElement` is unavailable (GM4+, Safari), inject via `@require` + linked stylesheet or remove the inline-style requirement. Source: MDN CSP fetch directives — `style-src sets allowed sources for CSS stylesheets` (https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP).
+
 ---
 
 ## Pitfall 6: Sandbox Context Confusion
@@ -253,7 +257,7 @@ if (typeof unsafeWindow !== 'undefined') {
 | VM <2.32 / GM4+ | ✅ | ✅ (`wrappedJSObject` equiv. on Firefox) | Full page context | — |
 | Safari Userscripts | ❌ NONE | ❌ NONE | Still ❌ — any `@grant` ⇒ forced content world; `none` does not conjure `unsafeWindow` | Never available — branch around it |
 
-**Fix the incompleteness:** `@grant none` does not just "disable the sandbox entirely" — it disables the sandbox **and removes all `GM_*`/`GM.*` APIs** (you lose storage, XHR, etc.). In Safari, it still does not provide `unsafeWindow` (always ❌). Always guard:
+**Fix the incompleteness:** `@grant none` does not just "disable the sandbox entirely" — it disables the sandbox **and removes all `GM_*`/`GM.*` APIs** (you lose storage, XHR, etc.) — but `GM_info` / `GM.info` remains available (verified 2026-08-24 via TM grant docs: "In this mode no GM* function but the GM_info property will be available" — https://www.tampermonkey.net/documentation.php?locale=en&q=grant). In Safari, it still does not provide `unsafeWindow` (always ❌). Always guard:
 
 ```javascript
 if (typeof unsafeWindow !== 'undefined') {
@@ -343,6 +347,31 @@ observer.observe(document.body ?? document.documentElement, { childList: true, s
 |----------|------|-------------|
 | Direct per-mutation | High — thousands of style recalculations | Never for bulk |
 | Debounced + `.processed` guard | Low — batches + idempotent | Always for observer-driven styling |
+
+**Event-listener duplication on re-observed/dynamic content (verified 2026-08-24 via MDN `addEventListener`):** Each `addEventListener(type, listener)` call adds a *new* listener — calling it again on the same element without `removeEventListener` or `{ once: true }` stacks duplicates and fires the handler multiple times. A `MutationObserver` callback that does `el.addEventListener('click', handler)` on every mutation will double-bind each re-observed node.
+
+```javascript
+// Wrong — duplicates on every mutation
+observerCallback(() => {
+    document.querySelectorAll('.btn').forEach(el =>
+        el.addEventListener('click', onClick) // stacks each time!
+    );
+});
+
+// Right — guard, once, or AbortSignal
+const seen = new WeakSet();
+observerCallback(() => {
+    document.querySelectorAll('.btn').forEach(el => {
+        if (seen.has(el)) return;
+        el.addEventListener('click', onClick);
+        seen.add(el);
+    });
+});
+// Alternatives: el.addEventListener('click', onClick, { once: true })
+// or: el.addEventListener('click', onClick, { signal: controller.signal })
+```
+
+Source: MDN `EventTarget.addEventListener()` — `once` option "listener should be invoked at most once ... automatically removed when invoked" and `signal` option "listener will be removed when abort() is called" (https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener).
 
 ---
 
@@ -446,6 +475,21 @@ function process() { ... }  // Private to script
 
 **Recommendation:** Use `let`/`const` always. Reserve IIFE as the primary defense for `@grant none` (page context) and as defense-in-depth elsewhere.
 
+> **jQuery / `@require` global conflicts (verified 2026-08-24):** `@require https://cdn.example.com/jquery.js` executes *before* your script inside the manager sandbox, defining `$`/`jQuery` only in that sandbox (VM docs: "Require another script to execute before the current one" — https://violentmonkey.github.io/api/metadata-block/). With a sandbox (`any @grant`), the page's own jQuery is isolated via `unsafeWindow`/`wrappedJSObject` and `$` does not collide. With `@grant none` (no sandbox) your `@require`'d jQuery *does* pollute `window` and collides with the page's version.
+>
+> ```javascript
+> // @grant GM_getValue          // sandboxed — $ is isolated, no conflict
+> // @require https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js
+> console.log(typeof window.$);       // page's $ (via unsafeWindow if needed)
+> console.log(typeof $);              // sandbox's jQuery — isolated
+>
+> // @grant none                 // page context — collision risk!
+> // @require https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js
+> const jq = jQuery.noConflict(true); // restore page's $/jQuery, keep sandbox ref
+> ```
+>
+> **Rule:** In sandboxed scripts, prefer the sandbox `$` and access page `$` only via `unsafeWindow` guard. In `@grant none`, call `jQuery.noConflict(true)` immediately after load or avoid `@require` jQuery entirely and use `fetch` + isolated DOM helpers.
+
 ---
 
 ## Pitfall 11: Wrong Timing with @run-at
@@ -512,6 +556,8 @@ if (typeof cloneInto !== 'undefined') {
 }
 ```
 
+> **Function serialization specifics (verified 2026-08-24):** Assigning a function via `unsafeWindow.fn = myFn` through the structured clone algorithm throws `DataCloneError` on Firefox (MDN: "Function objects cannot be duplicated ... attempting to throws a DataCloneError" — https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm). Xray `cloneInto` strips functions by default because it uses structured clone; pass `{ cloneFunctions: true }` to preserve them. To expose a callable to the page, use `exportFunction` instead — `exportFunction(fn, unsafeWindow, { defineAs: 'fn' })` (MDN Sharing objects with page scripts — https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Sharing_objects_with_page_scripts). On Chromium there is no Xray; direct `unsafeWindow.fn = fn` assignment works but prototype chains are not walked (MDN: "The prototype chain is not walked or duplicated"). Guard accordingly.
+
 **Manifest V3 limitations (framed by manager, not browser):**
 ```javascript
 // @webRequest / GM_webRequest is NOT "Chrome MV3" generically — it's:
@@ -529,10 +575,13 @@ if (typeof GM_webRequest !== 'undefined') {
 
 | Topic | Manager-aware fact | Browser tie |
 |-------|-------------------|-------------|
-| `cloneInto` / `exportFunction` | Firefox Xray vision — GM4+ and TM-on-Firefox; not a GM API | Firefox only; Chromium has no Xray |
+| `cloneInto` / `exportFunction` | Firefox Xray vision — GM4+ and TM-on-Firefox; not a GM API — `cloneInto` without `cloneFunctions:true` strips functions via `DataCloneError` (MDN structured clone) | Firefox only; Chromium has no Xray |
 | `GM_webRequest` / `@webRequest` | TM experimental Firefox MV2 only; broken TM Chrome MV3 5.2+; VM wontfix; GM/Safari ❌ | Manifest (MV2 vs MV3) + manager |
 | Firefox containers | TM's `@run-in container-id-N` (TM 5.3+) is TM-only; Firefox's native contextual identities are separate | Firefox only |
 | Storage types | GM4+ stores **primitives only** — `JSON.stringify` objects yourself; TM/VM/Safari store objects | Manager, not browser |
+| Storage race / atomicity | `GM.*` storage is async with no cross-tab transactions — concurrent `GM.getValue` → `GM.setValue` races (file under-covers) | Manager (all) — especially parallel tabs |
+
+> **Storage race & atomicity (verified 2026-08-24 via Greasespot wiki):** `GM.getValue`/`GM.setValue` return promises with no transaction. Concurrent read-modify-write from two tabs races — final value may reflect only one increment (e.g., 64 instead of 100). Wiki stresses "Note awaiting the set -- required so the next get sees this set" (https://wiki.greasespot.net/GM_getValue) and warns "Doing many gets/many sets can be slow. Instead get/set one value ... or use Promise.all()". Mitigations: (1) batch state in a single JSON object behind one key, (2) serialize with `await` ordering, (3) use `GM_addValueChangeListener` to react to external writes, or (4) implement a compare-and-swap loop. See also `GM_setValue` primitives-only note — https://wiki.greasespot.net/GM_setValue.
 | Logging | `GM_log` removed in GM4+ — use `console.log` | Manager (GM4+) |
 
 ---

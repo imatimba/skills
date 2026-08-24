@@ -15,6 +15,17 @@ Managers covered: **TM** = Tampermonkey · **VM** = Violentmonkey · **GM4+** = 
 | Greasemonkey 4+ | Firefox only | `GM.*` promises ONLY | All sync `GM_*` removed in 4.0. Storage values limited to strings/numbers/booleans. |
 | Safari "Userscripts" app | Safari (macOS + iOS 15.1+) | Async `GM.*` promise SUBSET | Open source. Any `@grant` forces content-world execution; no page-world access. |
 
+### Tier-2 snapshot (verified 2026-08-24) — see [manager-compat.md](manager-compat.md) for full divergences
+
+| Manager | Browsers (verified 2026-08-24) | License (verified 2026-08-24) | GM compatibility | Notes |
+| --- | --- | --- | --- | --- |
+| ScriptCat | Chrome, Edge, Firefox | GPL-3.0 | Full TM compatibility + background & scheduled scripts, rich APIs | Active — 1,589 commits, v1.4.0 (Jul 2026); Chrome Web Store + AMO + Edge Add-ons; docs at https://docs.scriptcat.org |
+| AdGuard | Windows / Android / Mac apps + Browser Extension (Chrome 138+ requires Developer mode + Allow user scripts) | Proprietary | Supports `GM_*` and `GM.*` for `getValue`/`setValue`/`deleteValue`/`listValues`/`getResourceText`/`getResourceURL`/`addStyle`/`log`/`setClipboard`/`xmlHttpRequest`/`openInTab`/`registerMenuCommand`/`addElement`/`window.onurlchange` (per https://adguard.com/kb/general/extensions/) | Acts as userscript manager; User Scripts API required on Chrome MV3 5.2+ (https://adguard.com/kb/adguard-browser-extension/user-scripts-api/) |
+| FireMonkey | Firefox (Firefox for Android experimental since 2.12) | MPL-2.0 | Supports GM3 (`GM_*`) & GM4 (`GM.*`) + `fetch` | Firefox native `userScripts` API (Firefox 65+); lightweight manager for scripts + styles; https://erosman.github.io/firemonkey/ |
+| OrangeMonkey | Chromium only | Proprietary | All `GM_*` functions (fork of Violentmonkey) | Lightweight VM fork, v2.0.16 (Aug 2026); Chrome Web Store only; https://chromewebstore.google.com/detail/orangemonkey/ekmeppjgajofkpiofbebgcbohbmfldaf |
+
+Core manager licenses & status (verified 2026-08-24): Violentmonkey MIT — active, 3,888 commits; Tampermonkey proprietary (Jan Biniok) — active, MV3 migration 2025–2026; Greasemonkey MIT — maintenance mode, 795 commits, Firefox-only; Userscripts (Safari) GPL-3.0 — active, 1,320 commits.
+
 ---
 
 ## 2. API Support Matrix
@@ -139,7 +150,7 @@ const canMuteTab = typeof GM_audio !== "undefined" || typeof GM?.audio !== "unde
 - **Sync**: Dropbox, OneDrive, Google Drive, WebDAV, S3-compatible (Settings → Sync).
 - **Backup**: ZIP export/import (scripts as `.user.js` + optional `.storage.json`; imports Tampermonkey-format files too).
 - **Debugging**: drop a `debugger;` statement → DevTools → Sources → **Violentmonkey** tree. Console output lands in the page console; the sandboxed console is captured separately.
-- **Mobile**: full features on Firefox for Android (AMO). Chromium-based mobile browsers are a volatile ecosystem (Kiwi archived Jan 2025) — verify before recommending.
+- **Mobile**: full features on Firefox for Android (AMO). Chromium-based mobile browsers are a volatile ecosystem (Kiwi archived Jan 2025; successor path via Microsoft Edge Canary with `Extension install by id` per https://github.com/kiwibrowser/src.next, verified 2026-08-24) — verify before recommending.
 
 ### Tampermonkey (brief)
 
@@ -167,7 +178,7 @@ const canMuteTab = typeof GM_audio !== "undefined" || typeof GM?.audio !== "unde
 - No local filesystem access via any GM API. Adjacent capabilities don't change this: `GM_download` writes only through the browser's download subsystem; `GM_xmlhttpRequest` blob/arraybuffer responses stay in memory; `@require`/`@resource` are network-only fetches by default — Tampermonkey accepts `file://` requires only after the user opts in to local file access (FAQ Q402). The "allow file URLs" extension toggle grants permission to run scripts on local pages — it is not a filesystem API.
 - Cross-origin iframe DOM is unreachable from the top frame (browser same-origin policy), regardless of manager. To affect iframe content, match the iframe's own URL — every manager injects separate script instances into frames whose URLs match; `@noframes` = top-frame-only.
 - GM storage values are per-browser-profile and never cloud-synced: manager sync features (TM TESLA/GDrive/Dropbox/WebDAV, VM Dropbox/OneDrive/GDrive/WebDAV/S3, Greasemonkey Firefox Sync, Safari iCloud folder) cover scripts and settings only.
-- Very strict CSP can still defeat injection (VM degrades to content world; TM relaxation is best-effort; neither guarantees bypass).
+- Very strict CSP can still defeat injection (VM degrades to content world; TM relaxation is best-effort; neither guarantees bypass; Safari CSP example: https://github.com/quoid/userscripts/issues/106, verified 2026-08-24).
 - A userscript in an isolated/content world observes the DOM but shares no JS scope with the page — page variables require the bridges in §4. (Edge case: DOM prototypes such as `Element.prototype` live in the shared native realm — prototype mutations are visible cross-world.)
 
 ---
@@ -180,6 +191,10 @@ Official documentation roots (consult these before adding new claims):
 - Violentmonkey: <https://violentmonkey.github.io/api/gm/> · metadata: <https://violentmonkey.github.io/api/metadata-block/> · matching: <https://violentmonkey.github.io/api/matching/> · injection contexts: <https://violentmonkey.github.io/posts/inject-into-context/> · external editors: <https://violentmonkey.github.io/posts/how-to-edit-scripts-with-your-favorite-editor/>
 - Greasemonkey: <https://wiki.greasespot.net/Greasemonkey_Manual:API> · GM4 migration: <https://www.greasespot.net/2017/09/greasemonkey-4-for-script-authors.html>
 - Safari Userscripts app: <https://github.com/quoid/userscripts>
+- AdGuard userscript support: <https://adguard.com/kb/general/extensions/> · User Scripts API: <https://adguard.com/kb/adguard-browser-extension/user-scripts-api/>
+- ScriptCat: <https://scriptcat.org/en> · docs: <https://docs.scriptcat.org> · repo: <https://github.com/scriptscat/scriptcat>
+- FireMonkey: <https://erosman.github.io/firemonkey/> · AMO: <https://addons.mozilla.org/en-US/firefox/addon/firemonkey/>
+- OrangeMonkey: <https://chromewebstore.google.com/detail/orangemonkey/ekmeppjgajofkpiofbebgcbohbmfldaf>
 - Chrome MV2 removal timeline: <https://developer.chrome.com/docs/webplatform/mv2-deprecation-timeline>
 
 Key decision records: VM declined `window.onurlchange` (violentmonkey/violentmonkey#1195) and `GM_webRequest` (violentmonkey/violentmonkey#583); TM MV3 dropped `GM_webRequest` (Tampermonkey/tampermonkey#2209).

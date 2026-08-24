@@ -20,6 +20,8 @@ ScriptCat — Chromium + Edge + Firefox desktop (MV3, historically MV2); no mobi
 | `@connect` + download | ScriptCat — `@connect` enforced for native-mode `GM_download` (undeclared hosts prompt) |
 | Background / schedule | ScriptCat — headers `@background` / `@crontab` exist for background/scheduled scripts |
 | `CAT_*` APIs | ScriptCat — `CAT_fileStorage`, `CAT_userConfig`, and other `CAT_*` extension APIs exist — beyond this skill's scope — see official docs |
+| `@run-at` / `@allFrames` | ScriptCat — `@run-at` defaults to `document-idle` (verified 2026-08-24 via `src/app/service/service_worker/utils.ts` fallback `document_idle` and `gm_info.ts`); `@allFrames` defaults `true` (no `@noframes` → `allFrames: true`, verified 2026-08-24) — matches TM/VM defaults |
+| Version history | ScriptCat — `@inject-into` added v1.2 (verified 2026-08-24 via docs `v1.2` changelog); native `GM_download` honors `@connect` since PR #1506 (verified 2026-08-24) |
 
 Verify: docs.scriptcat.org
 
@@ -32,8 +34,9 @@ Verify: docs.scriptcat.org
 | Distribution | AdGuard — desktop apps (Windows/Mac/Android) act as system-level cross-browser userscript managers; AdGuard — browser extension supports userscripts since v5.2 via Chrome User Scripts API |
 | Enable toggle | AdGuard — requires Developer mode toggle (<Chrome 138) or "Allow user scripts" (Chrome 138+) in `chrome://extensions` |
 | Supported GM subset | AdGuard — documented: `GM.info`/`GM_info`, `GM.setValue`/`getValue`/`listValues`/`deleteValue`, `GM.getResourceUrl`, `GM.setClipboard`, `GM.xmlHttpRequest`, `GM.openInTab`, `GM.notification`, `unsafeWindow`, `GM.getResourceText`, `GM.addStyle`, `GM.log`, `GM.addElement`, `window.onurlchange` |
-| Not supported | AdGuard — per official KB: `GM_cookie`, httpOnly cookie access, `xmlHttpRequest` streaming; AdGuard — `@unwrap` ignored |
+| Not supported | AdGuard — per official KB: `GM_cookie`, httpOnly cookie access, `xmlHttpRequest` streaming; AdGuard — `@unwrap` ignored; omitted APIs (`GM_cookie`, `GM_addValueChangeListener`, etc.) imply unsupported — supported list is finite and version-sensitive (verified 2026-08-24 via adguard.com/kb/general/extensions/) — Violentmonkey `GM_cookie` httpOnly entries listed only when HTTP-only option enabled globally + per-script (verified 2026-08-24 via violentmonkey.github.io/api/gm/) |
 | `GM_` vs `GM.` | AdGuard — both `GM_` and `GM.` forms work (`GM_` deprecated-but-supported) |
+| Portable baseline gap | Greasemonkey 4 — `GM_addStyle` removed as of GM 4.0 and `GM.getResourceText` does not exist (verified 2026-08-24 via wiki.greasespot.net) — present in TM/VM/SC/AdGuard; see `managers.md` baseline |
 
 Verify: adguard.com
 
@@ -50,6 +53,10 @@ FireMonkey — Firefox-only (v3.x needs FF 128+; experimental Firefox Android vi
 | CSP | FireMonkey — page-mode injection blocked by page CSP |
 | `@allFrames` | FireMonkey — defaults `FALSE` (TM/VM default `true`) |
 | `@run-at` defaults | FireMonkey — `document-idle` for JS, `document-start` for CSS |
+| `GM.*` async parity | FireMonkey — `GM.xmlHttpRequest` updated v3.0 to return `Promise` (breaking, verified 2026-08-24 via `erosman/firemonkey/releases/tag/v3.0`); `GM.getResourceUrl` returns synchronously (also works with `await`) — not fully Promise-native across all APIs (verified 2026-08-24) |
+| Missing / removed APIs | FireMonkey — `GM_cookie` added v3.0; `GM.getTab`/`GM.getTabs`/`GM.saveTab`, `GM.createObjectURL`, `GM.import` removed or `not working` per API comparison table (verified 2026-08-24 via `erosman.github.io/firemonkey`) |
+| `GM_info` deltas | FireMonkey — v3.0 removed a few `GM_info` properties, moved `GM.info.script.injectInto` → `GM.info.injectInto` to match Violentmonkey, added `GM.info.script.grant`/`require`/`runAt`; `GM.info.isIncognito` shows `No support at the moment` for MV3 (verified 2026-08-24) |
+| Version history | FireMonkey — v3.0 breaking: `GM` APIs now depend on `@grant` (any `@grant` enables sandbox), `@grant none` injects into page, `@inject-into page` concatenates `@require` (verified 2026-08-24) |
 
 Verify: erosman.github.io
 

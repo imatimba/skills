@@ -24,6 +24,8 @@ The `GM.*` API provides promise-based versions of `GM_*` functions.
 - Use `await` or `.then()` for results
 - Some names differ in capitalisation (see table below) — conventions come from Greasemonkey 4 and Tampermonkey respectively
 
+> **GM.info is synchronous — not part of the async surface (verified 2026-08-24):** `GM.info` / `GM_info` is a plain object — Tampermonkey `GM_info` docs describe a `ScriptGetInfo` object, Violentmonkey `GM_info: {...}` object, and Greasemonkey Manual:API lists `GM.info` as an object (verified 2026-08-24 via wiki.greasespot.net, tampermonkey.net/documentation.php?q=GM_info, violentmonkey.github.io/api/gm/). Do not `await` it; access properties directly — e.g. `GM.info.scriptHandler` / `GM_info.scriptHandler`.
+
 ---
 
 ## Naming Conventions
@@ -42,6 +44,7 @@ The `GM.*` API provides promise-based versions of `GM_*` functions.
 | `GM_openInTab` | `GM.openInTab` | — | Per-manager option sets — see [api-tabs.md](api-tabs.md) |
 | `GM_addStyle` | `GM.addStyle` | — | Tampermonkey + Violentmonkey since 2.12.0; Greasemonkey 4+ via `gm4-polyfill.js` only; Safari partial impl |
 | `GM_addElement` | `GM.addElement` | — | Tampermonkey + Violentmonkey since 2.13.1; Greasemonkey 4+ / Safari: not supported |
+| `GM_download` | `GM.download` | — | Tampermonkey + Violentmonkey since 2.18.3 (verified 2026-08-24) — async `GM.download` returns `Promise<Blob>` with `abort()` per Violentmonkey types `download(): void \| Promise<Blob>` and Tampermonkey docs “If GM.download is used it returns a promise … also has an abort function”; sync `GM_download` uses callbacks / handle `abort()` |
 
 > **Note:** `GM.addValues` does not exist in any manager — the batch helpers are `getValues`/`setValues`/`deleteValues` only. Do not call `GM.addValues`/`GM_addValues`.
 
@@ -51,6 +54,8 @@ Feature-detect the promise surface rather than branching on handler names:
 const canBatch = typeof GM !== "undefined" && typeof GM.getValues === "function";
 const canXhrPromise = typeof GM !== "undefined" && typeof GM.xmlHttpRequest === "function";
 ```
+
+> **Grant strings are distinct for the promise forms (verified 2026-08-24):** `@grant GM.getValue` does not imply `@grant GM_getValue` and vice versa — Greasemonkey Manual:API notes “API methods need to be specified with @grant”. Declare each promise API you `await` explicitly — e.g. `// @grant GM.getValue`, `// @grant GM.xmlHttpRequest`, `// @grant GM.download` — or list both forms when a script supports sync and async paths.
 
 ---
 
@@ -181,6 +186,11 @@ Per-manager notes: Tampermonkey and Violentmonkey fire `remote === true` for cha
 await GM.removeValueChangeListener(listenerId);
 ```
 
+### Promise rejection and value-type portability (verified 2026-08-24)
+
+- **Rejection:** Every `GM.*` promise rejects on error and resolves on success — Greasemonkey wiki `GM.getValue` (“A Promise, rejected in case of error”) and `GM.setValue` (“A Promise, resolved … on success, rejected … on failure”) per wiki.greasespot.net/GM.getValue and /GM.setValue (verified 2026-08-24). Wrap `await` in `try/catch` or `.catch()`; storage and network failures surface as rejections, not callback errors.
+- **Value types — version-sensitive:** Greasemonkey 4+ allows only `string`, `boolean`, and `integer` — “Any other type may cause undefined behavior, including crashes” per wiki `GM.setValue` (as of Greasemonkey 4.0+, verified 2026-08-24). Tampermonkey and Violentmonkey accept any JSON-serialisable value including `null`, `object`, `undefined`, and numbers per Tampermonkey `GM_values` docs (verified 2026-08-24). For portability serialize objects with `JSON.stringify` or guard via feature detection; canonical rules live in [api-storage.md](api-storage.md).
+
 ---
 
 ## Resource Functions
@@ -207,6 +217,8 @@ img.src = iconUrl;
 ```
 
 Portability: Tampermonkey and Violentmonkey since 2.12.0 support the promise form; Greasemonkey 4+ supports `GM.getResourceUrl` (lowercase `rl`); Safari has no `@resource` implementation.
+
+> **Return-type difference (verified 2026-08-24):** `GM.getResourceText` is synchronous `string` in Violentmonkey (`getResourceText: (name) => string` per Violentmonkey `VMScriptGMObject` types at violentmonkey.github.io/types/) while Tampermonkey provides both `GM_getResourceText(name): string` and `await GM.getResourceText(name): string` (docs show `const scriptText2 = await GM.getResourceText("myscript.js")` at tampermonkey.net/documentation.php?q=GM_getResource). `GM.getResourceUrl` is promise-based `Promise<string>` in all managers that implement it (Violentmonkey `getResourceUrl: (name, isBlobUrl?) => Promise<string>`, Tampermonkey `await GM.getResourceUrl`). Feature-detect before `await`ing `getResourceText` when targeting Violentmonkey.
 
 ---
 
@@ -259,6 +271,8 @@ try {
 | Violentmonkey | Control object with `abort()` | Since promise form added in Violentmonkey 2.18.3 |
 | Greasemonkey 4+ | `undefined` per wiki (`GM.xmlHttpRequest` “Returns undefined”) — no documented abort control; feature-detect `abort()` if present | Wiki documents `Returns undefined`; do not rely on abort |
 | Safari (Userscripts) | Custom promise with `abort` | Safari-specific promise shape; still `request.abort()` when present — feature-detect before calling |
+
+> **Fetch vs XHR mode (verified 2026-08-24):** Tampermonkey `GM_xmlhttpRequest` `details.fetch: true` switches to `fetch` (enforced automatically when `details.anonymous` or `details.redirect` is set as of build 6180+). In fetch mode `details.timeout` and `onprogress` do not work and `onreadystatechange` receives only `readyState DONE (4)` — per Tampermonkey `GM_xmlhttpRequest` docs at tampermonkey.net/documentation.php?q=GM_xmlhttpRequest (verified 2026-08-24). No first-party source documents `AbortController` integration for `GM.xmlHttpRequest` as of 2026-08-24; use the returned promise’s `abort()` handle instead.
 
 For the full option matrix (`anonymous`, `cookie`, `responseType: 'stream'`, `redirect`, `proxy`, `@connect` enforcement, `response` shape) see [http-requests.md](http-requests.md) — that file is canonical.
 

@@ -20,6 +20,8 @@ Documentation for tab management and cross-tab communication. Per-manager facts 
 
 Tab objects persist for the lifetime of the current tab and survive navigations within that tab.
 
+> **Isolation & deprecation (verified 2026-08-24):** Tampermonkey isolates tab objects per script; Safari Userscripts shares the tab object between scripts (can cause cross-script conflicts) and plans deprecation of `GM.getTab`/`GM.saveTab` in v5 with removal in v6 in favour of `sessions.setTabValue`/`getTabValue` (not available in Safari) per [quoid/userscripts#667](https://github.com/quoid/userscripts/issues/667).
+
 ### GM_getTab(callback) — sync (callback), legacy
 
 Get an object that persists for the lifetime of the current tab.
@@ -154,6 +156,15 @@ Open a new browser tab. This file is the **canonical home** for per-manager opti
 
 Normalize `closed` / `onclose` casing consistently (lowercase) across examples.
 
+> **GM_openInTab portability & permission notes (verified 2026-08-24):**
+> - **Popup blocker:** `window.open()` requires transient activation and returns `null` when blocked ([MDN Window.open](https://developer.mozilla.org/en-US/docs/Web/API/Window/open)); `GM_openInTab` is privileged and bypasses popup blockers — prefer it for background / outside-click flows (as of Tampermonkey docs, verified 2026-08-24).
+> - **Defaults differ:** Tampermonkey defaults `active:false` (background) and `insert:false` (append at end; integer position when set) per [TM docs](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_openInTab); Violentmonkey defaults `active:true` (foreground) and `insert:true` (next to current, sets `openerTab`) per [VM types](https://violentmonkey.github.io/types/interfaces/VMScriptGMTabOptions.html). Note type: TM `insert` is integer/false, VM `insert` is boolean.
+> - **Lifecycle:** Tampermonkey `setParent:true` makes the new tab a child of the opener — closing the parent may close the child; Violentmonkey `insert:true` sets `openerTab` so closing the child refocuses the opener (verified via VM `VMScriptGMTabOptions` insert description, verified 2026-08-24).
+> - **Incognito:** `incognito:true` (Tampermonkey) requires the manager to be allowed in private windows ("Run in Private Windows"); otherwise the call silently opens nothing (observed in [Tampermonkey #2657](https://github.com/Tampermonkey/tampermonkey/issues/2657), verified 2026-08-24).
+> - **Data URLs:** Firefox does not support `data:` URLs for `GM_openInTab` ([VM GM_openInTab](https://violentmonkey.github.io/types/functions/GM_openInTab.html), verified 2026-08-24).
+> - **Container (Violentmonkey-only, Firefox):** `container` is an integer contextual-identity index, not a name — `0` is the default container (as shown), omit to reuse the opener tab’s container ([VM VMScriptGMTabOptions](https://violentmonkey.github.io/types/interfaces/VMScriptGMTabOptions.html), verified 2026-08-24).
+> - **Promise rejection:** Promise forms (`GM.openInTab`) reject with an error message on invalid URL or failure — wrap `await GM.openInTab(...)` in `try/catch` (Safari: “rejected with error message if fails” per [quoid/userscripts README](https://raw.githubusercontent.com/quoid/userscripts/main/README.md) `GM.openInTab` entry, verified 2026-08-24; same for Tampermonkey/Violentmonkey).
+
 ```javascript
 // @grant GM_openInTab
 
@@ -233,6 +244,8 @@ if (confirm('Close this tab?')) {
 // Note: Cannot close the last tab in a window (security restriction) — all managers
 ```
 
+> **Script-closable (verified 2026-08-24):** Per [MDN Window.close](https://developer.mozilla.org/en-US/docs/Web/API/Window/close), only windows created by web content (`Window.open()` or links/forms with `target=_blank`) are script-closable; windows opened via browser UI (Ctrl/Cmd-click, right-click → Open in new tab, middle-click) are typically not closable — `close()` warns “Scripts may not close windows that were not opened by script.” The last-tab guard above is in addition to this.
+
 ### window.focus
 
 Bring the window to the front.
@@ -251,6 +264,8 @@ Bring the window to the front.
 
 window.focus();
 ```
+
+> **Focus may be blocked (verified 2026-08-24):** `window.focus()` “may fail due to user settings and the window isn’t guaranteed to be frontmost” per [MDN Window.focus](https://developer.mozilla.org/en-US/docs/Web/API/Window/focus) and [TM docs window](https://www.tampermonkey.net/documentation.php?locale=en&q=window) (“`window.focus` brings the window to the front, while `unsafeWindow.focus` may fail due to user settings”). Browsers may also require transient activation.
 
 ---
 
@@ -278,6 +293,8 @@ if (window.onurlchange === null) {
     });
 }
 ```
+
+> **Hash nuance (verified 2026-08-24):** Hash-only changes via `history.pushState` were previously skipped by `window.onurlchange` and fixed in Tampermonkey’s changelog (“Fixed onurlchange so it fires on hash changes triggered by pushState”, verified via [TM changelog](https://www.tampermonkey.net/changelog.php?locale=en) and [issue #2339](https://github.com/Tampermonkey/tampermonkey/issues/2339)); test hash routes explicitly and keep the portable `hashchange` fallback below.
 
 ### Comprehensive SPA handler — Tampermonkey onurlchange + portable fallback
 
@@ -401,6 +418,8 @@ function handleMessage(type, data) {
 
 broadcast('SETTINGS_CHANGED', { theme: 'dark' });
 ```
+
+> **Remote flag & alternatives (verified 2026-08-24):** `GM_addValueChangeListener` fires in every tab including the writer — `remote` is `true` only in tabs *other* than the writer (`false` in the sender), so guard with `if (remote)` to avoid echo. For same-origin pages, `BroadcastChannel` ([MDN BroadcastChannel](https://developer.mozilla.org/en-US/docs/Web/API/BroadcastChannel)) is a standardized alternative that does not persist storage and avoids quota limits; `GM_setValue` broadcast persists and is subject to storage quotas.
 
 ### Tab Registry
 

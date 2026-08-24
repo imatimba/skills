@@ -63,7 +63,7 @@ TypeScript setup: [typescript.md](typescript.md). Per-manager header support: [m
 
 ### @name
 
-The script's display name. Supports internationalisation.
+The script's display name. Supports internationalisation. Locale suffixes use `ISO 639` language + optional `ISO 3166` country (e.g. `:de`, `:zh-CN`); locale codes are case-insensitive — verified 2026-08-24 via violentmonkey.github.io/api/metadata-block and wiki.greasespot.net/Metadata_block.
 
 ```javascript
 // @name         My Awesome Script
@@ -74,7 +74,7 @@ The script's display name. Supports internationalisation.
 
 ### @namespace
 
-Unique identifier namespace, typically a URL you control.
+Unique identifier namespace, typically a URL you control. If omitted, Violentmonkey falls back to an empty string (`''`) for uniqueness — verified 2026-08-24 via violentmonkey.github.io/api/metadata-block; Greasy Fork requires `@namespace` and warns if it changes on update (greasyfork.org/en/help/meta-keys).
 
 ```javascript
 // @namespace    https://yoursite.com/userscripts
@@ -82,7 +82,7 @@ Unique identifier namespace, typically a URL you control.
 
 ### @version
 
-Script version for update checking. Must increase with each update.
+Script version for update checking. Must increase with each update. Greasy Fork requires [Mozilla version format](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/AMO/Manifest_version) and warns if the version is decremented or not incremented when code changes — verified 2026-08-24 via greasyfork.org/en/help/meta-keys.
 
 ```javascript
 // @version      1.0.0
@@ -139,11 +139,12 @@ URL for users to report issues.
 
 ### @icon, @iconURL, @defaulticon
 
-Script icon (low resolution).
+Script icon (low resolution). The URL may be absolute, data: URI, or relative to the script's download URL — verified 2026-08-24 via wiki.greasespot.net/Metadata_block (`This value may be specified relative to the URL the script itself is downloaded from`).
 
 ```javascript
 // @icon         https://example.com/icon.png
 // @icon         data:image/png;base64,iVBORw0...
+// @icon         ./icon.png  // relative to download URL
 ```
 
 ### @icon64, @icon64URL
@@ -203,7 +204,7 @@ Legacy matching with glob patterns and regex support.
 // @include      /^https:\/\/www\.example\.com\/page\/\d+$/
 ```
 
-**Note:** @include with `://` is interpreted like @match. Use @match for new scripts.
+**Note:** @include with `://` is interpreted like @match. Use @match for new scripts. Neither `@match` nor `@include` matches the URL hash fragment or query string — they match only scheme/host/path (violentmonkey.github.io/api/matching; tampermonkey.net/documentation.php?q=include: `@include doesn't support the URL hash parameter`). For SPA hash routing, combine a broad `@match` with `window.onurlchange` (Tampermonkey `// @grant window.onurlchange`) or a `MutationObserver`/`navigation` listener — verified 2026-08-24.
 
 ### @exclude
 
@@ -228,6 +229,8 @@ Matching logic (Violentmonkey per violentmonkey.github.io/api/matching): `@exclu
 
 Verify: violentmonkey.github.io/api/metadata-block · violentmonkey.github.io/api/matching
 
+> **Publishing note (Greasy Fork):** Every script must have at least one `@match` or `@include`; Greasy Fork warns if code changes without a version bump — verified 2026-08-24 via greasyfork.org/en/help/meta-keys.
+
 ---
 
 ## Execution Control
@@ -244,7 +247,7 @@ When to inject the script.
 | `document-idle` | Inject after window load / shortly after DOMContentLoaded | All — **default in Tampermonkey only** |
 | `context-menu` | Inject when clicked in browser context menu | **Tampermonkey only** |
 
-Defaults: Tampermonkey `document-idle`; Violentmonkey, Greasemonkey 4+, and Safari `document-end`. Set explicitly to avoid cross-manager drift. See [managers.md](managers.md) §3.
+Defaults: Tampermonkey `document-idle`; Violentmonkey, Greasemonkey 4+, and Safari `document-end`. Set explicitly to avoid cross-manager drift. See [managers.md](managers.md) §3. Prefer `document-idle` for scripts taking more than a couple of milliseconds to compile/run so they don't delay page usability — verified 2026-08-24 via violentmonkey.github.io/api/metadata-block (`Prefer this mode for scripts that take more than a couple of milliseconds ... don't delay the moment the page becomes usable`).
 
 > **Greasemonkey 4 note:** only `document-end` is guaranteed; `document-body` is an invalid enum and `context-menu` / `document-idle` may be treated as `document-end` or ignored — verify per Greasemonkey docs.
 
@@ -282,7 +285,7 @@ Default: Runs in all tabs if not specified. Other managers: no equivalent — Fi
 
 ### @noframes
 
-Only run on main page, not in iframes.
+Only run on main page, not in iframes. Takes no arguments — presence alone enables it — and is off by default (scripts run in frames) — verified 2026-08-24 via wiki.greasespot.net/Metadata_block (`It takes no arguments, it is either present or not present. This is off (scripts run in frames) by default`).
 
 ```javascript
 // @noframes
@@ -343,7 +346,7 @@ Whitelist GM APIs and special window features. Prefer promise forms (`GM.*`) for
 > - **Greasemonkey 4+ / Safari:** equivalent — no grant and `none` behave the same (both sandboxed / both isolated respectively; Safari always content-world when any grant exists).
 > `GM_info` / `GM.info` is available in all cases without a grant.
 
-**See:** [sandbox-modes.md](sandbox-modes.md) and [managers.md](managers.md) §4 for injection vs sandbox implications.
+**See:** [sandbox-modes.md](sandbox-modes.md) and [managers.md](managers.md) §4 for injection vs sandbox implications. `GM_info` / `GM.info` is available without any grant and in Violentmonkey exposes structured inspection fields (`script`, `platform`, `injectInto`, etc.) useful for feature-detection — verified 2026-08-24 via violentmonkey.github.io/api/gm.
 
 ### @sandbox — Tampermonkey-only (Tampermonkey 4.18+; honored only by Tampermonkey)
 
@@ -422,12 +425,13 @@ Disclose monetisation (required by GreasyFork).
 
 ### @require
 
-Load external JavaScript before script runs.
+Load external JavaScript before script runs. URLs may be relative to the script's install URL — verified 2026-08-24 via wiki.greasespot.net/Metadata_block and violentmonkey.github.io/api/metadata-block. Since Greasemonkey 0.9.0, changing `@require` values triggers re-download of the altered entries — verified 2026-08-24 via wiki.greasespot.net/Metadata_block.
 
 ```javascript
 // External URLs
 // @require      https://code.jquery.com/jquery-3.6.0.min.js
 // @require      https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js
+// @require      ./lib/helper.js  // relative to install URL
 
 // With integrity hash (SRI) — support varies, see SRI section
 // @require      https://code.jquery.com/jquery-3.6.0.min.js#sha256-/xUj+3OJU...
@@ -443,12 +447,13 @@ Load external JavaScript before script runs.
 
 ### @resource
 
-Preload resources accessible via `GM_getResourceText`/`GM_getResourceURL` (or `GM.getResourceText`/`GM.getResourceUrl`).
+Preload resources accessible via `GM_getResourceText`/`GM_getResourceURL` (or `GM.getResourceText`/`GM.getResourceUrl`). The resource URL may be relative to the script's install URL — verified 2026-08-24 via wiki.greasespot.net/Metadata_block and violentmonkey.github.io/api/metadata-block.
 
 ```javascript
 // @resource     myCSS    https://example.com/style.css
 // @resource     myIcon   https://example.com/icon.png
 // @resource     myData   https://example.com/data.json
+// @resource     relData  ./data/config.json  // relative to install URL
 
 // With integrity hash
 // @resource     secure   https://example.com/file.js#sha256=abc123
@@ -468,7 +473,7 @@ URL to check for updates (requires @version).
 
 ### @downloadURL
 
-URL to download updates from. Use `none` to disable.
+URL to download updates from. Use `none` to disable. Violentmonkey auto-adds `@downloadURL` when using "Install from URL" — verified 2026-08-24 via violentmonkey.github.io/api/metadata-block (`Automatically added when using "Install from URL."`). Greasy Fork strips `@updateURL`/`@downloadURL`/`@installURL` on publish so installs update only from Greasy Fork (greasyfork.org/en/help/meta-keys).
 
 ```javascript
 // @downloadURL  https://example.com/script.user.js

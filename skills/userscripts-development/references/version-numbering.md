@@ -31,6 +31,10 @@ Do not present any single ordering as universal. Each manager ships its own comp
 
 Violentmonkey is the worked example for this skill; when a concrete comparator must be shown, use the Tampermonkey reference hierarchy and label it, then note Violentmonkey's simpler model as the portable assumption.
 
+### Greasy Fork Site Comparator (verified 2026-08-24)
+
+Greasy Fork itself compares versions using [Mozilla Toolkit version format](https://udn.realityripple.com/docs/Mozilla/Toolkit_version_format) (verified 2026-08-24 via [Greasy Fork source `script_version.rb`](https://raw.githubusercontent.com/greasyfork-org/greasyfork/main/app/models/script_version.rb) `split_version`/`compare_versions`). Each version string is split on `.` into up to 4 parts; each part is parsed as `<number-a><string-b><number-c><string-d>` (numbers may be negative; strings are non-numeric ASCII). Missing parts count as `0`. Comparison uses a 16-element array (4 parts × 4 sub-parts); numeric sub-parts compare as integers, string sub-parts byte-wise, and a string-part that exists is always less than one that does not (e.g. `1.6a < 1.6`). Special cases: `*` in a part is treated as infinity (`1.5.0.*` > `1.5.0`), and `+` in `string-b` increments `number-a` (`1.0+` == `1.1pre`). Greasy Fork enforces `version` length ≤ 200 characters and warns if the version is decremented or not incremented when code changes (`version_not_incremented?` via `compare_versions != 1`). The helper `get_next_version` auto-increments the last numeric component (verified 2026-08-24 via `script_version.rb` lengths, `split_version` regex, and `compare_versions` logic).
+
 ### The Portable Subset (TM + VM + GM4+)
 
 The comparator runs inside the manager during update checks — portability comes from choosing an `@version` string all three parse identically. Verified common ground:
@@ -164,6 +168,15 @@ Violentmonkey: numeric-segment equality holds as listed (source-verified); exoti
 Greasemonkey 4+: strict semver — versions without complete `X.Y.Z` before a prerelease tag (e.g. `2023-08-17.alpha`, `1.1a`) may be REJECTED outright, disabling update checks for that script. Prefer plain `X.Y.Z[-pre][+build]`.
 Safari Userscripts: string-compare — UNVERIFIED; do not rely on numeric or prerelease semantics.
 
+### Toolkit Special Cases (verified 2026-08-24)
+
+The Mozilla Toolkit format — used by Greasy Fork and as the Tampermonkey reference — has two non-portable special cases not present in semver (verified 2026-08-24 via [Toolkit version format](https://udn.realityripple.com/docs/Mozilla/Toolkit_version_format)):
+
+- `*` == infinity: a version part that is a single `*` is treated as an infinitely-large number (`1.5.0.*` > `1.5.0` and `1.*` < `1.*.1`).
+- `+` == increment `number-a`: if `string-b` is `+`, `number-a` is incremented for Firefox 1.0.x compatibility (`1.0+` == `1.1pre` == `1.1pre0`).
+
+Neither `*` nor `+`-as-increment is supported by Violentmonkey or Greasemonkey (`+` after a version is build metadata ignored for ordering in both; `*` is not a valid semver token). Avoid `*` and `+`-increment forms in portable `@version` strings; use plain `X.Y.Z` and semver `+build` only where intended.
+
 ---
 
 ## Recommended Version Formats
@@ -195,6 +208,8 @@ Pre-release ordering (`-alpha` < `-beta` < release) is verified in Tampermonkey,
 ### Date-Based Versions — Tampermonkey-leaning, NOT portable
 
 Greasemonkey's strict-semver comparator may reject these entirely (silently disabling updates); Violentmonkey parses them by its own rules. Use only if you target Tampermonkey specifically.
+
+> **Date-based failure mode on Greasy Fork (verified 2026-08-24):** `YYYY-MM-DD` uses hyphens, which the Toolkit parser treats as negative numbers. `2026-04-12` is parsed with segment `-04` (i.e. −4) and `2026-01-14` with `-01` (−1); since −4 < −1, Greasy Fork considers `2026-04-12 < 2026-01-14` and warns "version not incremented." Greasy Fork's discussion explicitly states "Version must be delimited by dots" for this reason (verified 2026-08-24 via [Greasy Fork discussion #326177](https://greasyfork.org/en/discussions/greasyfork/326177-version-update-not-detected-correctly-when-version-is-yyyy-mm-dd) and `script_version.rb` `split_version`). Prefer dot-delimited forms such as `2026.04.12` or semver `2026.4.12` for portable ordering.
 
 ```javascript
 // @version 2024-01-15
@@ -277,6 +292,17 @@ Build metadata after `+` is ignored by Tampermonkey, Violentmonkey, and Greasemo
 
 Per-manager note: default derivation of `@updateURL` / `@downloadURL` when one is omitted **differs per manager** — set both explicitly for portable scripts. Greasemonkey 4+ routes update checks through `about:addons` machinery rather than a standalone manager dashboard.
 
+### Greasy Fork UI Handling (verified 2026-08-24)
+
+- Version is displayed on the script's Greasy Fork info page (verified 2026-08-24 via [Greasy Fork help: meta-keys](https://greasyfork.org/en/help/meta-keys) — "@version … Version is displayed on a script's info page").
+- Greasy Fork **strips** `@updateURL`, `@installURL`, and `@downloadURL` on install — scripts installed from Greasy Fork update exclusively from Greasy Fork (same source, verified 2026-08-24).
+- `version` length is capped at 200 characters (`validates :version, length: { maximum: 200 }` in `script_version.rb`, verified 2026-08-24).
+- `ScriptVersion.get_next_version` can auto-suggest an incremented version (last numeric component +1, verified 2026-08-24 via source).
+
+### OpenUserJS Version Handling (verified 2026-08-24)
+
+OpenUserJS publishes no formal `@version` format specification (verified 2026-08-24 — no version-format page found on [openuserjs.org](https://openuserjs.org/about/Userscript-Beginners-HOWTO); Beginners HOWTO and related docs only advise to "increment @version" generically). In practice OUJS mirrors Greasy Fork's expectation (increment `@version` to publish an update); actual update ordering is determined by the **manager's** comparator, not the site's. For portable scripts, stay inside the semver `X.Y.Z` subset and verify bumps with your target managers.
+
 ### Disabling Updates
 
 ```javascript
@@ -289,6 +315,51 @@ Per-manager note: default derivation of `@updateURL` / `@downloadURL` when one i
 2. Parses the `@version` from the meta file
 3. Compares with installed `@version` using that manager's comparator (see matrix above — Tampermonkey reference vs simpler Violentmonkey/Greasemonkey, string-compare UNVERIFIED for Safari)
 4. If remote > local, downloads from `@downloadURL` (or its derived default; Greasemonkey via `about:addons`)
+
+### Update Check Intervals (verified 2026-08-24)
+
+Polling intervals are manager-configured; there is no cross-manager standard. Source-verified defaults where available (first-party GitHub sources):
+
+| Manager | Default interval | Source |
+| --- | --- | --- |
+| Violentmonkey | 1 day (configurable via `autoUpdate` days; `getUpdateInterval = +val * 86400000`, `TIMEOUT_24HOURS = 86400000`, `autoUpdate: 1` in `options-defaults.js`) | [ Violentmonkey `update.js`](https://raw.githubusercontent.com/violentmonkey/violentmonkey/master/src/background/utils/update.js) / [`consts.js`](https://raw.githubusercontent.com/violentmonkey/violentmonkey/master/src/common/consts.js) / [`options-defaults.js`](https://raw.githubusercontent.com/violentmonkey/violentmonkey/master/src/common/options-defaults.js) |
+| Greasemonkey 4+ | Adaptive 3 hours – 7 days (`MIN_UPDATE_IN_MS = 3h`, `MAX_UPDATE_IN_MS = 7 days`, `CHANGE_RATE = 1.25`, with random `fuzz`; short interval after update, longer after no-update) | [ Greasemonkey `src/bg/updater.js`](https://raw.githubusercontent.com/greasemonkey/greasemonkey/master/src/bg/updater.js) (`MIN_UPDATE_IN_MS`/`MAX_UPDATE_IN_MS`/`CHANGE_RATE`) |
+| Tampermonkey | No officially published default interval in [Tampermonkey documentation](https://www.tampermonkey.net/documentation.php) (verified 2026-08-24 — docs are JS-rendered and contain no interval promise; GitHub issues [#280](https://github.com/Tampermonkey/tampermonkey/issues/280) and [#588](https://github.com/Tampermonkey/tampermonkey/issues/588) mention throttles such as "never more than once per hour" and "every 6 hours" but these are issue comments, not published docs) | Undocumented — treat as configurable/undisclosed |
+| Greasy Fork | Not a manager — does not push updates; it is the version source. Managers poll it. | [Greasy Fork help](https://greasyfork.org/en/help/meta-keys) |
+
+### @updateURL / @downloadURL Derivation Defaults (verified 2026-08-24)
+
+Set both explicitly for portable scripts. Verified per-manager defaults from first-party sources:
+
+| Manager | `@updateURL` default if omitted | `@downloadURL` default if omitted | Notes |
+| --- | --- | --- | --- |
+| Tampermonkey | Falls back to `@downloadURL` (per docs — `@updateURL` "should point to meta file" but manager uses `downloadURL` as fallback) | Falls back to the script's install URL | See [Tampermonkey documentation `update_url`](https://www.tampermonkey.net/documentation.php); derivation not enumerated in a single matrix doc but fallback behavior is documented |
+| Violentmonkey | Resolved via `getScriptUpdateUrl(script, { all, allowedOnly, enabledOnly })` — may return multiple URLs (meta + code); `allowedOnly`/`enabledOnly` filtering and `update` vs `download` URL selection | Same helper; `requestNewer` decides meta vs code path | Verified 2026-08-24 via [Violentmonkey `update.js` `getScriptUpdateUrl`](https://raw.githubusercontent.com/violentmonkey/violentmonkey/master/src/background/utils/update.js) |
+| Greasemonkey 4+ | Not separately documented; `downloadUrl` defaults to the page/script URL (`details.downloadUrl = url` in `parseUserScript`) | Defaults to the source page URL (`downloadUrl: url`) | Verified 2026-08-24 via [Greasemonkey `parse-user-script.js`](https://raw.githubusercontent.com/greasemonkey/greasemonkey/master/src/parse-user-script.js) `downloadUrl: url` default |
+
+### Invalid Version Handling per Manager (verified 2026-08-24)
+
+| Manager/site | Input `1.0-alpha` (no `X.Y.Z` before `-`) | Input `1.0.0-alpha` | Invalid input consequence | Source |
+| --- | --- | --- | --- | --- |
+| Greasemonkey 4+ (`compare-versions` v3.3.0) | THROWS `Error: Invalid argument not valid semver` — `validate()` rejects; `checkForUpdate` rejects and the update is aborted for that cycle | Valid — `1.0.0-alpha < 1.0.0` | Rejected versions abort that update check | [compare-versions `index.js`](https://raw.githubusercontent.com/greasemonkey/greasemonkey/master/third-party/compare-versions/index.js) (`semver` regex + `validate` throw) |
+| Violentmonkey | Does **not** throw — `compareVersion` returns `-1`/`0`/`1` via `parseInt(a,10)\|\|0` + `DIGITS_RE` semver branch; `1.0-alpha` is parsed but sorts via its own rule (`1.0-alpha < 1.0`) | Valid — `1.0.0-alpha < 1.0.0` | Never throws; ordering is deterministic but simpler | [Violentmonkey `util.js`](https://raw.githubusercontent.com/violentmonkey/violentmonkey/master/src/common/util.js) `VERSION_RE`/`compareVersion` |
+| Greasy Fork | `split_version("1.0-alpha")` does **not** throw but splits differently (hyphen part becomes `number-c`/`string-d`); `compare_versions` returns `nil` if `split_version` returns `nil`, otherwise compares — `YYYY-MM-DD` style is accepted but orders as negative numbers | Accepted | `nil` from `compare_versions` is treated as non-increment (`!= 1`) and triggers the "not incremented" warning | [Greasy Fork `script_version.rb`](https://raw.githubusercontent.com/greasyfork-org/greasyfork/main/app/models/script_version.rb) `split_version`/`compare_versions` |
+| Toolkit (reference) | Valid per spec (`<number-a><string-b><number-c><string-d>` per part) | Valid | Most ASCII strings are valid; exotic forms compare via toolkit rules | [Toolkit version format](https://udn.realityripple.com/docs/Mozilla/Toolkit_version_format) |
+
+Prefer plain `X.Y.Z[-pre][+build]` to avoid per-manager rejection.
+
+### Conditional Request Optimization (verified 2026-08-24)
+
+Even when `@version` is bumped, a manager may not re-download immediately due to HTTP caching:
+
+- **Violentmonkey:** `requestNewer(url, opts)` implements `If-None-Match`/`If-Modified-Since` optimization — on scheduled (`AUTO`) checks it first issues a `HEAD` request and reads `etag` / `last-modified` / `date` headers; if the cached `mod` matches (`mod === modOld` in `storage.mod`), it skips the `GET`. `ETag` is checked first, then `last-modified`, then `date`; `storage.mod` caches `[mod, Date.now()]` per URL and `getUpdateInterval()` throttles `AUTO` re-checks. Rate-limited via `requestLimited` for remote URLs (verified 2026-08-24 via [Violentmonkey `storage-fetch.js` `requestNewer`](https://raw.githubusercontent.com/violentmonkey/violentmonkey/master/src/background/utils/storage-fetch.js)).
+- **Greasemonkey 4+:** No `ETag` path in the disclosed source; instead it uses an adaptive `updateWindowMs` stored in `chrome.storage.local` (`updateWindow.<uuid>` + `updateNextAt.<uuid>`), multiplied by `CHANGE_RATE` on no-update and reset to `MIN_UPDATE_IN_MS` on update, with `fuzz()` jitter (verified 2026-08-24 via [Greasemonkey `updater.js`](https://raw.githubusercontent.com/greasemonkey/greasemonkey/master/src/bg/updater.js)).
+- Implication: bumping `@version` alone does not guarantee an instant poll — the manager's throttling/caching window still applies. "Force update" / "Check for updates" in the manager UI bypasses the throttle.
+
+### Version Downgrade Behaviour (verified 2026-08-24)
+
+- Greasy Fork warns if `@version` is decremented on publish (verified 2026-08-24 via [Greasy Fork help: meta-keys](https://greasyfork.org/en/help/meta-keys) — "will warn if it's decremented" and via `script_version.rb` `version_not_incremented?` using `compare_versions != 1`).
+- Managers **do not downgrade**: an update is applied only if `remote > local` (`compareVersions(...) === -1` / `compare_versions == 1` / `compareVersion == 1`). If the remote version is equal or lower, no download occurs (verified 2026-08-24 via Greasemonkey `updater.js` `comparison !== -1` → `abort = true` and Violentmonkey `compareVersion` delta check).
 
 ---
 

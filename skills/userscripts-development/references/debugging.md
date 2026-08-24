@@ -47,6 +47,16 @@ Violentmonkey is the worked example for concrete UI steps (manager-neutral guida
 
 Other managers: Tampermonkey has its own dashboard/editor via toolbar icon; Greasemonkey 4+ uses `about:addons` → Greasemonkey; Safari "Userscripts" app uses Safari → Settings → Extensions. See the Manager × Browser table for debugging entry points.
 
+### Logging: console.log vs GM_log (verified 2026-08-24)
+
+- **Violentmonkey / Tampermonkey:** both `console.log` and `GM_log` work. `GM_log` is Tampermonkey-documented as "Log a message to the console" — https://www.tampermonkey.net/documentation.php?locale=en&q=GM_log — and Violentmonkey-typed as `GM_log(...args: any): void` — https://violentmonkey.github.io/types/functions/GM_log.html. Prefer `console.log` for object inspection (preserves structure); use `GM_log` only when you need Tampermonkey's grant-gated logger.
+- **Greasemonkey 4.0+:** `GM_log` removed — "As of Greasemonkey 4.0, this method has been removed. You should use the console instead." — https://wiki.greasespot.net/GM_log (verified 2026-08-24). Use `console.log` only; `GM_log` will throw `ReferenceError`.
+- Cross-manager portability: guard: `if (typeof GM_log !== 'undefined') GM_log('msg'); else console.log('msg');` or just use `console.log`.
+
+### Tampermonkey Debug Logging Toggle (verified 2026-08-24)
+
+Tampermonkey hides verbose logs unless enabled. Before expecting output: Dashboard → **Settings** tab → **Logging Level** → **Debug** ("Before getting the output you have to enable debug output. Just click at the Tampermonkey icon, choose \"Dashboard\", select the \"Settings\" tab and set \"Logging Level\" to \"Debug\"" — https://www.tampermonkey.net/faq.php?locale=en&q=Q600). In advanced Config mode this surfaces as **Debug scripts** (Dashboard → Settings → General → Config mode: Advanced → Debug scripts, as of TM 4.10+). Without this, `console.log` from userscripts may be suppressed in Tampermonkey's own consoles.
+
 ---
 
 ## Testing if Script Runs
@@ -392,6 +402,38 @@ See [api-storage.md](api-storage.md) for value-type rules and batch helpers (`GM
 
 ---
 
+## SourceURL, SourceMaps, Exception Breakpoints, and Console Realms (verified 2026-08-24)
+
+### Debugger Source Naming via `//# sourceURL` (verified 2026-08-24)
+
+Violentmonkey names each userscript with a synthetic `//# sourceURL=` suffix (`'\\n//# sourceURL=' + browser.extension.getURL(`${name}.user.js#${scriptId}`)` — https://github.com/Tampermonkey/tampermonkey/issues/831 comment, Violentmonkey behavior) so it appears as a distinct file under **Sources → Violentmonkey**. Tampermonkey MV3 uses `userscript.html?name=<encoded name>&id=<uuid>` (same issue). Add `debugger;` anywhere — DevTools pauses there even inside `eval` sources (https://firefox-source-docs.mozilla.org/devtools-user/debugger/how_to/debug_eval_sources/ — "The debugger will also stop at debugger; statements in unnamed eval sources").
+
+### Inline SourceMaps (`//# sourceMappingURL`) and Wrapper Offsets (verified 2026-08-24)
+
+If you bundle with `vite-plugin-monkey`, `webpack`, or `esbuild`, emit an inline `//# sourceMappingURL=data:application/json;base64,...` comment — Chrome DevTools (https://developer.chrome.com/docs/devtools/javascript/source-maps — "With source maps ready and enabled... breakpoints will automatically map") and Firefox Debugger (https://firefox-source-docs.mozilla.org/devtools-user/debugger/ — "Use a source map") will map minified/bundled code back to originals.
+
+Known offset bug (verified 2026-08-24 via official repos): both Violentmonkey and Tampermonkey wrap userscript code before evaluation, shifting line numbers by N lines. This breaks sourcemap line mapping — "userscript sourcemap is mapping wrong variable" (https://github.com/violentmonkey/violentmonkey/issues/1616 and https://github.com/Tampermonkey/tampermonkey/issues/1621). As of VM 2.13.x / TM 4.18+ the wrapper offset differs per manager (VM 0 lines vs TM 2 lines reported in issue #1616 comments); `vite-plugin-monkey` exposes a `sourcemap offset` config to prefix `;` to `mappings` to compensate. Verify your bundler's offset for your target manager — do not assume universal alignment.
+
+### Exception Breakpoints & Stack Traces (verified 2026-08-24)
+
+Don't rely only on `console.log`. Use **Break on exceptions** (pause on caught/uncaught throws) and inspect stack traces:
+
+- **Chrome/Edge:** Sources panel → right pane → **Breakpoints** → ☑ **Pause on exceptions** (and ☑ **Pause on caught exceptions**). See https://developer.chrome.com/docs/devtools/javascript/breakpoints — table row "Exception | Pause on the line of code that is throwing a caught or uncaught exception."
+- **Firefox:** Debugger → toolbar → **Pause on exceptions** (icon with pause + exception). See https://firefox-source-docs.mozilla.org/devtools-user/debugger/ — "Break on exceptions" under Pause execution.
+
+Stack traces then show the `sourceURL`-named userscript file, not just `VMXXX` eval frames.
+
+### Console Realms: Where `console.log` Actually Appears (verified 2026-08-24)
+
+- **Violentmonkey caveat (as of 2.20.0, verified 2026-08-24):** when `@inject-into page` + any `@grant` other than `none`, `console.log` from the sandbox may be **silent** in the page console — "console.log wont print anything for @grant non-nones" (https://github.com/violentmonkey/violentmonkey/issues/2143). Workaround: `unsafeWindow.console.log(...)` or switch `@inject-into` to `auto`/`content`. With `@grant none` (no sandbox) or `inject-into content/auto` the log appears in the page console as expected.
+- **Tampermonkey 3 consoles (verified 2026-08-24 via https://www.tampermonkey.net/faq.php?locale=en&q=Q600):** **Background Context Console** (service-worker DevTools via `chrome://extensions` → Details → service worker / `about:debugging` → This Firefox → Inspect), **Option Page Console** (Dashboard tab's own DevTools), and **Web Page Console** (normal page DevTools). Userscript `console.log` under default sandbox appears in the **Web Page Console**, but errors thrown in the background context (e.g., GM_xmlhttpRequest failures managed out-of-page) may surface only in the Background console.
+
+### Keep the Toolbox Closed When Testing Background Behavior (verified 2026-08-24)
+
+FAQ Q600 notes for Firefox: "Keeping the Toolbox open prevents background scripts from unloading. Close it when testing is complete." and for Chrome/Edge/Opera: "Inspecting the service worker keeps it active. Always close DevTools afterward to test normal termination behavior." (same FAQ). If you leave `about:debugging` Toolbox or `chrome://extensions` service-worker DevTools open, background timeouts/unloads won't reproduce — close it before measuring lifecycle bugs.
+
+---
+
 ## Browser-Specific Debugging — Manager × Browser Decision Table
 
 | Manager | Browser | How to open script sources / debugger | Console / realm notes |
@@ -426,4 +468,19 @@ console.log('Script:', GM_info.script.name, GM_info.script.version);
 ```
 
 See [managers.md](managers.md) §5 for runtime detection (`GM_info.scriptHandler` literals: `"Violentmonkey"` / `"Tampermonkey"` / `"Greasemonkey"` / `"Userscripts"`).
+
+### GM_info for Realm & Platform Diagnosis (verified 2026-08-24)
+
+When filing a bug, include realm/platform fields beyond `scriptHandler`:
+
+```javascript
+console.log('injectInto:', GM_info.injectInto); // Violentmonkey: "auto" | "page" | "content" — https://violentmonkey.github.io/api/gm/ — GM_info.injectInto
+console.log('platform:', GM_info.platform);       // Violentmonkey: {arch, browserName, browserVersion, os, ...} — reliable vs spoofable navigator.userAgent — https://violentmonkey.github.io/api/gm/ — "Unlike navigator.userAgent, which can be overriden... GM_info.platform is more reliable"
+console.log('sandboxMode:', GM_info.sandboxMode); // Tampermonkey 4.18+: "js" | "raw" | "dom" — https://www.tampermonkey.net/documentation.php?locale=en&q=GM_info — sandboxMode: SandboxMode // 4.18+
+console.log('userAgentData:', GM_info.userAgentData); // Chromium 90+ high-entropy brands, from extension background (both VM and TM expose it)
+```
+
+`navigator.userAgent` / `navigator.userAgentData` can be spoofed by other extensions or DevTools device emulation; `GM_info.platform` / `GM_info.userAgentData` are fetched from the extension background via `browser.runtime.getPlatformInfo` and are not affected by page spoofing (Violentmonkey docs quoted above).
+
+> **No `// @debugFlag` metadata exists (verified 2026-08-24).** No Violentmonkey (https://violentmonkey.github.io/api/metadata-block/ — full key list contains @name, @namespace, @match, @grant, @inject-into, @run-at, etc., but no @debugFlag) nor Tampermonkey (https://www.tampermonkey.net/documentation.php?locale=en — documentation index lists all @grant/@sandbox/@run-at keys, no @debugFlag) defines such a key. If you need debug-only behavior, gate it yourself: `if (GM_info.script.version.includes('debug')) ...` or a stored flag via `GM_getValue`.
 

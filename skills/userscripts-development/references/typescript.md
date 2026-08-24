@@ -41,6 +41,14 @@ Current at time of writing: 5.0.5 — verify with `npm view @types/tampermonkey 
 }
 ```
 
+**`module` / `moduleResolution` for bundlers (verified 2026-08-24):**
+- For Vite/esbuild use `"module": "ESNext"` (or `"Preserve"`) with `"moduleResolution": "bundler"` (or `"node"`). See https://www.typescriptlang.org/tsconfig/module and https://www.typescriptlang.org/tsconfig/moduleResolution — `bundler` is the mode designed for bundlers, `node16`/`nodenext` for modern Node.
+- Set `"isolatedModules": true` when using esbuild/Vite/Babel single-file transpilers (see https://www.typescriptlang.org/tsconfig/isolatedModules), and enable `"esModuleInterop": true` / `"allowSyntheticDefaultImports": true` if you import CommonJS deps (see https://www.typescriptlang.org/tsconfig/esModuleInterop).
+- `target` controls downleveling and default `lib`; `ES2022` adds top-level `await` support (see https://www.typescriptlang.org/tsconfig/target).
+
+**`types` array suppresses auto-inclusion (verified 2026-08-24):**
+Setting `"types": ["tampermonkey"]` limits global scope to that package only — other `node_modules/@types/*` are excluded. If you also need Node types for tooling, add `"node"` explicitly: `"types": ["tampermonkey", "node"]`. Alternative: leave `types` empty and use `/// <reference types="tampermonkey" />`. See https://www.typescriptlang.org/tsconfig/types.
+
 ---
 
 ## Bundler Setup
@@ -66,6 +74,9 @@ pnpm add -D esbuild
 Output `.user.js` is manager-agnostic — load the same artifact in Violentmonkey/Tampermonkey/Greasemonkey. Violentmonkey worked example: build, then drag `dist/script.user.js` into the Violentmonkey dashboard or serve via `npx http-server` and install from `http://localhost:8080/dist/script.user.js` with Track external edits enabled.
 
 For the metadata block with esbuild, prepend a banner file containing `// ==UserScript==` … `// ==/UserScript==` or use an `esbuild --banner` / small prepend script — header generation is not built-in.
+
+**Output format for userscripts (verified 2026-08-24):**
+When `bundle: true`, esbuild defaults to `iife` for `--platform=browser` and to `esm` for `--platform=neutral` (see https://esbuild.github.io/api/ — default output format). Userscript managers execute the `.user.js` in a sandbox wrapper and expect a single-file global script — use `format: iife` and `splitting: false`. `@require`'d external bundles must also be IIFE/UMD, not ESM with `export`; Vite library-mode ESM output will break `@require`. Disable code splitting (`splitting: false` / single `outfile`) to keep one artifact.
 
 ### Vite with vite-plugin-monkey
 
@@ -96,6 +107,8 @@ export default defineConfig({
 ```
 
 Output `.user.js` is manager-agnostic — load the same artifact in Violentmonkey/Tampermonkey/Greasemonkey. Violentmonkey worked example: run `pnpm dev`/`vite`, install the dev-server URL, or drag the built `dist/script.user.js` into the dashboard.
+
+**Typed userscript header (verified 2026-08-24):** `vite-plugin-monkey` exports a `MonkeyUserScript` interface for the `userscript` option, so `@match`/`@grant`/`@connect`/`@run-at` etc. are type-checked in `vite.config.ts`. See `MonkeyOption.userscript?: MonkeyUserScript` in https://raw.githubusercontent.com/lisonge/vite-plugin-monkey/main/README.md and https://github.com/lisonge/vite-plugin-monkey (latest 8.1.0 as of 2026-07-20 via `npm view vite-plugin-monkey version`).
 
 ### Tooling Decision Table
 
@@ -178,6 +191,9 @@ GM.xmlHttpRequest<TContext>(details: Tampermonkey.Request<TContext>): Tampermonk
 GM.notification(text: string, title?: string, image?: string, ondone?: () => void): Promise<void>
 GM.notification(details: Tampermonkey.NotificationDetails, ondone?: () => void): Promise<void>
 ```
+
+**Sync `GM_*` vs promisified `GM.*` (verified 2026-08-24):**
+`@types/tampermonkey` exposes both: sync globals like `GM_getValue<T>(name, default): T` and `GM_setValue(name, value: Tampermonkey.StorageValue)` (see https://raw.githubusercontent.com/DefinitelyTyped/DefinitelyTyped/master/types/tampermonkey/index.d.ts), and promisified `GM.getValue<T>(name, default?): Promise<T>` / `GM.setValue(name, value: any): Promise<void>` (see https://violentmonkey.github.io/api/gm/ — `GM.*` aliases added in VM 2.12.0). Do not confuse `GM.getValue` (Promise) with `GM_getValue` (sync). `GM.xmlHttpRequest` returns `Tampermonkey.PromiseWithAbort` (Promise & `{ abort(): void }`), not plain `Promise`.
 
 ---
 
@@ -264,6 +280,33 @@ const button = await waitForElement<HTMLButtonElement>('#submit-btn');
 button.click();
 ```
 
+### Declaration Merging and Ambient Augmentation
+
+To extend page globals or manager types, use declaration merging (see https://www.typescriptlang.org/docs/handbook/declaration-merging.html):
+
+```typescript
+// Augment the page window
+declare global {
+  interface Window { myLib: { version: string } }
+}
+// Ambient module for vite-plugin-monkey ESM GM imports
+declare module '$' {
+  export * from 'vite-plugin-monkey/dist/client';
+}
+// Augment unsafeWindow with page libs
+declare var unsafeWindow: Window & { myLib: Window['myLib'] };
+```
+
+Pattern mirrors the table's "Hand-rolled ambient *.d.ts: declare namespace Tampermonkey { ... }" — extend `Tampermonkey` namespace or `Window` as needed. (verified 2026-08-24)
+
+### Source Maps and Debugging
+
+`sourceMap` / `inlineSources` in `tsconfig.json` emit `//# sourceMappingURL=...` (see https://www.typescriptlang.org/tsconfig/sourceMap). esbuild `--sourcemap=inline` inlines the map; managers may strip or ignore the `sourceMappingURL` comment on install. Vite HMR source maps are not useful inside the manager sandbox — build a separate debug artifact with `sourceMap: true` and inspect via browser DevTools rather than relying on HMR. (verified 2026-08-24)
+
+### Top-Level Await and Async Wrapper
+
+Userscript entry files run as plain scripts, not ES modules — top-level `await` is invalid unless the bundler emits ESM. `vite-plugin-monkey` supports top-level `await` and `dynamic import()` in a single file (it switches to `systemjs`/`iife` as needed; see https://raw.githubusercontent.com/lisonge/vite-plugin-monkey/main/README.md). esbuild supports bundling top-level `await` only with `format: esm` (see https://esbuild.github.io/content-types/ — bundling top-level await only supported when output format is `esm`). Otherwise wrap in `(async () => { ... })()` and avoid duplicate `'use strict'` if the bundler already injects it. Requires `target` ≥ `ES2017` for async/await downleveling (see https://www.typescriptlang.org/tsconfig/target). (verified 2026-08-24)
+
 ---
 
 ## Notes
@@ -274,3 +317,5 @@ button.click();
 - When using `@grant none`, the sandbox is disabled and `GM_*`/`GM.*` functions are unavailable — TypeScript won't catch this at compile time; any `@grant` vs `@grant none` semantics differ per manager (see `managers.md` and `common-pitfalls.md`)
 - `@connect` and network APIs are manager-enforced differently (TM strict, VM not enforced, GM ignores); declare domains for TM compatibility
 - Output `.user.js` is manager-agnostic — build once, load in Violentmonkey/Tampermonkey/Greasemonkey/Safari Userscripts (within each manager's supported API subset)
+- `unsafeWindow` typing per manager (verified 2026-08-24): Tampermonkey types it as `declare var unsafeWindow: Window & Omit<typeof globalThis, ...GM APIs...>` (see https://raw.githubusercontent.com/DefinitelyTyped/DefinitelyTyped/master/types/tampermonkey/index.d.ts line ~683), Violentmonkey as `declare const unsafeWindow: Window` (see https://raw.githubusercontent.com/violentmonkey/types/master/index.d.ts). Greasemonkey context differs. Some managers require `@grant unsafeWindow`; guard with `typeof unsafeWindow !== 'undefined'` and avoid leaking GM APIs via the page window — see `managers.md` and https://violentmonkey.github.io/api/gm/#unsafeWindow
+- DT contribution / `skipLibCheck` (verified 2026-08-24): If a new manager API (e.g., `GM_cookie`, `GM_webRequest`) is missing from `@types/tampermonkey`, contribute to https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/tampermonkey. While DT lags a release, set `"skipLibCheck": true` to skip type-checking of `*.d.ts` (see https://www.typescriptlang.org/tsconfig/skipLibCheck) rather than blocking builds

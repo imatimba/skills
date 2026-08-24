@@ -2,6 +2,8 @@
 
 This reference covers the synchronous `GM_*` surface for UI, script info, menu, and tab helpers. It is **not** an exhaustive `GM_*` catalogue — storage, networking, web-request, cookies, and richer DOM/UI or tab storage details live in dedicated references. For promise-based `GM.*` equivalents see [api-async.md](api-async.md).
 
+> **Disambiguation — “sync” = synchronous, not cloud sync:** This file documents **synchronous** `GM_*` APIs (`GM_setValue`/`GM_getValue` etc., which persist **locally** per extension storage / IndexedDB) — they are **not** cloud/browser-synced. Cloud sync of saved scripts/settings across devices is a separate manager feature; see [Cloud Sync](#cloud-sync--how-managers-sync-scripts--settings-across-devices) below (verified 2026-08-24).
+
 ## Scope & Related References
 
 | Topic | Canonical reference | What lives there vs here |
@@ -524,6 +526,51 @@ Every API above has a `GM.*` promise counterpart where the manager supports it. 
 | `GM_addStyle` | `GM.addStyle` | Safari partial impl |
 | `GM_addElement` | `GM.addElement` | TM + Violentmonkey 2.13.1+ |
 | `GM_getResourceText` / `GM_getResourceURL` | `GM.getResourceText` / `GM.getResourceUrl` | Lowercase `rl` in promise form |
+
+---
+
+## Cloud Sync — How Managers Sync Scripts & Settings Across Devices
+
+> File-name note: `api-sync.md` = **synchronous** APIs, not cloud sync. The section below is the cloud-sync companion so the confusing name does not mislead (verified 2026-08-24).
+
+### What is NOT cloud-synced
+
+| Fact | Detail | Source |
+| --- | --- | --- |
+| `GM_setValue` / `GM_getValue` storage is **local only** | Values persist per extension storage / IndexedDB on that browser profile. No native cross-device sync. Use Google Drive / WebDAV etc. **from script code** to sync data yourself. Tampermonkey issue #453: “storage.sync is severely limited … not suited for anything that can grow unpredictably … use Google Drive or similar to sync data by your own” | `github.com/Tampermonkey/tampermonkey/issues/453` (verified 2026-08-24) |
+| `GM_saveBlob` **does not exist** | No `GM_saveBlob` in Tampermonkey, Violentmonkey, or Greasemonkey. Confusable with `GM_download(Blob\|File)` (Tampermonkey 5.4.6226+ accepts Blob/File) or `GM_setValue` binary handling. If you need blob persistence, store via `GM_download` or encode to string | Tampermonkey docs API list (`documentation.php?q=GM_values`, `q=GM_download`) and `violentmonkey.github.io/api/gm/` list no such API — omission is the proof (verified 2026-08-24) |
+| `GM_addValueChangeListener` `remote` is **cross-tab**, not cloud | Callback `(key, oldValue, newValue, remote)` — `remote === true` means another tab’s script instance changed the value. Useful for multi-tab coordination, not for cloud sync | `violentmonkey.github.io/types/types/VMScriptGMValueChangeCallback.html` + `tampermonkey.net/documentation.php?q=GM_values` (verified 2026-08-24) |
+
+### Tampermonkey — Script Sync (cloud)
+
+| Topic | Detail | Source |
+| --- | --- | --- |
+| **Supported sync services** (as of 2026-08-24) | **Google Drive**, **Dropbox**, **WebDAV** (incl. proprietary **TamperDAV** speedups), **Browser Sync** (browser-internal). OneDrive appears in changelog for *backup/restore* but FAQ Q105 does **not** list it as a Script Sync target — treat as backup-only | `tampermonkey.net/faq.php?q=Q105` (verified 2026-08-24) |
+| **Enablement** | Dashboard → **Settings** tab → set **Config Mode** to **Beginner** or **Advanced** → **Script Sync** section → choose service → **Enable Script Sync** → **Save** | `faq.php?q=Q105` steps 1-5 (verified 2026-08-24) |
+| **Frequency** | **WebDAV / TamperDAV:** remote changes within **~1 s**, local changes within **~1 min**, script-update triggers a pre-executed sync. **Other clouds (Drive/Dropbox/Browser):** poll every **~10 min**. Background quotas prevent faster polling on Drive/Dropbox | `github.com/Tampermonkey/tampermonkey/issues/2414` derjanb comment (verified 2026-08-24) |
+| **Conflict resolution** | “In case of a conflict the change with the most recent **modification date** will win.” (FAQ Q105 final line; also #2414/#2659) | `faq.php?q=Q105` + issues #2414, #2659 (verified 2026-08-24) |
+| **What is synced vs not** | **Synced:** full script sources (code + metadata + resources) for Drive/Dropbox/WebDAV. **Browser Sync only:** list of **download URLs** ( `http`/`https` `@downloadURL` ) — not sources. **Not synced:** `GM_setValue` storage (#825, #453), per-device **enabled/disabled** state (#2414 “enabled state is not synced”), local edits without a remote URL when using Browser Sync (#2659 “nothing. They are not synced.”) | `faq.php?q=Q105` + issues #2659, #2414, #825 (verified 2026-08-24) |
+| **Browser Sync limitations** | Very limited quota; requires browser sign-in; needs a publicly accessible URL per script (`@downloadURL` http/https); local modifications are **lost** if you rely on Browser Sync. Prefer Drive/Dropbox/WebDAV for edited scripts | `faq.php?q=Q105` + issue #2659 “Yes, exactly … only sync of the list of downloadUrls … local modifications: nothing” (verified 2026-08-24) |
+| **Backup vs Sync** | **Script Sync** = continuous background sync (section above). **Utilities → Cloud Export** = **manual** zip/JSON backup/restore to Drive/Dropbox/OneDrive/WebDAV — triggered only by explicit Export/Import clicks | issue #2414 “Utilities > Cloud > Export, then yes [manual]” + FAQ Q105 scope (verified 2026-08-24) |
+| **Security / privacy** | Google Drive: uses hidden **appDataFolder** (not visible in Drive UI, per OAuth app-data scope). Dropbox: files **visible** in your Dropbox. WebDAV: Tampermonkey will **not run scripts at the server’s URLs** while sync is enabled | `faq.php?q=Q105` (“special folder which solely contains app data” / Dropbox note / WebDAV note) + `github.com/violentmonkey/violentmonkey/discussions/1155` (verified 2026-08-24) |
+
+### Violentmonkey — Sync
+
+| Topic | Detail | Source |
+| --- | --- | --- |
+| **Services** | **Dropbox**, **OneDrive**, **Google Drive**, **WebDAV**, **S3-compatible** (S3 added since Violentmonkey 2.37.4 via #2521) | `violentmonkey.github.io` homepage (“Sync to Dropbox, OneDrive, Google Drive, or a WebDAV service.”) + `github.com/violentmonkey/violentmonkey` releases v2.37.4 / `src/background/sync/s3.js` + `src/options/views/tab-settings/vm-sync.vue` (verified 2026-08-24) |
+| **Why third-party, not `browser.storage.sync`** | `browser.storage.sync` is for small preferences: **~100 KB** quota (smaller than a feature-rich script), **same-browser only**, and absent in some browsers. Third-party gives larger quota + cross-browser (Chrome ↔ Firefox ↔ Vivaldi etc.) | `violentmonkey.github.io/faq/` “Why are third-party sync services used instead of native ones?” (verified 2026-08-24) |
+| **Behaviour** | Same model as Tampermonkey: enable in Violentmonkey settings → Authorize OAuth (Drive/Dropbox/OneDrive) or enter WebDAV/S3 credentials → changes propagate on same ~poll intervals as TM (check Violentmonkey sync docs for current frequency). App-data folder hidden for Google Drive, visible for Dropbox (discussion #1155) | `violentmonkey.github.io/faq/` + discussion #1155 + `violentmonkey.github.io/api/gm/` (verified 2026-08-24) |
+
+### Tab-scoped storage — `GM_getTab` / `GM_saveTab` / `GM_getTabs` (Tampermonkey-only)
+
+| API | Detail | Source |
+| --- | --- | --- |
+| `GM_getTab(callback)` / `GM.getTab()` | Returns an object **persistent as long as this tab is open** (isolated per script). Survives navigation but not tab close | `tampermonkey.net/documentation.php?q=GM_tabs` (verified 2026-08-24) |
+| `GM_saveTab(tab)` / `GM.saveTab(tab)` | Persists the modified tab object for later `GM_getTab` / `GM_getTabs` reads | same doc (verified 2026-08-24) |
+| `GM_getTabs(callback)` / `GM.getTabs()` | Returns map `{ tabId: tabObject }` of all tabs running the script — for multi-tab coordination | same doc (verified 2026-08-24) |
+| Violentmonkey | **WONTFIX** — “There's just 24 scripts on greasyfork that use `GM_getTab` so we won't implement it.” Approximate with `GM_setValue` + `GM_addValueChangeListener(remote)` if needed | `github.com/violentmonkey/violentmonkey/issues/1120` (verified 2026-08-24) |
+| Greasemonkey / Safari | No support; Greasemonkey #2484 family / Userscripts #667 deprecation | wiki.greasespot.net + `github.com/quoid/userscripts/issues/667` (verified 2026-08-24) |
 
 ---
 

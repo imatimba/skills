@@ -81,6 +81,15 @@ Chrome match-pattern grammar applies in all managers. Violentmonkey ≥2.10.4 ex
 // @match https://*.example.*/*
 ```
 
+### Match-pattern notes (verified 2026-08-24)
+
+- **`<all_urls>`** — special value (not `<scheme>://<host><path>`) matching all URLs under any supported scheme: `http`, `https`, `ws`, `wss`, `ftp`, `data`, `file` (MDN). Unlike `*://*/*` (only `http`/`https`/`ws`/`wss`), `<all_urls>` also covers `ftp`, `data`, `file`. Chrome Web Store treats it as broad host permission — use sparingly.
+- **Scheme `http*`** — as of Tampermonkey and Violentmonkey ≥2.10.4 (verified 2026-08-24), `http*://` matches both `http` and `https` (e.g., `http*://example.com/*`). More explicit than `*://` and common in the wild.
+- **Host `*` vs `*.`** — `*` alone means any host (`https://*/*` = any host over HTTPS); `*.example.com` means that host and any subdomain (spec matches nested `a.b.example.com`). Verified against MDN host table (verified 2026-08-24).
+- **Port** — host may include `:port` (e.g., `https://example.com:8080/`). Ports are supported in Chrome, not in Firefox (MDN example note, verified 2026-08-24). Test per manager if you gate on port.
+- **Path includes query string** — base spec matches `path + "?" + query` (MDN). `https://example.com/path` does **not** match `https://example.com/path?foo=1`; `https://example.com/*` does. To anchor an exact file ending even with query, use two patterns `["https://example.com/foo.bar","https://example.com/foo.bar?"]` where trailing `?` anchors before query (MDN, verified 2026-08-24). Violentmonkey diverges: it ignores query + hash for `@match`/`@include` globs (violentmonkey.github.io) — so query-aware gating needs runtime check or regex `@include` where supported.
+- **Invalid patterns** — base grammar rejects: missing path (`https://example.com`), unsupported scheme (`resource://path/`), wildcard not at start of host (`https://*example.com/*` base, `https://mozilla..org/`), `*` in scheme must be only char, pattern containing `#` never matches (fragment ignored). Validate before shipping.
+
 ---
 
 ## @include (Legacy)
@@ -104,6 +113,15 @@ More flexible but less secure than @match. Supports glob patterns and regex.
 // @include https://*.example.*/*
 // Equivalent Violentmonkey ≥2.10.4 @match: https://*.example.*/*
 ```
+
+**Glob semantics (verified 2026-08-24, Greasespot/SourceForge):**
+
+- No wildcard → must match entire URL exactly; `*` matches any characters including empty.
+- Case-insensitive always; regex anchors `^`/`$` are **not** supplied — add them explicitly if needed.
+- If no `@include`/`@match` rule is provided, `@include *` is assumed (within greaseable schemes).
+- Greaseable schemes (Greasemonkey) are only `http`, `https`, `about:blank` — `ftp`/`file`/`data` pages will not run userscripts there even if pattern would match per MDN (verified 2026-08-24).
+- `.tld` works only in glob patterns, not in regex (SourceForge: "currently only works in glob pattern matching"). Public-suffix based — covers dual-segment TLDs like `co.uk`, `co.jp` (Magic TLD); beware leaking data to unintended suffixes.
+- **Tampermonkey `@include` `://` nuance (verified 2026-08-24):** `*` before `://` matches everything except `:` (scheme guard), and the host segment between `://` and next `/` matches everything except `/`. So `://tmnk.net/` also matches `https://example.com/?http://tmnk.net/` — prefer `@match` for precise host gating.
 
 ### Regular Expressions
 
@@ -130,11 +148,13 @@ Wrap in forward slashes:
 | Extra host wildcards (`*.example.*`, `*example.com`) | Base: No — Violentmonkey ≥2.10.4 only | Yes via glob in all managers |
 | Recommended | Yes | Legacy |
 
+> **Conversion note (verified 2026-08-24):** Translating regex `@include` to portable `@match` often needs runtime URL checks for query/hash because `@include` globs/regex can test query while base `@match` includes query but Violentmonkey ignores query+hash, and Tampermonkey notes "`@include` doesn't support the URL hash parameter — match path without hash and use `window.onurlchange` or history patching". `<all_urls>` broadens schemes — avoid unless you truly need `ftp`/`data`/`file`.
+
 ---
 
-## @exclude
+## @exclude / @exclude-match
 
-Exclude URLs even if they match @match or @include.
+Exclude URLs even if they match @match or @include. Violentmonkey adds `@exclude-match` (verified 2026-08-24) — the safer, strict `@match`-grammar counterpart to `@exclude` (violentmonkey.github.io: four rule types `@match`/`@exclude-match`/`@include`/`@exclude`; recommend `@match`/`@exclude-match`).
 
 ```javascript
 // Run on example.com except admin pages
@@ -151,9 +171,9 @@ Exclude URLs even if they match @match or @include.
 
 ### Precedence
 
-1. @exclude is checked first
-2. If URL matches @exclude, script doesn't run
-3. Otherwise, @match/@include is checked
+1. `@exclude-match` / `@exclude` are checked first (either match → script does not run)
+2. If no exclude matches, `@match` (if defined) is checked; otherwise `@include` is checked
+3. If neither `@match` nor `@include` is defined, script is assumed to match (Violentmonkey flow, verified 2026-08-24)
 
 ---
 

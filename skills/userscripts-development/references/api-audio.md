@@ -171,3 +171,114 @@ function muteAllMediaElements(muted = true) {
 ```
 
 Limitations vs `GM_audio`: does not change the tab's mute icon, misses WebAudio-only playback, and must be re-applied for dynamically inserted elements. See [managers.md](managers.md) §2 for the full support matrix.
+
+---
+
+## Autoplay Policy (Browser-Enforced)
+
+Browsers block **audible** autoplay until a user gesture; inaudible media (muted, `volume` 0, or no audio track) is exempt. `Permissions-Policy: autoplay` defaults to `self`; blocked `element.play()` rejects with `NotAllowedError` (`DOMException`). `Navigator.getAutoplayPolicy("mediaelement" | "audiocontext" | element/context)` returns `allowed` / `allowed-muted` / `disallowed` (W3C Autoplay Detection Working Draft, verified 2026-08-24). `GM_audio` does **not** bypass this policy — tab-level mute and page autoplay allowance are orthogonal.
+
+Source: MDN `Autoplay guide for media and Web Audio APIs` (developer.mozilla.org/en-US/docs/Web/Media/Guides/Autoplay), W3C `autoplay-detection` (w3.org/TR/autoplay-detection), MDN `Permissions-Policy: autoplay`, `HTMLMediaElement.play()`.
+
+---
+
+## HTMLMediaElement Playback Control
+
+`element.play()` returns `Promise<void>` — handle rejection:
+
+```javascript
+// Correct handling of autoplay blocking (verified 2026-08-24 via MDN HTMLMediaElement.play)
+element.play().catch((e) => {
+  if (e.name === "NotAllowedError") {
+    // Autoplay blocked — show a play button or prompt for interaction
+  }
+});
+```
+
+`volume` is `0.0`–`1.0` (`0` effectively muted); `muted` (`boolean`) is independent of `volume`; `defaultMuted` reflects the `muted` attribute only and has no dynamic effect (verified 2026-08-24 via MDN `HTMLMediaElement.volume` / `muted` / `defaultMuted`).
+
+---
+
+## Web Audio Autoplay & State
+
+An `AudioContext` may start `suspended` when autoplay is blocked; resume only after a user activation: `await audioContext.resume()` (verified 2026-08-24). Observe `audioContext.state` (`suspended` | `running` | `closed` | `interrupted`) and `onstatechange`; `suspend()`/`resume()` return `Promise<void>`.
+
+Source: MDN `BaseAudioContext.state`, `AudioContext.resume()`; MDN Autoplay guide (Web Audio API affected by autoplay blocking).
+
+---
+
+## Codec Support & canPlayType
+
+Use `element.canPlayType(mimeString)` → `""` | `"maybe"` | `"probably"` to probe codecs; support varies by browser for `audio/mpeg`, `audio/ogg`, `audio/wav`, `audio/webm`, `audio/mp4` (verified 2026-08-24 via MDN `HTMLMediaElement.canPlayType`, Media type and format guide). Chain fallbacks:
+
+```javascript
+const src = audio.canPlayType('audio/ogg; codecs="vorbis"') ? "sound.ogg"
+          : audio.canPlayType('audio/mpeg') ? "sound.mp3" : "sound.wav";
+```
+
+---
+
+## Web Audio Bridging (MediaElement → Audio Graph)
+
+`AudioContext.createMediaElementSource(mediaEl)` routes an `<audio>`/`<video>` into the Web Audio graph; thereafter control volume via `GainNode` (`gainNode.gain.value = 0` for mute) or suspend the context (`audioContext.suspend()`). This is distinct from `element.muted` — element muting does not affect graph-routed signal if gain is not connected via the element (verified 2026-08-24 via MDN `createMediaElementSource`, `GainNode`).
+
+```javascript
+const ctx = new AudioContext();
+const src = ctx.createMediaElementSource(document.querySelector("audio"));
+const gain = ctx.createGain();
+src.connect(gain).connect(ctx.destination);
+gain.gain.value = 0; // mute via graph
+```
+
+---
+
+## Dynamic Element Handling (MutationObserver)
+
+The portable snippet above must be re-run for SPA navigation. Use `MutationObserver` (Baseline since July 2015, verified 2026-08-24 via MDN `MutationObserver`):
+
+```javascript
+function muteAllMediaElements(muted = true) {
+  document.querySelectorAll("audio, video").forEach((el) => (el.muted = muted));
+}
+const observer = new MutationObserver(() => muteAllMediaElements(true));
+observer.observe(document.documentElement, { childList: true, subtree: true });
+// Later: observer.disconnect();
+```
+
+---
+
+## GM_notification Silent Flag (Audio-Adjacent)
+
+`GM_notification({ text, title, silent: true })` suppresses notification sound; `silent: boolean` — `true` = no sound (verified 2026-08-24 via tampermonkey.net/documentation.php?q=GM_notification). Relevant when your script produces audio feedback via notifications:
+
+```javascript
+// @grant GM_notification
+GM_notification({ text: "Muted", title: "Audio", silent: true, timeout: 2000 });
+```
+
+`highlight: boolean` controls tab highlighting; `timeout` auto-closes the notification.
+
+---
+
+## Storage Preference Portability Note
+
+`GM.getValue`/`GM.setValue` are `Promise`-based in Greasemonkey 4+ and Violentmonkey (`GM.*` aliases added VM 2.12.0, verified 2026-08-24 via wiki.greasespot.net/Greasemonkey_Manual:API, violentmonkey.github.io/api/gm/), whereas legacy `GM_getValue`/`GM_setValue` are synchronous. The file's `await GM.getValue` example is correct for modern managers but does not warn about this divergence. For maximal portability, feature-detect:
+
+```javascript
+const getVal = typeof GM?.getValue === "function" ? GM.getValue : GM_getValue;
+const wasMuted = await getVal("userMutePreference", false);
+```
+
+---
+
+## Security: CSP & Permissions-Policy Interaction
+
+- `Content-Security-Policy: media-src` controls where `<audio>`/`<video>` may load from; absent → falls back to `default-src` (verified 2026-08-24 via MDN `CSP: media-src`).
+- `Permissions-Policy: autoplay` (default `self`) can block `play()` cross-origin even after a gesture; expect `NotAllowedError` (MDN `Permissions-Policy: autoplay`).
+- Cross-origin media without permissive `media-src` + autoplay allowance fails regardless of `GM_audio` state.
+
+---
+
+## Accessibility & UX
+
+Tab muting does not exempt autoplay policy and does not convey state to assistive technology; element-level `muted` is DOM-visible. Do not auto-mute without user consent; expose a toggle (e.g., `GM_registerMenuCommand`) and respect user preferences — consider `prefers-reduced-motion` (`@media (prefers-reduced-motion: reduce)`, Baseline since Jan 2020, verified 2026-08-24 via MDN) for animated audio UIs and avoid unsolicited sound. Use audible indicators sparingly and honor `silent` notifications (see above).

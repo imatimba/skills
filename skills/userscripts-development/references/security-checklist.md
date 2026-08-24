@@ -174,6 +174,8 @@ const handler = (typeof GM_info !== "undefined" ? GM_info : GM.info).scriptHandl
 // "Violentmonkey" | "Tampermonkey" | "Greasemonkey" | "Userscripts"
 ```
 
+> **Prototype pollution & cloning (verified 2026-08-24, MDN):** Any object read via `wrappedJSObject`/`unsafeWindow` is **untrusted** — page code may have redefined prototypes/getters/setters (MDN: "once you use wrappedJSObject, you can no longer rely on any property being what you expect"). Validate and sanitize all data from `unsafeWindow`; never expose privileged `GM_*` functions directly via `exportFunction`/`cloneInto` without filtering. Prefer `CustomEvent`/`postMessage` bridge over direct unsafeWindow assignment; when you must share, use `cloneInto(obj, window, { cloneFunctions: true })` and `exportFunction` narrowly. Source: developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Sharing_objects_with_page_scripts.
+
 ---
 
 ## Code Quality Checks
@@ -351,6 +353,8 @@ GM_setValue('userPrefs', { theme: 'dark' });
 const prefs = GM_getValue('userPrefs', {});
 ```
 
+> **Storage nuance (verified 2026-08-24):** `GM storage` isolates per-script (unlike page `localStorage`) but is still **plaintext in extension storage — not encrypted**. Do not store secrets at rest without user awareness; prompt via `GM_registerMenuCommand` or `GM_getValue('apiKey','')` and avoid logging secrets. Prefer user-provided credentials over bundling. Sources: violentmonkey.github.io/api/gm/#GM_getValue; MDN `browser.storage` / WebExtensions storage is unencrypted at rest.
+
 ### Safe External Requests
 
 ```javascript
@@ -383,6 +387,8 @@ GM_xmlhttpRequest({
 
 > Core `GM_xmlhttpRequest` is cross-manager; `cookie` / `anonymous` / `fetch` / `stream` options are **Tampermonkey-only**.
 
+> **Exfiltration & CSRF hardening (verified 2026-08-24, tampermonkey.net):** `GM_xmlhttpRequest` bypasses CORS and — unless `anonymous: true` — sends page cookies. Use `anonymous: true` when cookies are not needed (Violentmonkey supports `anonymous` since 2.10.1; TM supports all four). After redirects, validate `r.finalUrl` (both initial and final URL are `@connect`-checked in TM) and inspect `r.responseHeaders` content-type before `JSON.parse`. Example: `GM_xmlhttpRequest({ url: 'https://api.example.com/data', anonymous: true, onload: r => { if (!r.responseHeaders.includes('application/json')) return; /* … */ } })`.
+
 ### Safe DOM Insertion
 
 ```javascript
@@ -392,6 +398,25 @@ div.textContent = userInput;  // Safe - no HTML parsing
 div.className = 'my-class';
 document.body.appendChild(div);
 ```
+
+> **Executable sink warning (verified 2026-08-24, MDN):** `element.textContent` is safe on normal elements, but `HTMLScriptElement.textContent` / `text` / `innerText` IS a JavaScript sink — assigning untrusted code to `scriptElement.textContent` and inserting it will execute (`scriptElement.textContent = untrustedCode // shows the alert`). Never inject untrusted strings via script elements; use `TrustedScript` via a `Trusted Types` policy or avoid creating the element. Source: developer.mozilla.org/en-US/docs/Web/API/HTMLScriptElement/textContent.
+
+> **Other HTML sinks (verified 2026-08-24, MDN + OWASP):** `outerHTML`, `insertAdjacentHTML`, `document.write`/`writeln`, and `DOMParser.parseFromString` are equally dangerous HTML sinks alongside `innerHTML` (OWASP DOM XSS Prevention lists them as "Example Dangerous HTML Methods"). Apply the same escaping/sanitizing discipline to all. Sources: developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML, /Element/outerHTML, /Element/insertAdjacentHTML, /Document/write, /DOMParser/parseFromString; cheatsheetseries.owasp.org — DOM_based_XSS_Prevention_Cheat_Sheet.
+
+> **Rich HTML — use a sanitizer (verified 2026-08-24, MDN):** When you must insert HTML (not just text), sanitize via a vetted library. MDN Trusted Types examples use `DOMPurify.sanitize(input)` to create `TrustedHTML` before `innerHTML`/`insertAdjacentHTML`. Pattern: `elem.innerHTML = DOMPurify.sanitize(untrustedHtml)` or via a `Trusted Types` policy `policy.createHTML(input) => DOMPurify.sanitize(input)`. `escapeHtml` (div.textContent → div.innerHTML) is correct for plain text but insufficient for rich HTML.
+
+### CSP & Trusted Types Interaction (verified 2026-08-24)
+
+Userscript managers do **not** universally bypass page CSP. Enforcement is context-sensitive:
+
+| Context | CSP effect | Guidance |
+| --- | --- | --- |
+| Violentmonkey **content** world (`@inject-into content` or `auto` fallback) | **Isolated world — NOT subject to page CSP** | Safe default on CSP-restricted sites (e.g., GitHub) |
+| Violentmonkey/Tampermonkey **page** context (`@grant none` or `@inject-into page`) | **Subject to page CSP** — inline scripts/styles blocked on strict sites | Use `GM_addElement` to inject `script`/`style`/`link` bypassing CSP (TM docs: "if the page limits these elements with CSP"; VM `GM_addElement` same), or a `Trusted Types` + `DOMPurify` helper |
+| Tampermonkey "Modify CSP" option | Can relax CSP but TM docs flag it "possibly unsecure" — prefer `GM_addElement` |
+| Safari "Userscripts" | **Cannot bypass CSP** | Design without page-world access |
+
+> **Trusted Types breakage (verified 2026-08-24):** Strict sites that enforce `require-trusted-types-for 'script'` throw `TypeError` on plain-string assignments to sinks (`innerHTML`, `outerHTML`, `script.text`, `eval`, etc.). Symptom: `TrustedHTML`/`TrustedScript` required (see violentmonkey/violentmonkey#1873, tampermonkey#1334 where jQuery `html()` broke under Trusted Types). Fix: reuse the page's policy or create one via `trustedTypes.createPolicy` with `DOMPurify`, or use `GM_addElement` for `script`/`style` injection. Sources: developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API, /Web/HTTP/Headers/Content-Security-Policy, violentmonkey.github.io/posts/inject-into-context/, tampermonkey.net/documentation.php?q=GM_addElement.
 
 ---
 
@@ -404,7 +429,9 @@ Every `@require` / `@resource` is code you ship but do not host — treat it as 
 - Pin **every** `@require` / `@resource` with an SRI hash suffix: `#sha256=...` (minimum; SHA-256/SHA-384/SHA-512 per W3C SRI). `#md5=...` is cryptographically broken — legacy/migration-only, supported by Tampermonkey for backward compat only. Example: `// @require https://cdn.example.com/lib.js#sha256=abc123...`
 - Tampermonkey verifies **SHA-256** and **MD5** natively; **SHA-1 / SHA-384 / SHA-512** require `window.crypto` at install time.
 - Multiple hashes: comma- or semicolon-separated, last supported wins (`#md5=...,sha256=...` → `sha256` used). Hex **or** base64 encoding accepted. Source: tampermonkey.net documentation.php?q=sri.
-- Prefer fewer externals. Review every external URL **before every version bump** — managers silently re-fetch `@require` / `@resource` on update.
+- **Scope — Tampermonkey only (verified 2026-08-24):** SRI hash suffixes are **enforced only by Tampermonkey**. Violentmonkey, Greasemonkey 4+, and Safari "Userscripts" silently **ignore** `#sha256=…`/`#md5=…` and always re-fetch on update. Pinning therefore protects only Tampermonkey users; others need vendor-or-audit mitigations. TM setting: Security → Subresource Integrity: *Validate if possible* / *Enforce*. Source: tampermonkey.net/documentation.php?q=sri; Violentmonkey metadata-block/API — no SRI enforcement documented.
+- **Version-pin URLs (verified 2026-08-24):** Use fully versioned CDN URLs (`https://cdn.example.com/lib-3.6.0.min.js#sha256=…`) — never `latest`/`jquery-latest.min.js`. A floating URL can drift to new (potentially compromised) code between bumps; Greasy Fork warns against unpinned externals. See issue greasyfork/JasonBarnabe-greasyfork#1070 for mismatch monitoring context.
+- Prefer fewer externals. Review every external URL **before every version bump** — managers silently re-fetch `@require` / `@resource` on update. Greasy Fork now monitors SRI mismatches for hosted scripts; Tampermonkey logs "Hash mismatch for @require" on failure — check install logs after bumping. Vendor small dependencies or prefer Greasy Fork-hosted libraries syncable from GitHub for an audit trail (verified 2026-08-24).
 
 ### Catalog context
 
