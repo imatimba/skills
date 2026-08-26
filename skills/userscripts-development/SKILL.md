@@ -74,7 +74,7 @@ Before writing code in an area, READ its reference first — no exceptions:
 | Watch mutations/elements (Observer) | [patterns.md](references/patterns.md) (Mutation Observation) |
 | Handle SPA navigation | [patterns.md](references/patterns.md) (SPA Navigation) + [api-tabs.md](references/api-tabs.md) (`onurlchange`) |
 | Call ANY `GM.*`/`GM_*` API | its api-*.md / http-requests.md page — never write the call from memory |
-| Debug a failing script | debugging.md + full common-pitfalls.md scan |
+| Debug a failing script | debugging.md + testing.md + full common-pitfalls.md scan |
 
 ## Execution Steps
 
