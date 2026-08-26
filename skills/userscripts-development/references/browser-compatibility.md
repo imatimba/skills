@@ -20,13 +20,13 @@ Violentmonkey worked example: build a standard `.user.js` and load the same arti
 | Topic | Fact |
 |-------|------|
 | Mobile | VM = full features on Firefox Android (AMO). Chromium mobile is volatile — Kiwi browser archived Jan 2025; verify any Chromium-mobile claim before recommending. |
-| Chrome MV2 → MV3 | Chrome 138 (Jul 24 2025) disabled MV2 for all users (no re-enable); enterprise `ExtensionManifestV2Availability` policy removed at Chrome 139; final Chrome Web Store MV2 removal Aug 31 2026 ([MV2 deprecation timeline](https://developer.chrome.com/docs/extensions/develop/migrate/mv2-deprecation-timeline)). The Chrome Web Store build of Tampermonkey is **MV3**; the Firefox build remains MV2. Several capabilities differ between them (notably `GM_webRequest`). |
-| Edge (Chromium) — MV2 divergence | Edge Add-ons retains MV2 as of Edge 139 (verified 2026-08-24); Partner Center timeline: early 2027 enterprise deprecation, TBD store deprecation ([Edge MV3 timeline](https://learn.microsoft.com/en-us/microsoft-edge/extensions/developer-guide/manifest-v3)). Do not apply Chrome 138/139/Aug 31 2026 dates verbatim to Edge. |
+| Chrome MV2 → MV3 | Chrome 138 (Jul 24 2025) disabled MV2 for all users (no re-enable); enterprise `ExtensionManifestV2Availability` policy removed at Chrome 139; final Chrome Web Store MV2 removal Aug 31 2026 ([MV2 deprecation timeline](https://developer.chrome.com/docs/extensions/develop/migrate/mv2-deprecation-timeline)) (verified 2026-08-25 — https://developer.chrome.com/docs/extensions/develop/migrate/mv2-deprecation-timeline). The Chrome Web Store build of Tampermonkey is **MV3**; the Firefox build remains MV2. Several capabilities differ between them (notably `GM_webRequest`). |
+| Edge (Chromium) — MV2 divergence | Edge Add-ons retains MV2 as of Edge 139 (verified 2026-08-25 — https://learn.microsoft.com/en-us/microsoft-edge/extensions/developer-guide/manifest-v3); Partner Center timeline: early 2027 enterprise deprecation, TBD store deprecation ([Edge MV3 timeline](https://learn.microsoft.com/en-us/microsoft-edge/extensions/developer-guide/manifest-v3)). Do not apply Chrome 138/139/Aug 31 2026 dates verbatim to Edge. |
 | Firefox | Retains MV2; supports `cloneInto`/`exportFunction`/containers. |
 | Firefox Android caveat | Add-on installs from AMO but mobile APIs are reduced vs desktop — no tab grouping/container sidebar; `storage.sync` not synced on Android per [MDN storage.sync](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/storage/sync) and Firefox bug 1625257 — verified 2026-08-24. “Full features” is relative to Chromium mobile, not desktop parity. |
 | Other Chromium browsers (Opera/Brave/Vivaldi etc.) | VM officially lists Chrome, Firefox 57+, Edge, Chromium, Brave, Cent, Orion, Opera 15+, Vivaldi, QQBrowser ([VM get-it](https://violentmonkey.github.io/get-it/)); TM FAQ lists Chrome/Edge/Opera/Safari builds ([TM Q406](https://www.tampermonkey.net/faq.php?locale=en&q=Q406)). Opera users install VM from Chrome Web Store. Verified 2026-08-24. |
 
-> **Tier-2 managers (verified 2026-08-24):** AdGuard, FireMonkey, ScriptCat and OrangeMonkey exist but diverge on MV3/CSP and API coverage — FireMonkey uses Firefox's official `userScripts` API (Firefox 65+, Android support experimental v2.12+, see [AMO FireMonkey](https://addons.mozilla.org/en-US/firefox/addon/firemonkey/)) and supports GM3+GM4; ScriptCat offers background/scheduled scripts and richer APIs ([ScriptCat GitHub](https://github.com/scriptscat/scriptcat)); AdGuard is an ad-blocking extension with userscript support ([AdGuard repo](https://github.com/AdguardTeam/AdguardBrowserExtension)). See `managers.md` for full matrix — do not assume TM/VM parity.
+> **Tier-2 managers (verified 2026-08-25 — https://addons.mozilla.org/en-US/firefox/addon/firemonkey/):** AdGuard, FireMonkey, ScriptCat and OrangeMonkey exist but diverge on MV3/CSP and API coverage — FireMonkey uses Firefox's official `userScripts` API (Firefox 65+, Android support experimental v2.12+, see [AMO FireMonkey](https://addons.mozilla.org/en-US/firefox/addon/firemonkey/)) and supports GM3+GM4; ScriptCat offers background/scheduled scripts and richer APIs ([ScriptCat GitHub](https://github.com/scriptscat/scriptcat)); AdGuard is an ad-blocking extension with userscript support ([AdGuard repo](https://github.com/AdguardTeam/AdguardBrowserExtension)). See `managers.md` for full matrix — do not assume TM/VM parity.
 
 ---
 
@@ -100,7 +100,7 @@ Chrome/Edge store builds are MV3; Firefox remains MV2. The restriction is manage
 | `@webRequest` / `GM_webRequest` | ❌ broken 5.2+ (issue #2209) | ✅ experimental | ❌ wontfix everywhere (VM Chrome Web Store is also MV3 as of 2024, see [VM homepage](https://violentmonkey.github.io/)) | VM declined universally |
 | Persistent background pages | ❌ removed in MV3 | ✅ | ❌ removed in MV3 (VM Chrome, MV3 banner verified 2026-08-24) / ✅ in Firefox | VM Chrome store build is MV3 |
 | CSP bypass | More restricted in MV3 | Best-effort relaxation | VM respects CSP regardless (both MV3 and MV2) | Never rely on TM stripping |
-| `Allow User Scripts` permission (TM 5.5+ on Chrome) | ⚠️ required toggle `chrome://extensions` → “Allow User Scripts” (see [TM changelog](https://www.tampermonkey.net/changelog.php) top banner, verified 2026-08-24) | n/a (MV2) | n/a — VM uses different permission model | Scripts appear broken until permission granted; follow `chrome://extensions` instructions |
+| `Allow User Scripts` permission (TM 5.5+ on Chrome) | ⚠️ required toggle `chrome://extensions` → “Allow User Scripts” (see [TM changelog](https://www.tampermonkey.net/changelog.php) top banner) (verified 2026-08-25 — https://developer.chrome.com/docs/extensions/reference/api/userScripts) | n/a (MV2) | n/a — VM uses different permission model | Scripts appear broken until permission granted; follow `chrome://extensions` instructions |
 
 ### Workarounds (Guarded)
 
@@ -150,7 +150,7 @@ function onNavigate(callback) {
 
 ## Firefox-Specific Bridges (Browser-Scoped, Manager-Filtered)
 
-`cloneInto` / `exportFunction` are **Firefox Xray** features, not manager features. They apply to GM4+ and TM-on-Firefox when running in the Firefox USERSCRIPT_WORLD. They do not exist in Chromium.
+`cloneInto` / `exportFunction` are **Firefox Xray** features, not manager features. They apply to GM4+ and TM-on-Firefox when running in the Firefox USERSCRIPT_WORLD. They do not exist in Chromium. (verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/userScripts and https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Sharing_objects_with_page_scripts)
 
 ```javascript
 // Share object with page (Firefox)
@@ -194,7 +194,7 @@ Safari uses the third-party "Userscripts" app (by quoid); Tampermonkey on Safari
 | Execution model | Any `@grant` ⇒ forced content world (isolated); no page-world access | `@sandbox` selectable | `@inject-into` selectable | Always sandboxed | Design Safari scripts without page-world access |
 | Auto-update | Manual | Automatic | Automatic | Automatic |  |
 
-> **Safari platform divergence (verified 2026-08-24):** Userscripts requires iOS 15.1+ / macOS 12+ with Safari 14.1+ ([quoid README](https://github.com/quoid/userscripts/blob/main/README.md), [App Store](https://apps.apple.com/us/app/userscripts/id1463298887) lists iOS 15.0+/macOS 12.0+). macOS has built-in editor at `~/Library/Containers/Userscripts/Data/Documents/scripts`; iOS has **no built-in editor** — edit via external editor or `.user.js` file drop into the chosen directory. Using an iCloud Drive folder for sync between macOS ↔ iOS works but with delays and possible file eviction due to optimization; since macOS 15 / iOS 18 use “Keep Downloaded” to avoid eviction (see [issue #424](https://github.com/quoid/userscripts/issues/424), README iCloud note).
+> **Safari platform divergence (verified 2026-08-25 — https://github.com/quoid/userscripts/blob/main/README.md):** Userscripts requires iOS 15.1+ / macOS 12+ with Safari 14.1+ ([quoid README](https://github.com/quoid/userscripts/blob/main/README.md), [App Store](https://apps.apple.com/us/app/userscripts/id1463298887) lists iOS 15.0+/macOS 12.0+). macOS has built-in editor at `~/Library/Containers/Userscripts/Data/Documents/scripts`; iOS has **no built-in editor** — edit via external editor or `.user.js` file drop into the chosen directory. Using an iCloud Drive folder for sync between macOS ↔ iOS works but with delays and possible file eviction due to optimization; since macOS 15 / iOS 18 use “Keep Downloaded” to avoid eviction (see [issue #424](https://github.com/quoid/userscripts/issues/424), README iCloud note).
 
 > **Tampermonkey on Safari distinction (verified 2026-08-24):** separate app `net.tampermonkey.SafariWebExt` (Safari + Safari iOS, App Store) vs free GPL quoid Userscripts app (`id1463298887`, © 2018-2026 Justin Wasack). Also `net.tampermonkey.SafariApp` legacy. See [TM Q406](https://www.tampermonkey.net/faq.php?locale=en&q=Q406) ID table. Branch by `GM_info.scriptHandler` capability, not app price/name.
 
@@ -219,7 +219,7 @@ if (typeof GM !== 'undefined' && GM.xmlHttpRequest) {
 
 ## Cross-Manager Best Practices
 
-### 1. Feature Detection (Prefer Over Handler Checks)
+### 1. Feature Detection (Prefer Over Handler Checks) (verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/userScripts and https://developer.chrome.com/docs/extensions/reference/api/userScripts — feature-detection guidance: check `typeof` API presence over UA sniffing; https://web.dev/articles/bfcache for page lifecycle events)
 
 ```javascript
 // Check if API exists before using

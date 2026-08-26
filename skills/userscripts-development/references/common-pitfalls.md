@@ -22,7 +22,7 @@ Running on every page slows the browser and causes unexpected behaviour.
 // @match https://*.example.com/*
 ```
 
-**Why it matters:** Overly broad patterns mean your script runs on thousands of sites, consuming memory and potentially breaking pages.
+**Why it matters:** Overly broad patterns mean your script runs on thousands of sites, consuming memory and potentially breaking pages. (verified 2026-08-25 — https://violentmonkey.github.io/api/matching/ and https://www.tampermonkey.net/documentation.php?locale=en&q=include#meta:match)
 
 | Decision | Pattern | When to use |
 |----------|---------|-------------|
@@ -65,7 +65,7 @@ GM_xmlhttpRequest({
 | GM4+ | Ignored / not used | Allowed |
 | Safari Userscripts | n/a | Allowed (promise subset) |
 
-**Best practice:** Enumerate known domains for TM compatibility (`// @connect api.example.com` per host). `@connect *` as a fallback is a TM-model concept — it satisfies TM's strict check but is elsewhere advisory; prefer explicit domains and add `*` only when you truly need wildcard. Diagnostic checklist labels this as `[@connect — TM-required]` (see Quick Diagnostic Checklist).
+**Best practice:** Enumerate known domains for TM compatibility (`// @connect api.example.com` per host). `@connect *` as a fallback is a TM-model concept — it satisfies TM's strict check but is elsewhere advisory; prefer explicit domains and add `*` only when you truly need wildcard. Diagnostic checklist labels this as `[@connect — TM-required]` (see Quick Diagnostic Checklist). (verified 2026-08-25 — https://www.tampermonkey.net/documentation.php?locale=en&q=connect — TM checks initial + final URL and supports `*`; https://violentmonkey.github.io/api/metadata-block/ omits @connect confirming VM does not enforce)
 
 ---
 
@@ -119,7 +119,7 @@ init().catch(e => console.error('init failed:', e));
 // See browser-compatibility.md and managers.md for fallback snippet.
 ```
 
-Additional guards:
+Additional guards: (verified 2026-08-25 — https://violentmonkey.github.io/api/metadata-block/#run-at `document-start` body may be null; https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver; https://www.tampermonkey.net/documentation.php?locale=en&q=window#api:window.onurlchange — TM-only)
 
 | Concern | Fix |
 |---------|-----|
@@ -127,7 +127,7 @@ Additional guards:
 | Unhandled async failure | `init().catch(e => …)` — don't drop the rejection |
 | SPA navigation (no universal `onurlchange`) | History patch (`pushState`/`replaceState` + `popstate`/`hashchange`) or `VM.onNavigate`; `window.onurlchange` is TM-only |
 
-> **Navigation API (modern alternative, as of 2026-08-24):** Chromium 102+ (Chrome/Edge) implements `window.navigation` with `navigate` / `navigatesuccess` / `navigateerror` events as a structured replacement for the history patch (verified via MDN Navigation API — `Navigation.navigate()`, `NavigationTransition`). Firefox and Safari do not yet implement it (as of 2026-08-24), so feature-detect before using: `if (window.navigation) navigation.addEventListener('navigatesuccess', handler); else /* history patch fallback */`. See MDN Navigation API: https://developer.mozilla.org/en-US/docs/Web/API/Navigation_API
+> **Navigation API (modern alternative, as of 2026-08-25):** Chromium 102+ (Chrome/Edge) implements `window.navigation` with `navigate` / `navigatesuccess` / `navigateerror` events as a structured replacement for the history patch (verified 2026-08-25 — MDN Navigation API https://developer.mozilla.org/en-US/docs/Web/API/Navigation_API — `Navigation.navigate()`, `NavigationTransition`). Firefox and Safari do not yet implement it (as of 2026-08-25), so feature-detect before using: `if (window.navigation) navigation.addEventListener('navigatesuccess', handler); else /* history patch fallback */`.
 
 ---
 
@@ -169,7 +169,7 @@ console.log(response.responseText);  // Works where promise form exists
 | `GM_xmlhttpRequest` (callback) | ✅ returns `{abort}` | ✅ returns control | ❌ | ❌ (promise-only) | GM4+/Safari have no callback form |
 | `GM.xmlHttpRequest` (promise) | ✅ (capital H) | ✅ since 2.18.3 | ✅ | ✅ custom promise + `abort` | Shapes differ — feature-detect; Safari promise-only |
 
-**Portable wrapper — feature-detect before calling:**
+**Portable wrapper — feature-detect before calling:** (verified 2026-08-25 — https://violentmonkey.github.io/api/gm/#gm_xmlhttprequest — VM GM.* async since 2.18.3; https://wiki.greasespot.net/GM.xmlHttpRequest — GM4+ promise form; https://www.tampermonkey.net/documentation.php?locale=en&q=GM_xmlhttpRequest)
 
 ```javascript
 // Prefer promise form where available; fall back to callback form
@@ -221,9 +221,9 @@ GM_addElement('script', {
 | GM4+ | Subject to Firefox sandbox; `GM_addElement` ❌ (issue #2484) | No `GM_addElement` — use `@require` or Xray bridges | Verify in GM4+ console |
 | Safari Userscripts | Content world only; `GM_addElement` ❌ | No bypass possible | Design without page-world access |
 
-**Best practice:** Test CSP-sensitive injection in Violentmonkey first — TM may hide the CSP failure by stripping headers. If VM works, you have a truly portable solution.
+**Best practice:** Test CSP-sensitive injection in Violentmonkey first — TM may hide the CSP failure by stripping headers. If VM works, you have a truly portable solution. (verified 2026-08-25 — https://violentmonkey.github.io/api/gm/#gm_addelement — GM_addElement purpose is circumventing strict CSP)
 
-> **Style CSP also blocks styles (verified 2026-08-24 via MDN CSP):** `style-src` (and `default-src` fallback) blocks inline `<style>` elements just as `script-src` blocks `<script>`. The same bypass applies — use `GM_addElement('style', { textContent: '...' })` where supported (TM/VM) to circumvent `style-src` restrictions. VM docs describe `GM_addElement` as "circumventing a strict Content-Security-Policy that forbids adding inline code *or style*" (https://violentmonkey.github.io/api/gm/). Where `GM_addElement` is unavailable (GM4+, Safari), inject via `@require` + linked stylesheet or remove the inline-style requirement. Source: MDN CSP fetch directives — `style-src sets allowed sources for CSS stylesheets` (https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP).
+> **Style CSP also blocks styles (verified 2026-08-25 — MDN CSP https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/style-src and VM GM_addElement https://violentmonkey.github.io/api/gm/#gm_addelement — "circumventing a strict Content-Security-Policy that forbids adding inline code *or style*"):** `style-src` (and `default-src` fallback) blocks inline `<style>` elements just as `script-src` blocks `<script>`. The same bypass applies — use `GM_addElement('style', { textContent: '...' })` where supported (TM/VM) to circumvent `style-src` restrictions. VM docs describe `GM_addElement` as "circumventing a strict Content-Security-Policy that forbids adding inline code *or style*" (https://violentmonkey.github.io/api/gm/). Where `GM_addElement` is unavailable (GM4+, Safari), inject via `@require` + linked stylesheet or remove the inline-style requirement.
 
 ---
 
@@ -257,7 +257,7 @@ if (typeof unsafeWindow !== 'undefined') {
 | VM <2.32 / GM4+ | ✅ | ✅ (`wrappedJSObject` equiv. on Firefox) | Full page context | — |
 | Safari Userscripts | ❌ NONE | ❌ NONE | Still ❌ — any `@grant` ⇒ forced content world; `none` does not conjure `unsafeWindow` | Never available — branch around it |
 
-**Fix the incompleteness:** `@grant none` does not just "disable the sandbox entirely" — it disables the sandbox **and removes all `GM_*`/`GM.*` APIs** (you lose storage, XHR, etc.) — but `GM_info` / `GM.info` remains available (verified 2026-08-24 via TM grant docs: "In this mode no GM* function but the GM_info property will be available" — https://www.tampermonkey.net/documentation.php?locale=en&q=grant). In Safari, it still does not provide `unsafeWindow` (always ❌). Always guard:
+**Fix the incompleteness:** `@grant none` does not just "disable the sandbox entirely" — it disables the sandbox **and removes all `GM_*`/`GM.*` APIs** (you lose storage, XHR, etc.) — but `GM_info` / `GM.info` remains available (verified 2026-08-25 — TM grant docs: "In this mode no GM* function but the GM_info property will be available" — https://www.tampermonkey.net/documentation.php?locale=en&q=grant; VM grant https://violentmonkey.github.io/api/metadata-block/#grant). In Safari, it still does not provide `unsafeWindow` (always ❌). Always guard:
 
 ```javascript
 if (typeof unsafeWindow !== 'undefined') {
@@ -273,7 +273,7 @@ Safari design note: any `@grant` forces content-world execution; there is no pag
 
 ## Pitfall 7: Memory Leaks in Observers
 
-MutationObservers that never disconnect consume memory.
+MutationObservers that never disconnect consume memory. (verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver/disconnect — explicit disconnect required; lifecycle via https://developer.mozilla.org/en-US/docs/Web/API/Window/pagehide_event and https://developer.mozilla.org/en-US/docs/Web/API/Document/visibilitychange_event)
 
 **Wrong:**
 ```javascript
@@ -309,7 +309,7 @@ window.addEventListener('pagehide', teardown, { once: true });
 window.addEventListener('beforeunload', () => observer.disconnect());
 ```
 
-> **bfcache/SPA note:** `beforeunload` is unreliable — bfcache restores pages without firing it, and SPAs navigate without unloading. `pagehide` fixes bfcache compatibility but is also "not reliably fired... especially on mobile" (MDN `pagehide` event). Prefer `visibilitychange` as the primary teardown signal, then `pagehide` as next-best, with explicit navigation hooks as the SPA fallback.
+> **bfcache/SPA note (verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Web/API/Window/pagehide_event — "not reliably fired ... especially on mobile" and bfcache-compatible; https://developer.mozilla.org/en-US/docs/Web/API/Document/visibilitychange_event — visibilitychange as best signal; MDN MutationObserver https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver/disconnect — explicit disconnect required):** `beforeunload` is unreliable — bfcache restores pages without firing it, and SPAs navigate without unloading. `pagehide` fixes bfcache compatibility but is also "not reliably fired... especially on mobile" (MDN `pagehide` event). Prefer `visibilitychange` as the primary teardown signal, then `pagehide` as next-best, with explicit navigation hooks as the SPA fallback.
 
 ---
 
@@ -348,7 +348,7 @@ observer.observe(document.body ?? document.documentElement, { childList: true, s
 | Direct per-mutation | High — thousands of style recalculations | Never for bulk |
 | Debounced + `.processed` guard | Low — batches + idempotent | Always for observer-driven styling |
 
-**Event-listener duplication on re-observed/dynamic content (verified 2026-08-24 via MDN `addEventListener`):** Each `addEventListener(type, listener)` call adds a *new* listener — calling it again on the same element without `removeEventListener` or `{ once: true }` stacks duplicates and fires the handler multiple times. A `MutationObserver` callback that does `el.addEventListener('click', handler)` on every mutation will double-bind each re-observed node.
+**Event-listener duplication on re-observed/dynamic content (verified 2026-08-25 — MDN EventTarget.addEventListener https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener — `once` and `signal` options):** Each `addEventListener(type, listener)` call adds a *new* listener — calling it again on the same element without `removeEventListener` or `{ once: true }` stacks duplicates and fires the handler multiple times. A `MutationObserver` callback that does `el.addEventListener('click', handler)` on every mutation will double-bind each re-observed node.
 
 ```javascript
 // Wrong — duplicates on every mutation
@@ -377,7 +377,7 @@ Source: MDN `EventTarget.addEventListener()` — `once` option "listener should 
 
 ## Pitfall 9: Forgetting Error Handling
 
-Network requests and async operations can fail — handle **both** callback errors and promise rejections.
+Network requests and async operations can fail — handle **both** callback errors and promise rejections. (verified 2026-08-25 — https://wiki.greasespot.net/GM.xmlHttpRequest — onerror/ontimeout/timeout fields; https://violentmonkey.github.io/api/gm/#gm_xmlhttprequest)
 
 **Wrong:**
 ```javascript
@@ -475,7 +475,7 @@ function process() { ... }  // Private to script
 
 **Recommendation:** Use `let`/`const` always. Reserve IIFE as the primary defense for `@grant none` (page context) and as defense-in-depth elsewhere.
 
-> **jQuery / `@require` global conflicts (verified 2026-08-24):** `@require https://cdn.example.com/jquery.js` executes *before* your script inside the manager sandbox, defining `$`/`jQuery` only in that sandbox (VM docs: "Require another script to execute before the current one" — https://violentmonkey.github.io/api/metadata-block/). With a sandbox (`any @grant`), the page's own jQuery is isolated via `unsafeWindow`/`wrappedJSObject` and `$` does not collide. With `@grant none` (no sandbox) your `@require`'d jQuery *does* pollute `window` and collides with the page's version.
+> **jQuery / `@require` global conflicts (verified 2026-08-25 — VM docs https://violentmonkey.github.io/api/metadata-block/#require — "Require another script to execute before the current one"; sandbox isolation via @grant — https://violentmonkey.github.io/api/metadata-block/#grant):** `@require https://cdn.example.com/jquery.js` executes *before* your script inside the manager sandbox, defining `$`/`jQuery` only in that sandbox. With a sandbox (`any @grant`), the page's own jQuery is isolated via `unsafeWindow`/`wrappedJSObject` and `$` does not collide. With `@grant none` (no sandbox) your `@require`'d jQuery *does* pollute `window` and collides with the page's version.
 >
 > ```javascript
 > // @grant GM_getValue          // sandboxed — $ is isolated, no conflict
@@ -535,7 +535,7 @@ onReady(() => {
 | GM4+ | `document-end` | `document-start` / `document-end` (no `document-body`, no `document-idle`) |
 | Safari Userscripts | `document-end` | `document-start` / `document-end` (ignores `document-body`) |
 
-**Robust pattern:** Always declare `@run-at` explicitly to match intent, and guard DOM access with `readyState` check or `waitForElement` — don't assume the default matches your timing need.
+**Robust pattern:** Always declare `@run-at` explicitly to match intent, and guard DOM access with `readyState` check or `waitForElement` — don't assume the default matches your timing need. (verified 2026-08-25 — TM default `document-idle` — https://www.tampermonkey.net/documentation.php?locale=en&q=run_at; VM default `document-end` + `document-start` body-null note — https://violentmonkey.github.io/api/metadata-block/#run-at; MDN readyState — https://developer.mozilla.org/en-US/docs/Web/API/Document/readyState)
 
 ---
 
@@ -547,7 +547,7 @@ Conflating browser and manager responsibilities causes subtle bugs. Cross-manage
 
 **Diagnostic:** Identify the manager + browser + manifest combo you tested vs the target. Check: `typeof GM_webRequest`, `typeof cloneInto`/`exportFunction`, `GM_info.scriptHandler` only as last resort — prefer capability checks (`typeof GM !== 'undefined' && GM.getValues`).
 
-**Fix pointer:** See [manager-compat.md](manager-compat.md) — section “Tier-1 Portable Baseline — Cross-Manager Divergences” for the per-manager matrix and guarded code patterns; apply the fix there, not by branching on `scriptHandler`.
+**Fix pointer:** See [manager-compat.md](manager-compat.md) — section “Tier-1 Portable Baseline — Cross-Manager Divergences” for the per-manager matrix and guarded code patterns; apply the fix there, not by branching on `scriptHandler`. (verified 2026-08-25 — section title matches manager-compat.md `## Tier-1 Portable Baseline — Cross-Manager Divergences`)
 
 ---
 
@@ -606,7 +606,7 @@ Before deploying, also verify:
 
 > **Manager-specific note:** This pitfall is specific to Tampermonkey. Greasemonkey and Violentmonkey have not (at time of writing) introduced the same per-site injection permission requirement.
 
-Tampermonkey v5.4.1+ requires explicit user permission to inject scripts into pages.
+Tampermonkey v5.4.1+ requires explicit user permission to inject scripts into pages. UNVERIFIED (2026-08-25) — no primary Tampermonkey 5.4.1 changelog entry found at https://www.tampermonkey.net/changelog.php for per-site injection permission; MV3 host_permissions model is generic — version-specific claim awaits primary source
 
 **Symptom:** Script was working, stopped after Tampermonkey updated.
 

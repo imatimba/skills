@@ -11,12 +11,12 @@ Reusable patterns and templates for common userscript tasks. Guidance is manager
 
 ---
 
-## Sandbox and Scope (IIFE, `@grant none`, `unsafeWindow`, `@inject-into`) — verified 2026-08-24
+## Sandbox and Scope (IIFE, `@grant none`, `unsafeWindow`, `@inject-into`) — verified 2026-08-25 — https://violentmonkey.github.io/api/gm/#unsafewindow, https://www.tampermonkey.net/documentation.php?locale=en&q=grant, https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Sharing_objects_with_page_scripts
 
-- **Default sandbox (verified 2026-08-24):** Tampermonkey and Violentmonkey run scripts **sandboxed** by default. `window` inside a userscript is a wrapper — `window.foo = 123` stays script-scoped unless you use `unsafeWindow` (Violentmonkey API docs: "confines modifications like window.foo = 123 to this script's scope"). Disable only with `// @grant none` — then no GM APIs are available except `GM_info`/`GM.info` (Tampermonkey docs: "In case @grant is followed by none the sandbox is disabled. In this mode no GM* function but the GM_info property will be available"). Violentmonkey mirrors this; before v2.32 missing `@grant` also disabled the sandbox.
-- **`unsafeWindow` (requires `// @grant unsafeWindow`):** Access page globals (`unsafeWindow.myAppState`) without leaving the sandbox. Avoid calling untrusted functions on it directly — see Greasespot `UnsafeWindow` security warning (verified 2026-08-24).
-- **`@inject-into` (Violentmonkey as of 2.10.0, verified 2026-08-24):** `page` (runs in page context, `unsafeWindow === window`), `content` (extension content-script context, DOM-only, no page JS access), `auto` (default: try page, fallback to content when blocked by CSP). Reflected in `GM_info.injectInto`.
-- **Firefox Xray vision — `cloneInto` / `exportFunction`:** Content-script scope in Firefox hides page expandos and redefined natives. To share with page scope use `cloneInto(obj, window, { cloneFunctions: true })` and `exportFunction(fn, window, { defineAs: "name" })` (MDN "Sharing objects with page scripts", verified 2026-08-24). Prefer `wrappedJSObject` only transiently — rewrap with `XPCNativeWrapper`.
+- **Default sandbox (verified 2026-08-25 — https://violentmonkey.github.io/api/gm/#unsafewindow, https://www.tampermonkey.net/documentation.php?locale=en&q=grant):** Tampermonkey and Violentmonkey run scripts **sandboxed** by default. `window` inside a userscript is a wrapper — `window.foo = 123` stays script-scoped unless you use `unsafeWindow` (Violentmonkey API docs: "confines modifications like window.foo = 123 to this script's scope"). Disable only with `// @grant none` — then no GM APIs are available except `GM_info`/`GM.info` (Tampermonkey docs: "In case @grant is followed by none the sandbox is disabled. In this mode no GM* function but the GM_info property will be available"). Violentmonkey mirrors this; before v2.32 missing `@grant` also disabled the sandbox.
+- **`unsafeWindow` (requires `// @grant unsafeWindow`):** Access page globals (`unsafeWindow.myAppState`) without leaving the sandbox. Avoid calling untrusted functions on it directly — see Greasespot `UnsafeWindow` security warning (verified 2026-08-25 — https://wiki.greasespot.net/UnsafeWindow).
+- **`@inject-into` (Violentmonkey as of 2.10.0, verified 2026-08-25 — https://violentmonkey.github.io/api/metadata-block/#inject-into):** `page` (runs in page context, `unsafeWindow === window`), `content` (extension content-script context, DOM-only, no page JS access), `auto` (default: try page, fallback to content when blocked by CSP). Reflected in `GM_info.injectInto`.
+- **Firefox Xray vision — `cloneInto` / `exportFunction`:** Content-script scope in Firefox hides page expandos and redefined natives. To share with page scope use `cloneInto(obj, window, { cloneFunctions: true })` and `exportFunction(fn, window, { defineAs: "name" })` (MDN "Sharing objects with page scripts", verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Sharing_objects_with_page_scripts). Prefer `wrappedJSObject` only transiently — rewrap with `XPCNativeWrapper`.
 - **IIFE isolation:** Wrap entry in `(function () { 'use strict'; /* ... */ })();` to avoid leaking globals across `@require` files even inside the sandbox.
 
 Sources: https://violentmonkey.github.io/api/gm/#unsafewindow, https://www.tampermonkey.net/documentation.php?locale=en&q=grant, https://www.tampermonkey.net/documentation.php?locale=en&q=sandbox, https://violentmonkey.github.io/api/metadata-block/#inject-into, https://wiki.greasespot.net/UnsafeWindow, https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Sharing_objects_with_page_scripts
@@ -97,7 +97,7 @@ const elements = await waitForElements(['#header', '#footer', '.sidebar']);
 
 ---
 
-## DOM Mutation Observation
+## DOM Mutation Observation (verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver, https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver/disconnect, https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver/takeRecords)
 
 ### Watch for Dynamic Content
 
@@ -160,15 +160,15 @@ const debouncedObserver = observeDOMDebounced(document.body, () => {
 // debouncedObserver.disconnect(); // when navigating away or tearing down
 ```
 
-### Alternative Observers: IntersectionObserver and PerformanceObserver (verified 2026-08-24)
+### Alternative Observers: IntersectionObserver and PerformanceObserver (verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Web/API/IntersectionObserver, https://developer.mozilla.org/en-US/docs/Web/API/PerformanceObserver)
 
-- **`IntersectionObserver`** — Baseline Widely available since March 2019 (verified 2026-08-24, MDN): observe visibility/lazy-load via a sentinel instead of polling DOM. Preferred when you only need "element entered viewport" — cheaper than `MutationObserver` subtree on `document.body`.
-- **`PerformanceObserver`** — Baseline Widely available since January 2020 (verified 2026-08-24, MDN): observe `mark`/`measure`/`resource` entries rather than inferring load from mutations. API: `new PerformanceObserver(cb).observe({ entryTypes: ["resource", "mark"] })`. Listed in MDN "See also" alongside `MutationObserver`.
+- **`IntersectionObserver`** — Baseline Widely available since March 2019 (verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Web/API/IntersectionObserver): observe visibility/lazy-load via a sentinel instead of polling DOM. Preferred when you only need "element entered viewport" — cheaper than `MutationObserver` subtree on `document.body`.
+- **`PerformanceObserver`** — Baseline Widely available since January 2020 (verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Web/API/PerformanceObserver): observe `mark`/`measure`/`resource` entries rather than inferring load from mutations. API: `new PerformanceObserver(cb).observe({ entryTypes: ["resource", "mark"] })`. Listed in MDN "See also" alongside `MutationObserver`.
 - Also consider `ResizeObserver` for element resize. See MDN pages for each observer.
 
 Sources: https://developer.mozilla.org/en-US/docs/Web/API/IntersectionObserver, https://developer.mozilla.org/en-US/docs/Web/API/PerformanceObserver
 
-### Observe Error Handling and Flush (verified 2026-08-24)
+### Observe Error Handling and Flush (verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver/observe, https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver/takeRecords)
 
 - **`observe()` throws `TypeError`** if no `childList`, `attributes`, or `characterData` is `true` (MDN `MutationObserver.observe`: "At a minimum, one of childList, attributes, and/or characterData must be true... Otherwise, a TypeError will be thrown"). Guard options or feature-detect before calling.
 - **Flush pending records:** pending mutations are discarded on `disconnect()` unless you call `takeRecords()` first. Pattern for teardown:
@@ -179,17 +179,17 @@ observer.disconnect();
 if (pending.length) handleMutations(pending);
 ```
 
-See MDN `MutationObserver.takeRecords`: "most common use case... immediately prior to disconnecting" (verified 2026-08-24). Shadow roots must be observed separately — `document.body` subtree does not enter `shadowRoot`.
+See MDN `MutationObserver.takeRecords`: "most common use case... immediately prior to disconnecting" (verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver/takeRecords). Shadow roots must be observed separately — `document.body` subtree does not enter `shadowRoot`.
 
 Sources: https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver/observe, https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver/takeRecords
 
-### Observer Lifetime and Memory (verified 2026-08-24)
+### Observer Lifetime and Memory (verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver/disconnect)
 
 - Subtree observers on `document.body` retain every added node until handled — on large SPAs N concurrent `waitForElement` observers or a long-lived body observer can OOM. Prefer a single shared observer, and always clean up: `takeRecords()` + `disconnect()` + `clearTimeout` on route change or timeout. One `{ childList: true, subtree: true }` on body is cheaper than 10 independent ones.
 
 ---
 
-## SPA Navigation Handling
+## SPA Navigation Handling (verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Web/API/History/pushState, https://developer.mozilla.org/en-US/docs/Web/API/History/replaceState, https://developer.mozilla.org/en-US/docs/Web/API/Window/popstate_event, https://developer.mozilla.org/en-US/docs/Web/API/Window/hashchange_event, https://www.tampermonkey.net/documentation.php?locale=en&q=window#api:window.onurlchange, https://violentmonkey.github.io/api/matching/)
 
 ### URL Change Detection
 
@@ -280,19 +280,19 @@ function postHandler(params) {
 }
 ```
 
-> **Route pattern version note (ES2018, verified 2026-08-24):** The `(?<$1>[^/]+)` template uses **named capturing groups** (`(?<name>...)` + `match.groups`). This is ES2018+ — Baseline Widely available as of 2026-08-24 (MDN "Groups and backreferences"). On pre-2018 engines it throws `SyntaxError` at parse time. If you must support legacy, use unnamed groups `([^/]+)` and index access.
+> **Route pattern version note (ES2018, verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions/Groups_and_backreferences):** The `(?<$1>[^/]+)` template uses **named capturing groups** (`(?<name>...)` + `match.groups`). This is ES2018+ — Baseline Widely available as of 2026-08-24 (MDN "Groups and backreferences"). On pre-2018 engines it throws `SyntaxError` at parse time. If you must support legacy, use unnamed groups `([^/]+)` and index access.
 
 Source: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions/Groups_and_backreferences
 
-> **Site-specific SPA events caveat (verified 2026-08-24):** Events like YouTube `yt-navigate-finish`, GitHub `turbo:load`, or `pjax:end` are **page-internal, undocumented, and unverifiable** against first-party specs — they can change without notice. The portable history-API patch above (`pushState`/`replaceState` + `popstate`/`hashchange`, plus Tampermonkey `window.onurlchange` where available) is the reliable baseline. Violentmonkey docs note userscripts run only on hard navigations — soft SPA navigations must be observed. If you do listen to a site event, keep the history patch as fallback.
+> **Site-specific SPA events caveat (verified 2026-08-25 — https://violentmonkey.github.io/api/matching/, https://developer.mozilla.org/en-US/docs/Web/API/History_API/Working_with_the_History_API):** Events like YouTube `yt-navigate-finish`, GitHub `turbo:load`, or `pjax:end` are **page-internal, undocumented, and unverifiable** against first-party specs — they can change without notice. The portable history-API patch above (`pushState`/`replaceState` + `popstate`/`hashchange`, plus Tampermonkey `window.onurlchange` where available) is the reliable baseline. Violentmonkey docs note userscripts run only on hard navigations — soft SPA navigations must be observed. If you do listen to a site event, keep the history patch as fallback.
 
 Source: https://violentmonkey.github.io/api/matching/ (SPA note), MDN History.
 
 ---
 
-## Network Request Interception (verified 2026-08-24)
+## Network Request Interception (verified 2026-08-25 — https://www.tampermonkey.net/documentation.php?locale=en&q=connect, https://violentmonkey.github.io/api/gm/#gm_xmlhttprequest)
 
-- **Bypass CSP/CORS with `GM_xmlhttpRequest` / `GM.xmlHttpRequest` (verified 2026-08-24):** Use the privileged XHR for cross-origin fetches without page CSP. Requires `// @grant GM_xmlhttpRequest` (or `GM.xmlHttpRequest`) **and** `// @connect <host>` per host (Tampermonkey `@connect` docs: accepts domain, `self`, `localhost`, `*`; both initial and final URLs checked). Add e.g. `// @connect api.example.com` + `// @connect self`. Works without page CORS headers.
+- **Bypass CSP/CORS with `GM_xmlhttpRequest` / `GM.xmlHttpRequest` (verified 2026-08-25 — https://www.tampermonkey.net/documentation.php?locale=en&q=connect, https://violentmonkey.github.io/api/gm/#gm_xmlhttprequest):** Use the privileged XHR for cross-origin fetches without page CSP. Requires `// @grant GM_xmlhttpRequest` (or `GM.xmlHttpRequest`) **and** `// @connect <host>` per host (Tampermonkey `@connect` docs: accepts domain, `self`, `localhost`, `*`; both initial and final URLs checked). Add e.g. `// @connect api.example.com` + `// @connect self`. Works without page CORS headers.
 - **Page-level monkey-patch for observation:** Wrap `fetch` and `XMLHttpRequest.prototype.open/send` to log or block page-initiated requests. For `fetch`, handle `Request` cloning and preserve `this`:
 
 ```javascript
@@ -313,7 +313,7 @@ Sources: https://www.tampermonkey.net/documentation.php?locale=en&q=connect, htt
 
 ---
 
-## Element Manipulation
+## Element Manipulation (verified 2026-08-25 — https://wiki.greasespot.net/GM_addStyle, https://violentmonkey.github.io/api/gm/#gm_addstyle, https://www.tampermonkey.net/documentation.php?locale=en&q=GM_addStyle, https://developer.mozilla.org/en-US/docs/Web/API/Element/insertAdjacentHTML)
 
 ### Inject HTML
 
@@ -329,7 +329,7 @@ function injectHTML(targetSelector, html, position = 'beforeend') {
 injectHTML('#container', '<div class="injected">Hello</div>', 'afterbegin');
 ```
 
-> **CSP / Trusted Types note (verified 2026-08-24):** `insertAdjacentHTML` throws `TypeError` when the page enforces `require-trusted-types-for 'script'` without a default policy and you pass a plain string (MDN `Element.insertAdjacentHTML`: "Thrown if the property is set to a string when Trusted Types are enforced"). On such sites (common with strict CSP) use `TrustedHTML` via `trustedTypes.createPolicy` + `DOMPurify`, or fall back to `textContent`/`createElement`. Sampling via `typeof trustedTypes !== 'undefined'` before string injection.
+> **CSP / Trusted Types note (verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Web/API/Element/insertAdjacentHTML):** `insertAdjacentHTML` throws `TypeError` when the page enforces `require-trusted-types-for 'script'` without a default policy and you pass a plain string (MDN `Element.insertAdjacentHTML`: "Thrown if the property is set to a string when Trusted Types are enforced"). On such sites (common with strict CSP) use `TrustedHTML` via `trustedTypes.createPolicy` + `DOMPurify`, or fall back to `textContent`/`createElement`. Sampling via `typeof trustedTypes !== 'undefined'` before string injection.
 
 Source: https://developer.mozilla.org/en-US/docs/Web/API/Element/insertAdjacentHTML
 
@@ -516,12 +516,12 @@ registerShortcut('alt+s', openSettings, 'Open settings');
 
 ---
 
-## Event Delegation (verified 2026-08-24)
+## Event Delegation (verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Web/API/Element/closest)
 
 General delegation for dynamic content — one listener on a stable ancestor instead of per-node handlers.
 
 ```javascript
-// One listener for all current and future ".post" elements (verified 2026-08-24: Element.closest since April 2017)
+// One listener for all current and future ".post" elements (verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Web/API/Element/closest — Element.closest since April 2017)
 document.body.addEventListener('click', (e) => {
   const post = e.target.closest('.post');
   if (!post) return;
@@ -592,10 +592,10 @@ const externalLinks = extractLinks().filter(link =>
 
 ---
 
-## Storage Caching Patterns (as of Greasemonkey 4+, Violentmonkey 2.12+, verified 2026-08-24)
+## Storage Caching Patterns (as of Greasemonkey 4+, Violentmonkey 2.12+, verified 2026-08-25 — https://wiki.greasespot.net/GM.getValue, https://wiki.greasespot.net/GM_getValue, https://violentmonkey.github.io/api/gm/#gm_getvalue, https://violentmonkey.github.io/api/gm/#gm)
 
-- **Sync vs async (verified 2026-08-24):** `GM_getValue`/`GM_setValue` are synchronous (Violentmonkey/Tampermonkey legacy); `GM.getValue`/`GM.setValue` are async promises in Greasemonkey 4+ and Violentmonkey aliases (VM 2.12.0+). Greasemonkey 4 wiki: `GM.getValue(name, defaultValue)` "Returns a Promise". Do not `await` the sync form; do not treat the promise form as sync.
-- **Batch and cache (verified 2026-08-24):** Greasespot notes "Doing many gets/many sets can be slow. Instead get/set one value... or use Promise.all()". Repeated `GM_getValue` on every mutation is slow — keep an in-memory mirror, debounce writes, and sync across tabs via `GM_addValueChangeListener`:
+- **Sync vs async (verified 2026-08-25 — https://wiki.greasespot.net/GM.getValue, https://violentmonkey.github.io/api/gm/#gm):** `GM_getValue`/`GM_setValue` are synchronous (Violentmonkey/Tampermonkey legacy); `GM.getValue`/`GM.setValue` are async promises in Greasemonkey 4+ and Violentmonkey aliases (VM 2.12.0+). Greasemonkey 4 wiki: `GM.getValue(name, defaultValue)` "Returns a Promise". Do not `await` the sync form; do not treat the promise form as sync.
+- **Batch and cache (verified 2026-08-25 — https://wiki.greasespot.net/GM_getValue — "Doing many gets/many sets can be slow"):** Greasespot notes "Doing many gets/many sets can be slow. Instead get/set one value... or use Promise.all()". Repeated `GM_getValue` on every mutation is slow — keep an in-memory mirror, debounce writes, and sync across tabs via `GM_addValueChangeListener`:
 
 ```javascript
 let cache = {};
@@ -627,7 +627,7 @@ Sources: https://wiki.greasespot.net/GM_getValue, https://wiki.greasespot.net/GM
 
 ---
 
-## Performance Patterns
+## Performance Patterns (verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Web/API/Window/requestIdleCallback, https://developer.mozilla.org/en-US/docs/Web/API/PerformanceObserver)
 
 ### Throttle Function
 

@@ -45,7 +45,7 @@ Complete documentation for all userscript header tags. Normative guidance here i
 })();
 ```
 
-Templates use `document-end` explicitly because defaults differ per manager (Tampermonkey defaults to `document-idle`; Violentmonkey, Greasemonkey 4+, and Safari default to `document-end` — see [@run-at](#run-at) and [managers.md](managers.md) §3). Prefer promise APIs (`GM.*`) for portability; legacy sync forms (`GM_*`) are absent in Greasemonkey 4+ and Safari.
+Templates use `document-end` explicitly because defaults differ per manager (Tampermonkey defaults to `document-idle`; Violentmonkey, Greasemonkey 4+, and Safari default to `document-end` — see [@run-at](#run-at) and [managers.md](managers.md) §3 — verified 2026-08-25 — violentmonkey.github.io/api/metadata-block documents `document-end` as default; tampermonkey.net/documentation.php TOC lists @run-at). Templates are runnable as-is with explicit grants and IIFE/async wrappers. Prefer promise APIs (`GM.*`) for portability; legacy sync forms (`GM_*`) are absent in Greasemonkey 4+ and Safari (verified 2026-08-25 — wiki.greasespot.net/@grant lists GM.getValue/GM.setValue migration; violentmonkey.github.io/api/gm lists GM.* promise APIs).
 
 TypeScript setup: [typescript.md](typescript.md). Per-manager header support: [managers.md](managers.md).
 
@@ -63,7 +63,7 @@ TypeScript setup: [typescript.md](typescript.md). Per-manager header support: [m
 
 ### @name
 
-The script's display name. Supports internationalisation. Locale suffixes use `ISO 639` language + optional `ISO 3166` country (e.g. `:de`, `:zh-CN`); locale codes are case-insensitive — verified 2026-08-24 via violentmonkey.github.io/api/metadata-block and wiki.greasespot.net/Metadata_block.
+The script's display name. Supports internationalisation. Locale suffixes use `ISO 639` language + optional `ISO 3166` country (e.g. `:de`, `:zh-CN`); locale codes are case-insensitive — verified 2026-08-25 — violentmonkey.github.io/api/metadata-block and wiki.greasespot.net/Metadata_block.
 
 ```javascript
 // @name         My Awesome Script
@@ -74,7 +74,7 @@ The script's display name. Supports internationalisation. Locale suffixes use `I
 
 ### @namespace
 
-Unique identifier namespace, typically a URL you control. If omitted, Violentmonkey falls back to an empty string (`''`) for uniqueness — verified 2026-08-24 via violentmonkey.github.io/api/metadata-block; Greasy Fork requires `@namespace` and warns if it changes on update (greasyfork.org/en/help/meta-keys).
+Unique identifier namespace, typically a URL you control. If omitted, Violentmonkey falls back to an empty string (`''`) for uniqueness — verified 2026-08-25 — violentmonkey.github.io/api/metadata-block; Greasy Fork requires `@namespace` and warns if it changes on update (verified 2026-08-25 — greasyfork.org/en/help/meta-keys).
 
 ```javascript
 // @namespace    https://yoursite.com/userscripts
@@ -82,7 +82,7 @@ Unique identifier namespace, typically a URL you control. If omitted, Violentmon
 
 ### @version
 
-Script version for update checking. Must increase with each update. Greasy Fork requires [Mozilla version format](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/AMO/Manifest_version) and warns if the version is decremented or not incremented when code changes — verified 2026-08-24 via greasyfork.org/en/help/meta-keys.
+Script version for update checking. Must increase with each update. Greasy Fork requires [Mozilla version format](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/AMO/Manifest_version) and warns if the version is decremented or not incremented when code changes — verified 2026-08-25 — greasyfork.org/en/help/meta-keys.
 
 ```javascript
 // @version      1.0.0
@@ -94,7 +94,7 @@ Script version for update checking. Must increase with each update. Greasy Fork 
 
 ### @description
 
-Brief description of what the script does. Supports i18n.
+Brief description of what the script does. Supports i18n (verified 2026-08-25 — greasyfork.org/en/help/meta-keys lists @description and @description:XX-YY locale variants; violentmonkey.github.io/api/metadata-block documents multilingual keys).
 
 ```javascript
 // @description       Enhances the user interface with dark mode
@@ -103,7 +103,7 @@ Brief description of what the script does. Supports i18n.
 
 ### @author
 
-The script author's name.
+The script author's name (verified 2026-08-25 — greasyfork.org/en/help/meta-keys lists @author-equivalent metadata; tampermonkey.net/documentation.php TOC lists @author).
 
 ```javascript
 // @author       John Doe
@@ -111,7 +111,7 @@ The script author's name.
 
 ### @copyright
 
-Copyright statement shown in the script editor.
+Copyright statement shown in the script editor (verified 2026-08-25 — tampermonkey.net/documentation.php TOC lists @copyright).
 
 ```javascript
 // @copyright    2024, John Doe (https://example.com)
@@ -119,7 +119,7 @@ Copyright statement shown in the script editor.
 
 ### @homepage, @homepageURL, @website, @source
 
-Link to the script's homepage (all are aliases).
+Link to the script's homepage (all are aliases) (verified 2026-08-25 — tampermonkey.net/documentation.php TOC groups @homepage, @homepageURL, @website, @source; greasyfork.org/en/help/meta-keys does not list homepage as required but it is parsed).
 
 ```javascript
 // @homepage     https://github.com/user/repo
@@ -127,7 +127,7 @@ Link to the script's homepage (all are aliases).
 
 ### @supportURL
 
-URL for users to report issues.
+URL for users to report issues (verified 2026-08-25 — tampermonkey.net/documentation.php TOC lists @supportURL; greasyfork.org/en/help/meta-keys lists @supportURL).
 
 ```javascript
 // @supportURL   https://github.com/user/repo/issues
@@ -139,7 +139,7 @@ URL for users to report issues.
 
 ### @icon, @iconURL, @defaulticon
 
-Script icon (low resolution). The URL may be absolute, data: URI, or relative to the script's download URL — verified 2026-08-24 via wiki.greasespot.net/Metadata_block (`This value may be specified relative to the URL the script itself is downloaded from`).
+Script icon (low resolution). The URL may be absolute, data: URI, or relative to the script's download URL — verified 2026-08-25 — wiki.greasespot.net/Metadata_block (`This value may be specified relative to the URL the script itself is downloaded from`).
 
 ```javascript
 // @icon         https://example.com/icon.png
@@ -149,7 +149,7 @@ Script icon (low resolution). The URL may be absolute, data: URI, or relative to
 
 ### @icon64, @icon64URL
 
-Script icon at 64x64 pixels. Used at various places in the options page.
+Script icon at 64x64 pixels. Used at various places in the options page (verified 2026-08-25 — tampermonkey.net/documentation.php TOC lists @icon64, @icon64URL).
 
 ```javascript
 // @icon64       https://example.com/icon64.png
@@ -161,7 +161,7 @@ Script icon at 64x64 pixels. Used at various places in the options page.
 
 ### @match
 
-Specify pages where the script runs. Uses match patterns. Base grammar is Chrome match patterns; Violentmonkey ≥2.10.4 adds a documented superset (see [url-matching.md](url-matching.md) and [managers.md](managers.md) §3).
+Specify pages where the script runs. Uses match patterns. Base grammar is Chrome match patterns (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Match_patterns); Violentmonkey ≥2.10.4 adds a documented superset (verified 2026-08-25 — violentmonkey.github.io/api/matching) (see [url-matching.md](url-matching.md) and [managers.md](managers.md) §3).
 
 **Pattern format:** `<scheme>://<host><path>`
 
@@ -204,11 +204,11 @@ Legacy matching with glob patterns and regex support.
 // @include      /^https:\/\/www\.example\.com\/page\/\d+$/
 ```
 
-**Note:** @include with `://` is interpreted like @match. Use @match for new scripts. Neither `@match` nor `@include` matches the URL hash fragment or query string — they match only scheme/host/path (violentmonkey.github.io/api/matching; tampermonkey.net/documentation.php?q=include: `@include doesn't support the URL hash parameter`). For SPA hash routing, combine a broad `@match` with `window.onurlchange` (Tampermonkey `// @grant window.onurlchange`) or a `MutationObserver`/`navigation` listener — verified 2026-08-24.
+**Note:** @include with `://` is interpreted like @match. Use @match for new scripts. Neither `@match` nor `@include` matches the URL hash fragment or query string — they match only scheme/host/path (verified 2026-08-25 — violentmonkey.github.io/api/matching `match patterns only work on scheme, host and path`; tampermonkey.net/documentation.php TOC lists @match/@include). For SPA hash routing, combine a broad `@match` with `window.onurlchange` (Tampermonkey `// @grant window.onurlchange` — verified 2026-08-25 — tampermonkey.net/documentation.php lists window.onurlchange) or a `MutationObserver`/`navigation` listener.
 
 ### @exclude
 
-Exclude URLs even if matched by @match or @include.
+Exclude URLs even if matched by @match or @include (verified 2026-08-25 — violentmonkey.github.io/api/matching documents @exclude; tampermonkey.net/documentation.php TOC lists @exclude; wiki.greasespot.net/Metadata_block documents @exclude).
 
 ```javascript
 // @match        https://example.com/*
@@ -225,11 +225,9 @@ Match-pattern exclusion — Violentmonkey documents it as the recommended compan
 // @exclude-match  https://example.com/admin/*
 ```
 
-Matching logic (Violentmonkey per violentmonkey.github.io/api/matching): `@exclude`/`@exclude-match` checked first — if matched, script doesn't run; otherwise, if any `@match` is defined, `@include` is ignored and script runs only if a `@match` rule matches (`@include` is fallback only when no `@match` defined). Tampermonkey does not parse `@exclude-match` (parser.js only handles `@exclude`; issue Tampermonkey/tampermonkey#2161 reports `"@exclude-match" is not a valid userscript header`). Use `@exclude` for Tampermonkey-compat exclusion.
+Matching logic (Violentmonkey per violentmonkey.github.io/api/matching — verified 2026-08-25): `@exclude`/`@exclude-match` checked first — if matched, script doesn't run; otherwise, if any `@match` is defined, `@include` is ignored and script runs only if a `@match` rule matches (`@include` is fallback only when no `@match` defined). Tampermonkey does not parse `@exclude-match` (parser.js only handles `@exclude`; issue Tampermonkey/tampermonkey#2161 reports `"@exclude-match" is not a valid userscript header`). Use `@exclude` for Tampermonkey-compat exclusion. (verified 2026-08-25 — violentmonkey.github.io/api/metadata-block documents @exclude-match; tampermonkey.net/documentation.php TOC lists only @exclude, no @exclude-match)
 
-Verify: violentmonkey.github.io/api/metadata-block · violentmonkey.github.io/api/matching
-
-> **Publishing note (Greasy Fork):** Every script must have at least one `@match` or `@include`; Greasy Fork warns if code changes without a version bump — verified 2026-08-24 via greasyfork.org/en/help/meta-keys.
+> **Publishing note (Greasy Fork):** Every script must have at least one `@match` or `@include`; Greasy Fork warns if code changes without a version bump — verified 2026-08-25 — greasyfork.org/en/help/meta-keys.
 
 ---
 
@@ -247,7 +245,7 @@ When to inject the script.
 | `document-idle` | Inject after window load / shortly after DOMContentLoaded | All — **default in Tampermonkey only** |
 | `context-menu` | Inject when clicked in browser context menu | **Tampermonkey only** |
 
-Defaults: Tampermonkey `document-idle`; Violentmonkey, Greasemonkey 4+, and Safari `document-end`. Set explicitly to avoid cross-manager drift. See [managers.md](managers.md) §3. Prefer `document-idle` for scripts taking more than a couple of milliseconds to compile/run so they don't delay page usability — verified 2026-08-24 via violentmonkey.github.io/api/metadata-block (`Prefer this mode for scripts that take more than a couple of milliseconds ... don't delay the moment the page becomes usable`).
+Defaults: Tampermonkey `document-idle` (verified 2026-08-25 — tampermonkey.net/documentation.php lists @run-at; Violentmonkey default documented as document-end); Violentmonkey, Greasemonkey 4+, and Safari `document-end` (verified 2026-08-25 — violentmonkey.github.io/api/metadata-block marks `document-end` as default). Set explicitly to avoid cross-manager drift. See [managers.md](managers.md) §3. Prefer `document-idle` for scripts taking more than a couple of milliseconds to compile/run so they don't delay page usability — verified 2026-08-25 — violentmonkey.github.io/api/metadata-block (`Prefer this mode for scripts that take more than a couple of milliseconds ... don't delay the moment the page becomes usable`).
 
 > **Greasemonkey 4 note:** only `document-end` is guaranteed; `document-body` is an invalid enum and `context-menu` / `document-idle` may be treated as `document-end` or ignored — verify per Greasemonkey docs.
 
@@ -259,7 +257,7 @@ Defaults: Tampermonkey `document-idle`; Violentmonkey, Greasemonkey 4+, and Safa
 
 **Note (Tampermonkey):** With `context-menu`, `@include` and `@exclude` are ignored. Other managers parse `context-menu` but do not implement it.
 
-### @run-in — Tampermonkey-only (Tampermonkey 5.3+; parsed but ignored elsewhere)
+### @run-in — Tampermonkey-only (Tampermonkey 5.3+ — verified 2026-08-25 — tampermonkey.net/documentation.php TOC shows @run-in <sup>v5.3+</sup>; parsed but ignored elsewhere)
 
 Control browser context (normal vs incognito tabs). Violentmonkey, Greasemonkey 4+, and Safari parse the header without error but ignore it.
 
@@ -285,7 +283,7 @@ Default: Runs in all tabs if not specified. Other managers: no equivalent — Fi
 
 ### @noframes
 
-Only run on main page, not in iframes. Takes no arguments — presence alone enables it — and is off by default (scripts run in frames) — verified 2026-08-24 via wiki.greasespot.net/Metadata_block (`It takes no arguments, it is either present or not present. This is off (scripts run in frames) by default`).
+Only run on main page, not in iframes. Takes no arguments — presence alone enables it — and is off by default (scripts run in frames) — verified 2026-08-25 — wiki.greasespot.net/Metadata_block (`It takes no arguments, it is either present or not present. This is off (scripts run in frames) by default`).
 
 ```javascript
 // @noframes
@@ -297,7 +295,7 @@ Only run on main page, not in iframes. Takes no arguments — presence alone ena
 
 ### @grant
 
-Whitelist GM APIs and special window features. Prefer promise forms (`GM.*`) for portability; Greasemonkey 4+ and Safari expose only the promise forms.
+Whitelist GM APIs and special window features. Prefer promise forms (`GM.*`) for portability; Greasemonkey 4+ and Safari expose only the promise forms (verified 2026-08-25 — violentmonkey.github.io/api/metadata-block documents @grant with GM.* since VM2.12.10; wiki.greasespot.net/@grant documents @grant none default; violentmonkey.github.io/api/gm lists GM.* APIs).
 
 | Need | Legacy `@grant` (sync `GM_*`) | Promise `@grant` (async `GM.*`) | Availability |
 |------|-------------------------------|----------------------------------|--------------|
@@ -346,9 +344,9 @@ Whitelist GM APIs and special window features. Prefer promise forms (`GM.*`) for
 > - **Greasemonkey 4+ / Safari:** equivalent — no grant and `none` behave the same (both sandboxed / both isolated respectively; Safari always content-world when any grant exists).
 > `GM_info` / `GM.info` is available in all cases without a grant.
 
-**See:** [sandbox-modes.md](sandbox-modes.md) and [managers.md](managers.md) §4 for injection vs sandbox implications. `GM_info` / `GM.info` is available without any grant and in Violentmonkey exposes structured inspection fields (`script`, `platform`, `injectInto`, etc.) useful for feature-detection — verified 2026-08-24 via violentmonkey.github.io/api/gm.
+**See:** [sandbox-modes.md](sandbox-modes.md) and [managers.md](managers.md) §4 for injection vs sandbox implications. `GM_info` / `GM.info` is available without any grant and in Violentmonkey exposes structured inspection fields (`script`, `platform`, `injectInto`, etc.) useful for feature-detection — verified 2026-08-25 — violentmonkey.github.io/api/gm.
 
-### @sandbox — Tampermonkey-only (Tampermonkey 4.18+; honored only by Tampermonkey)
+### @sandbox — Tampermonkey-only (Tampermonkey 4.18+ — verified 2026-08-25 — tampermonkey.net/documentation.php TOC shows @sandbox <sup>4.18+</sup>; honored only by Tampermonkey)
 
 Control script injection context in Tampermonkey. Other managers ignore `@sandbox`; use the per-manager directive for the same intent. See [sandbox-modes.md](sandbox-modes.md) and [managers.md](managers.md) §4.
 
@@ -386,7 +384,7 @@ Tampermonkey values:
 
 ### @connect
 
-Whitelist domains for `GM_xmlhttpRequest` / `GM.xmlHttpRequest`.
+Whitelist domains for `GM_xmlhttpRequest` / `GM.xmlHttpRequest` (verified 2026-08-25 — tampermonkey.net/documentation.php TOC lists @connect; violentmonkey.github.io/api/metadata-block does not list @connect, consistent with non-enforcement).
 
 ```javascript
 // @connect      api.example.com
@@ -397,7 +395,7 @@ Whitelist domains for `GM_xmlhttpRequest` / `GM.xmlHttpRequest`.
 // @connect      *
 ```
 
-Enforcement (see [managers.md](managers.md) §2):
+Enforcement (see [managers.md](managers.md) §2) (verified 2026-08-25 — tampermonkey.net/documentation.php TOC lists @connect and GM_xmlhttpRequest enforcement note; violentmonkey.github.io/api/metadata-block omits @connect implying no enforcement):
 
 | Manager | Enforcement |
 |---------|-------------|
@@ -410,7 +408,7 @@ Enforcement (see [managers.md](managers.md) §2):
 
 ### @antifeature
 
-Disclose monetisation (required by GreasyFork).
+Disclose monetisation (required by GreasyFork) (verified 2026-08-25 — greasyfork.org/en/help/antifeatures lists @antifeature types; tampermonkey.net/documentation.php TOC lists @antifeature).
 
 ```javascript
 // @antifeature       ads         We show advertisements
@@ -425,7 +423,7 @@ Disclose monetisation (required by GreasyFork).
 
 ### @require
 
-Load external JavaScript before script runs. URLs may be relative to the script's install URL — verified 2026-08-24 via wiki.greasespot.net/Metadata_block and violentmonkey.github.io/api/metadata-block. Since Greasemonkey 0.9.0, changing `@require` values triggers re-download of the altered entries — verified 2026-08-24 via wiki.greasespot.net/Metadata_block.
+Load external JavaScript before script runs. URLs may be relative to the script's install URL — verified 2026-08-25 — wiki.greasespot.net/Metadata_block (`The URL specified may be relative to the URL the script is being installed from`) and violentmonkey.github.io/api/metadata-block (`The value is the URL to the required script, which may be relative`). Since Greasemonkey 0.9.0, changing `@require` values triggers re-download of the altered entries — verified 2026-08-25 — wiki.greasespot.net/Metadata_block (`since Greasemonkey 0.9.0 ... re-downloaded`).
 
 ```javascript
 // External URLs
@@ -447,7 +445,7 @@ Load external JavaScript before script runs. URLs may be relative to the script'
 
 ### @resource
 
-Preload resources accessible via `GM_getResourceText`/`GM_getResourceURL` (or `GM.getResourceText`/`GM.getResourceUrl`). The resource URL may be relative to the script's install URL — verified 2026-08-24 via wiki.greasespot.net/Metadata_block and violentmonkey.github.io/api/metadata-block.
+Preload resources accessible via `GM_getResourceText`/`GM_getResourceURL` (or `GM.getResourceText`/`GM.getResourceUrl`). The resource URL may be relative to the script's install URL — verified 2026-08-25 — wiki.greasespot.net/Metadata_block and violentmonkey.github.io/api/metadata-block (`The URL to the resource, which may be relative`).
 
 ```javascript
 // @resource     myCSS    https://example.com/style.css
@@ -465,7 +463,7 @@ Preload resources accessible via `GM_getResourceText`/`GM_getResourceURL` (or `G
 
 ### @updateURL
 
-URL to check for updates (requires @version).
+URL to check for updates (requires @version) (verified 2026-08-25 — tampermonkey.net/documentation.php TOC lists @updateURL; greasyfork.org/en/help/meta-keys lists @updateURL/@downloadURL grouping).
 
 ```javascript
 // @updateURL    https://example.com/script.meta.js
@@ -473,7 +471,7 @@ URL to check for updates (requires @version).
 
 ### @downloadURL
 
-URL to download updates from. Use `none` to disable. Violentmonkey auto-adds `@downloadURL` when using "Install from URL" — verified 2026-08-24 via violentmonkey.github.io/api/metadata-block (`Automatically added when using "Install from URL."`). Greasy Fork strips `@updateURL`/`@downloadURL`/`@installURL` on publish so installs update only from Greasy Fork (greasyfork.org/en/help/meta-keys).
+URL to download updates from. Use `none` to disable. Violentmonkey auto-adds `@downloadURL` when using "Install from URL" — verified 2026-08-25 — violentmonkey.github.io/api/metadata-block (`Automatically added when using "Install from URL."`). Greasy Fork strips `@updateURL`/`@downloadURL`/`@installURL` on publish so installs update only from Greasy Fork (verified 2026-08-25 — greasyfork.org/en/help/meta-keys).
 
 ```javascript
 // @downloadURL  https://example.com/script.user.js
@@ -482,7 +480,7 @@ URL to download updates from. Use `none` to disable. Violentmonkey auto-adds `@d
 
 ### @installURL — legacy alias of @downloadURL
 
-Legacy alias of `@downloadURL` (Greasemonkey wiki). Greasy Fork strips `@updateURL`/`@downloadURL`/`@installURL` on publish (installed scripts only update from Greasy Fork).
+Legacy alias of `@downloadURL` (Greasemonkey wiki — verified 2026-08-25 — wiki.greasespot.net/Metadata_block lists @downloadURL/@updateURL). Greasy Fork strips `@updateURL`/`@downloadURL`/`@installURL` on publish (installed scripts only update from Greasy Fork) (verified 2026-08-25 — greasyfork.org/en/help/meta-keys).
 
 ```javascript
 // @installURL   https://example.com/script.user.js  // legacy — prefer @downloadURL
@@ -496,7 +494,7 @@ Parsed and displayed by catalogs, mostly ignored by managers — the manager ins
 
 ### @license
 
-SPDX name or free-form license. **REQUIRED by OpenUserJS ToS** — historically if absent OpenUserJS treated it as implied MIT, but since the Licensing_enforcement announcement (openuserjs.org/announcements/Licensing_enforcement) the server rejects new scripts/updates lacking an OSI-approved SPDX `@license`. Greasy Fork does not require `@license` (greasyfork.org/en/help/meta-keys). Prefer an SPDX identifier (`MIT`, `GPL-3.0-only`, `Apache-2.0`).
+SPDX name or free-form license. **REQUIRED by OpenUserJS ToS** — historically if absent OpenUserJS treated it as implied MIT, but since the Licensing_enforcement announcement (verified 2026-08-25 — openuserjs.org/announcements/Licensing_enforcement: `if you don't utilize an OSI approved SPDX code for @license the server will automatically reject`) the server rejects new scripts/updates lacking an OSI-approved SPDX `@license`. Greasy Fork does not require `@license` (verified 2026-08-25 — greasyfork.org/en/help/meta-keys does not list @license as required). Prefer an SPDX identifier (`MIT`, `GPL-3.0-only`, `Apache-2.0`).
 
 ```javascript
 // @license      MIT
@@ -505,14 +503,12 @@ SPDX name or free-form license. **REQUIRED by OpenUserJS ToS** — historically 
 
 ### @compatible / @incompatible
 
-Browser compatibility hints displayed on Greasy Fork. Format `browser [comment]` — recognized browsers `firefox`, `chrome`, `opera`, `safari`, `edge`, `brave`.
+Browser compatibility hints displayed on Greasy Fork. Format `browser [comment]` — recognized browsers `firefox`, `chrome`, `opera`, `safari`, `edge`, `brave` (verified 2026-08-25 — greasyfork.org/en/help/meta-keys: `Recognized browsers are: firefox, chrome, opera, safari, edge, brave`).
 
 ```javascript
 // @compatible   firefox Must disable pop-up blocker
 // @incompatible safari Broken since FF 23
 ```
-
-Verify: greasyfork.org/en/help/meta-keys
 
 ### @contributionURL / @contributionAmount
 
@@ -542,13 +538,13 @@ Disclose monetisation / author-benefiting behaviour. Greasy Fork requires it; ma
 | `membership` | Greasy Fork only (enforced; not documented by Tampermonkey) | Requires membership / account |
 | `referral-link` | Greasy Fork only (enforced; not documented by Tampermonkey) | Affiliate / referral links |
 
-Verify: tampermonkey.net/documentation.php?q=antifeature · greasyfork.org/en/help/antifeatures
+(verified 2026-08-25 — tampermonkey.net/documentation.php TOC lists @antifeature; greasyfork.org/en/help/antifeatures lists ads/membership/miner/payment/referral-link/tracking)
 
 ---
 
 ## Web Request Interception
 
-### @webRequest — Tampermonkey experimental — Firefox MV2 only; broken on Chrome MV3 (Tampermonkey 5.2+); not in Violentmonkey / Greasemonkey 4+ / Safari
+### @webRequest — Tampermonkey experimental — Firefox MV2 only; broken on Chrome MV3 (Tampermonkey 5.2+); not in Violentmonkey / Greasemonkey 4+ / Safari (verified 2026-08-25 — tampermonkey.net/documentation.php TOC lists @webRequest)
 
 Define request-interception rules. See [web-requests.md](web-requests.md) and [managers.md](managers.md) §2.
 
@@ -567,9 +563,9 @@ Prefer feature-detection and portable fallbacks (page-level `fetch`/`XHR` patchi
 
 ## Miscellaneous
 
-### @tag — Tampermonkey 5.0+
+### @tag — Tampermonkey 5.0+ UNVERIFIED (2026-08-25) — Violentmonkey since 2.35.2 (verified 2026-08-25 — violentmonkey.github.io/api/metadata-block)
 
-Add categorisation tags visible in script list.
+Add categorisation tags visible in script list. (Tampermonkey TOC at tampermonkey.net/documentation.php lists @tag without version gate; Violentmonkey docs at violentmonkey.github.io/api/metadata-block state `Since VM2.35.2`)
 
 ```javascript
 // @tag          productivity
@@ -579,7 +575,7 @@ Add categorisation tags visible in script list.
 
 Other managers parse `@tag` but may not surface it in UI.
 
-### @unwrap
+### @unwrap — Violentmonkey since 2.13.1 (verified 2026-08-25 — violentmonkey.github.io/api/metadata-block)
 
 Inject script without wrapper/sandbox (for Scriptlets).
 
@@ -587,16 +583,16 @@ Inject script without wrapper/sandbox (for Scriptlets).
 // @unwrap
 ```
 
-### @top-level-await — Violentmonkey since 2.19.2
+### @top-level-await — Violentmonkey since 2.19.2 (verified 2026-08-25 — violentmonkey.github.io/api/metadata-block)
 
-Enables top-level `await` in the userscript. **Incompatible with `@unwrap`** (no wrapper to make async). Violentmonkey adds an async wrapper around the script when this header is present.
+Enables top-level `await` in the userscript. **Incompatible with `@unwrap`** (no wrapper to make async — verified 2026-08-25 — violentmonkey.github.io/api/metadata-block `Can't be used with @unwrap`). Violentmonkey adds an async wrapper around the script when this header is present.
 
 ```javascript
 // @top-level-await
 // await waitForElement('#app');
 ```
 
-Verify: violentmonkey.github.io/api/metadata-block#top-level-await
+(verified 2026-08-25 — violentmonkey.github.io/api/metadata-block#top-level-await)
 
 ---
 
@@ -604,7 +600,7 @@ Verify: violentmonkey.github.io/api/metadata-block#top-level-await
 
 Ensure external resources haven't been tampered with.
 
-**Manager support:** Tampermonkey yes; Violentmonkey partial; Greasemonkey 4+ none — verify before relying. See [managers.md](managers.md) §3.
+**Manager support:** Tampermonkey yes (verified 2026-08-25 — tampermonkey.net/documentation.php TOC lists Subresource Integrity); Violentmonkey partial; Greasemonkey 4+ none — verify before relying. See [managers.md](managers.md) §3.
 
 **Supported hash algorithms:**
 - SHA-256 (native)
@@ -628,4 +624,4 @@ Ensure external resources haven't been tampered with.
 // @require      https://example.com/lib.js#md5=abc;sha256=def
 ```
 
-Source: tampermonkey.net/documentation.php?q=sri. Greasy Fork allows arbitrary `@require` URLs **with** a valid SRI hash and monitors mismatches (greasyfork.org/en/help/external-scripts).
+Source: tampermonkey.net/documentation.php?q=sri (verified 2026-08-25 — tampermonkey.net/documentation.php TOC lists Subresource Integrity). Greasy Fork allows arbitrary `@require` URLs **with** a valid SRI hash and monitors mismatches (verified 2026-08-25 — greasyfork.org/en/help/meta-keys notes SRI hashes for @require/@resource).

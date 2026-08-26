@@ -6,13 +6,13 @@ Documentation for `GM_xmlhttpRequest` / `GM.xmlHttpRequest` — cross-origin HTT
 
 ## Overview
 
-`GM_xmlhttpRequest` (callback) and `GM.xmlHttpRequest` (Promise form, Greasemonkey 4.0+) perform background fetches that bypass the page's same-origin/CORS and CSP `connect-src` restrictions. They are dispatched from the manager's background context — Tampermonkey docs: "GM_xmlhttpRequest is dispatched by Tampermonkey's background context" + "If you want to use this method then please also check the documentation about @connect"; wiki.greasespot.net: "allows these requests to cross the same origin policy boundaries"; Violentmonkey API index lists `GM_xmlhttpRequest` (verified 2026-08-24). Behaviour is **manager-neutral for core options**; extended options are manager-specific — see the support matrix below.
+`GM_xmlhttpRequest` (callback) and `GM.xmlHttpRequest` (Promise form, Greasemonkey 4.0+) perform background fetches that bypass the page's same-origin/CORS and CSP `connect-src` restrictions. They are dispatched from the manager's background context — Tampermonkey docs: "GM_xmlhttpRequest is dispatched by Tampermonkey's background context" + "If you want to use this method then please also check the documentation about @connect"; wiki.greasespot.net: "allows these requests to cross the same origin policy boundaries"; Violentmonkey API index lists `GM_xmlhttpRequest` (verified 2026-08-25 — violentmonkey.github.io/api/gm#gm_xmlhttprequest). Behaviour is **manager-neutral for core options**; extended options are manager-specific — see the support matrix below.
 
 Manager-neutral voice: every manager-specific option or version below is qualified with its owner (for example, "Tampermonkey build 6180+").
 
 ---
 
-## Background vs Page `fetch` — CORS, CSP & Credentials (verified 2026-08-24 — MDN + WHATWG Fetch Living Standard 2026-08-20)
+## Background vs Page `fetch` — CORS, CSP & Credentials (verified 2026-08-25 — MDN + WHATWG Fetch Living Standard)
 
 `GM_webRequest` blocks/redirects at the extension layer; `GM_xmlhttpRequest` background fetches skip page-level security checks (see contrast). Use this section when choosing between `GM_xmlhttpRequest` and page `fetch`/`XHR` via `unsafeWindow`.
 
@@ -21,14 +21,14 @@ Manager-neutral voice: every manager-specific option or version below is qualifi
 | CORS preflight | Required for non-simple requests | Skipped via background (no OPTIONS preflight) |
 | CSP `connect-src` | Enforced — `fetch()` "is controlled by the connect-src directive" (MDN fetch) | Bypassed — uses browser networking stack from background |
 | Forbidden headers (`Cookie`, `User-Agent`, `Referer`) | Blocked by browser | Allowed — Tampermonkey docs list `headers e.g. user-agent, referer, ...` and wiki example sets `User-Agent` |
-| `@connect` whitelist | N/A | **Required** — `@connect <domain>` / `@connect *` / `@connect self`; both initial and final URL are checked (TM docs `?q=connect`, verified 2026-08-24) |
+| `@connect` whitelist | N/A | **Required** — `@connect <domain>` / `@connect *` / `@connect self`; both initial and final URL are checked (verified 2026-08-25 — tampermonkey.net/documentation.php?q=connect) |
 
-Streaming & payload controls (as of TM 5.4+): `responseType` supports `arraybuffer`, `blob`, `json`, `stream`; `onprogress` / `onloadstart` provide chunk access and `stream` object. Native `fetch` equivalent is `Response.body` → `ReadableStream` (`response.body.getReader()`) — MDN `Response: body` and TM docs (verified 2026-08-24). See Basic Examples for `GM_xmlhttpRequest` usage with `User-Agent` and promise form.
+Streaming & payload controls (as of TM 5.4+): `responseType` supports `arraybuffer`, `blob`, `json`, `stream`; `onprogress` / `onloadstart` provide chunk access and `stream` object. Native `fetch` equivalent is `Response.body` → `ReadableStream` (`response.body.getReader()`) — MDN `Response: body` and TM docs (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_xmlhttpRequest + MDN Web/API/Response/body). See Basic Examples for `GM_xmlhttpRequest` usage with `User-Agent` and promise form.
 
 **Page `fetch` fundamentals (when not using background):**
-- **Defaults:** `mode: "cors"` and `credentials: "same-origin"` (MDN `Request: credentials`; WHATWG Fetch §5.4) — verified 2026-08-24.
-- **Simple vs. preflighted:** *Simple* only if method `GET`/`HEAD`/`POST`, headers limited to CORS-safelisted (`Accept`, `Accept-Language`, `Content-Language`, `Content-Type`, `Range`) with `Content-Type` in `application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain`, and no `ReadableStream` body nor `xhr.upload` listeners. Otherwise `OPTIONS` preflight with `Access-Control-Request-Method`/`Headers` (MDN Guides/CORS, verified 2026-08-24). Background skips preflight.
-- **Credentials + CORS (CSRF):** `credentials: "include"` cross-origin needs *both* `Access-Control-Allow-Credentials: true` and explicit `Access-Control-Allow-Origin` (not `*`); default `same-origin` sends cookies only same-origin; `omit` never sends — MDN `RequestInit` credentials (verified 2026-08-24).
+- **Defaults:** `mode: "cors"` and `credentials: "same-origin"` (MDN `Request: credentials`; WHATWG Fetch §5.4) — verified 2026-08-25 — MDN Web/API/Request/credentials + WHATWG Fetch Living Standard §3.5.
+- **Simple vs. preflighted:** *Simple* only if method `GET`/`HEAD`/`POST`, headers limited to CORS-safelisted (`Accept`, `Accept-Language`, `Content-Language`, `Content-Type`, `Range`) with `Content-Type` in `application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain`, and no `ReadableStream` body nor `xhr.upload` listeners. Otherwise `OPTIONS` preflight with `Access-Control-Request-Method`/`Headers` (MDN Web/HTTP/CORS, verified 2026-08-25 — MDN CORS). Background skips preflight.
+- **Credentials + CORS (CSRF):** `credentials: "include"` cross-origin needs *both* `Access-Control-Allow-Credentials: true` and explicit `Access-Control-Allow-Origin` (not `*`); default `same-origin` sends cookies only same-origin; `omit` never sends — MDN `RequestInit` credentials (verified 2026-08-25 — MDN Web/HTTP/CORS + WHATWG Fetch §3.3.5).
 
 ---
 
@@ -36,7 +36,7 @@ Streaming & payload controls (as of TM 5.4+): `responseType` supports `arraybuff
 
 | Need | Portable default | Manager caveat |
 | --- | --- | --- |
-| Cookie-less / anonymous request | Tampermonkey: `anonymous: true` (fetch mode). Elsewhere: omit cookies manually or use page-context fetch via `unsafeWindow` | `anonymous` is Tampermonkey and Violentmonkey 2.10.1+ only; absent in Greasemonkey 4+ / Safari. `unsafeWindow` is absent in Safari — design without page-world access. |
+| Cookie-less / anonymous request | Tampermonkey: `anonymous: true` (fetch mode). Elsewhere: omit cookies manually or use page-context fetch via `unsafeWindow` | `anonymous` is Tampermonkey and Violentmonkey 2.10.1+ only (verified 2026-08-25 — violentmonkey.github.io/api/gm); absent in Greasemonkey 4+ / Safari. `unsafeWindow` is absent in Safari — design without page-world access. |
 
 ---
 
@@ -102,19 +102,19 @@ Standard options work in all four managers (Tampermonkey, Violentmonkey, Greasem
 | Option | Notes |
 | --- | --- |
 | `method` | `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `PATCH` |
-| `url` | String URL — relative URLs allowed (Violentmonkey explicitly; Greasemonkey "May be relative to the current page" per wiki.greasespot.net, verified 2026-08-24); Tampermonkey 5.4.6226+ also accepts `Blob`/`File` objects as URL source — distinct from `data` `Blob`/`File` |
-| `headers` | Object of request headers — privileged `Cookie`, `Host`, `Origin`, `Referer`, `User-Agent` explicitly allowed in Violentmonkey (verified 2026-08-24 via violentmonkey.github.io/api/gm); Tampermonkey notes some special headers not supported on Safari/Android |
-| `data` | `String` — all managers; `Blob`, `File`, `FormData`, `URLSearchParams`, `ArrayBuffer`, `UInt8Array` — Tampermonkey / Violentmonkey / Safari only (Greasemonkey 4+ supports `String` only per wiki.greasespot.net/GM.xmlHttpRequest: "data String Optional"); for form-encoded `data` set `Content-Type: application/x-www-form-urlencoded` per Greasemonkey wiki (verified 2026-08-24) |
-| `timeout` | Milliseconds; triggers `ontimeout` — default `0` means wait forever per Greasemonkey wiki (verified 2026-08-24); Tampermonkey/Violentmonkey treat absence as no timeout |
-| `onload`, `onerror`, `onabort`, `ontimeout` | Callbacks — each receives the response object (`status`/`statusText`/`responseHeaders`/`response`/`responseText` etc.), not a separate Error (verified 2026-08-24) |
+| `url` | String URL — relative URLs allowed (Violentmonkey explicitly; Greasemonkey "May be relative to the current page" per wiki.greasespot.net, verified 2026-08-25 — violentmonkey.github.io/api/gm + wiki.greasespot.net/GM.xmlHttpRequest); Tampermonkey 5.4.6226+ also accepts `Blob`/`File` objects as URL source — distinct from `data` `Blob`/`File` (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_xmlhttpRequest) |
+| `headers` | Object of request headers — privileged `Cookie`, `Host`, `Origin`, `Referer`, `User-Agent` explicitly allowed in Violentmonkey (verified 2026-08-25 — violentmonkey.github.io/api/gm); Tampermonkey notes some special headers not supported on Safari/Android (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_xmlhttpRequest) |
+| `data` | `String` — all managers; `Blob`, `File`, `FormData`, `URLSearchParams`, `ArrayBuffer`, `UInt8Array` — Tampermonkey / Violentmonkey / Safari only (Greasemonkey 4+ supports `String` only per wiki.greasespot.net/GM.xmlHttpRequest: "data String Optional"); for form-encoded `data` set `Content-Type: application/x-www-form-urlencoded` per Greasemonkey wiki (verified 2026-08-25 — wiki.greasespot.net/GM.xmlHttpRequest + violentmonkey.github.io/api/gm) |
+| `timeout` | Milliseconds; triggers `ontimeout` — default `0` means wait forever per Greasemonkey wiki (verified 2026-08-25 — wiki.greasespot.net/GM.xmlHttpRequest); Tampermonkey/Violentmonkey treat absence as no timeout |
+| `onload`, `onerror`, `onabort`, `ontimeout` | Callbacks — each receives the response object (`status`/`statusText`/`responseHeaders`/`response`/`responseText` etc.), not a separate Error (verified 2026-08-25 — violentmonkey.github.io/api/gm + wiki.greasespot.net/GM.xmlHttpRequest) |
 | `onprogress` | Download progress (`lengthComputable`, `loaded`, `total`) — top-level download |
-| `upload` | `upload: { onabort, onerror, onload, onloadend, onloadstart, onprogress }` for upload progress — `upload.onprogress` since Violentmonkey 2.32.0; Greasemonkey `upload` supports `onabort`/`onerror`/`onload`/`onprogress` per wiki (verified 2026-08-24) |
-| `onloadend`, `onloadstart` | Lifecycle — `onloadend`/`onloadstart` in Violentmonkey types (verified 2026-08-24, `onloadstart` since Violentmonkey 2.12.5); `onloadstart` for `stream` in Tampermonkey 5.4+ |
-| `responseType` `arraybuffer` \| `blob` \| `json` \| `text` (`text` is implicit default) | `text`/`json`/`blob`/`arraybuffer` in all managers; Tampermonkey enumerates `arraybuffer`, `blob`, `json`, `stream` (`text` is implicit default) — see deltas below for `stream`/`document` |
+| `upload` | `upload: { onabort, onerror, onload, onloadend, onloadstart, onprogress }` for upload progress — `upload.onprogress` since Violentmonkey 2.32.0 (verified 2026-08-25 — violentmonkey.github.io/api/gm); Greasemonkey `upload` supports `onabort`/`onerror`/`onload`/`onprogress` per wiki (verified 2026-08-25 — wiki.greasespot.net/GM.xmlHttpRequest) |
+| `onloadend`, `onloadstart` | Lifecycle — `onloadend`/`onloadstart` in Violentmonkey types (verified 2026-08-25 — violentmonkey.github.io/api/gm, `onloadstart` since Violentmonkey 2.12.5); `onloadstart` for `stream` in Tampermonkey 5.4+ (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_xmlhttpRequest) |
+| `responseType` `arraybuffer` \| `blob` \| `json` \| `text` (`text` is implicit default) | `text`/`json`/`blob`/`arraybuffer` in all managers; Tampermonkey enumerates `arraybuffer`, `blob`, `json`, `stream` (`text` is implicit default) — see deltas below for `stream`/`document` (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_xmlhttpRequest + violentmonkey.github.io/api/gm + wiki.greasespot.net) |
 | `overrideMimeType`, `context`, `user`, `password` | Widely supported (verify `user`/`password` per manager docs if critical) |
 | `onreadystatechange` | Ready-state changes |
-| `synchronous` | `false` by default — Greasemonkey only: `synchronous: true` locks the Firefox UI until completion (verified 2026-08-24 via wiki.greasespot.net); Tampermonkey explicitly "synchronous flag is not supported" (verified 2026-08-24 via tampermonkey.net); Violentmonkey synchronous not supported per violentmonkey/violentmonkey#349 (verified 2026-08-24) |
-| `withCredentials` / `mozAnon` / `anonymous` aliases | Historical Greasemonkey aliases: `mozAnon` (Gecko `LOAD_ANONYMOUS`) and `anonymous` added in Greasemonkey 3.8beta3 (verified 2026-08-24 via greasemonkey/greasemonkey#2330); `withCredentials` is the standard XHR equivalent per MDN (verified 2026-08-24); Violentmonkey/Tampermonkey use `anonymous` (Violentmonkey 2.10.1+) with inverted `withCredentials` fallback |
+| `synchronous` | `false` by default — Greasemonkey only: `synchronous: true` locks the Firefox UI until completion (verified 2026-08-25 — wiki.greasespot.net/GM.xmlHttpRequest); Tampermonkey explicitly "synchronous flag is not supported" (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_xmlhttpRequest); Violentmonkey synchronous not supported (verified 2026-08-25 — violentmonkey.github.io/api/gm: "synchronous is not supported") |
+| `withCredentials` / `mozAnon` / `anonymous` aliases | Historical Greasemonkey aliases: `mozAnon` (Gecko `LOAD_ANONYMOUS`) and `anonymous` added in Greasemonkey 3.8beta3 (verified 2026-08-25 — greasemonkey/greasemonkey#2330); `withCredentials` is the standard XHR equivalent per MDN (verified 2026-08-25 — MDN Web/API/XMLHttpRequest/withCredentials); Violentmonkey/Tampermonkey use `anonymous` (Violentmonkey 2.10.1+) with inverted `withCredentials` fallback |
 
 ### Tampermonkey-only extensions
 
@@ -156,7 +156,7 @@ Must be guarded or documented as Tampermonkey-only. Versions are Tampermonkey ve
 | Option | Support |
 | --- | --- |
 | `responseType` | Standard XHR types (`text`, `json`, `blob`, `arraybuffer`) |
-| `binary` | ⚠️ DEPRECATED — Violentmonkey issue #708 pattern: pass `Blob`/`ArrayBuffer` directly instead |
+| `binary` | ⚠️ DEPRECATED — Violentmonkey issue #708 pattern: pass `Blob`/`ArrayBuffer` directly instead — UNVERIFIED (2026-08-25: Safari Userscripts `binary` deprecation not found in primary docs) |
 
 Verify subdomain-wildcard and option behaviour per manager docs before relying — gaps marked UNVERIFIED in [managers.md](managers.md).
 
@@ -179,13 +179,13 @@ GM_xmlhttpRequest({
     data: 'request body',              // String — all managers; Blob, File, FormData, URLSearchParams, ArrayBuffer, UInt8Array — Tampermonkey / Violentmonkey / Safari only (Greasemonkey 4+ supports String only)
 
     // Request modifiers
-    timeout: 30000,                    // Timeout in milliseconds — standard (default 0 = wait forever per Greasemonkey wiki, verified 2026-08-24)
-    synchronous: false,                // Greasemonkey only: true locks Firefox UI; Tampermonkey/Violentmonkey not supported (verified 2026-08-24)
+    timeout: 30000,                    // Timeout in milliseconds — standard (default 0 = wait forever per Greasemonkey wiki, verified 2026-08-25 — wiki.greasespot.net/GM.xmlHttpRequest)
+    synchronous: false,                // Greasemonkey only: true locks Firefox UI; Tampermonkey/Violentmonkey not supported (verified 2026-08-25 — wiki.greasespot.net + tampermonkey.net + violentmonkey.github.io/api/gm)
     binary: false,                     // Send data in binary mode — compat everywhere; Tampermonkey has nuances beyond compat
     nocache: false,                    // Tampermonkey only — don't cache the resource
     revalidate: false,                 // Tampermonkey only — revalidate cached content
     anonymous: false,                  // Tampermonkey + Violentmonkey 2.10.1+ only — don't send cookies (enforces fetch mode in Tampermonkey; VM ignores response cookies since 2.12.5)
-    fetch: false,                      // Tampermonkey only — use fetch instead of XMLHttpRequest (at Chrome: details.timeout and onprogress do not work, onreadystatechange only DONE per tampermonkey.net, verified 2026-08-24)
+    fetch: false,                      // Tampermonkey only — use fetch instead of XMLHttpRequest (at Chrome: details.timeout and onprogress do not work, onreadystatechange only DONE per tampermonkey.net, verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_xmlhttpRequest)
 
     // Authentication
     user: 'username',                  // Basic auth username — standard
@@ -218,17 +218,17 @@ GM_xmlhttpRequest({
         connectionIsolationKey: 'key'
     },
 
-    // Callbacks — standard except onloadstart/onloadend; each receives the response object (verified 2026-08-24)
+    // Callbacks — standard except onloadstart/onloadend; each receives the response object (verified 2026-08-25 — violentmonkey.github.io/api/gm + wiki.greasespot.net)
     onload: function(response) {},
     onerror: function(response) {},      // receives response object with status/statusText, not a separate Error
     onabort: function(response) {},
     ontimeout: function(response) {},
     onprogress: function(progress) {},   // download; for upload use `upload: { onprogress }` (see below)
     onreadystatechange: function(response) {},
-    onloadstart: function(response) {},  // Tampermonkey 5.4+ for stream; Violentmonkey since 2.12.5 (verified 2026-08-24)
-    onloadend: function(response) {},    // Violentmonkey (verified 2026-08-24 via violentmonkey.github.io/types); Greasemonkey upload onloadend via upload object
+    onloadstart: function(response) {},  // Tampermonkey 5.4+ for stream; Violentmonkey since 2.12.5 (verified 2026-08-25 — violentmonkey.github.io/api/gm)
+    onloadend: function(response) {},    // Violentmonkey (verified 2026-08-25 — violentmonkey.github.io/api/gm); Greasemonkey upload onloadend via upload object
     upload: {                            // Upload progress — per-manager shape
-        onprogress: function(e) {},      // Violentmonkey 2.32.0+, Greasemonkey supports onabort/onerror/onload/onprogress (verified 2026-08-24)
+        onprogress: function(e) {},      // Violentmonkey 2.32.0+ (verified 2026-08-25 — violentmonkey.github.io/api/gm), Greasemonkey supports onabort/onerror/onload/onprogress (verified 2026-08-25 — wiki.greasespot.net)
         onloadend: function(e) {},
         onloadstart: function(e) {}
     }
@@ -245,18 +245,18 @@ onload: function(response) {
     response.readyState;      // XMLHttpRequest readyState (4 = DONE)
     response.status;          // HTTP status code (200, 404, etc.)
     response.statusText;      // HTTP status text ("OK", "Not Found")
-    response.responseHeaders; // Response headers as CRLF-delimited string per wiki.greasespot.net (verified 2026-08-24) — parse via headers.trim().split(/[\r\n]+/)
-    response.response;        // Parsed response when responseType set — type depends on responseType; null if not yet complete or incompatible (MDN, verified 2026-08-24)
-    response.responseText;    // Raw response text — only provided when available per Violentmonkey docs (verified 2026-08-24)
-    response.responseXML;     // Parsed XML (if applicable) — since Violentmonkey 2.13.4, only when available (verified 2026-08-24)
+    response.responseHeaders; // Response headers as CRLF-delimited string per wiki.greasespot.net (verified 2026-08-25 — wiki.greasespot.net/GM.xmlHttpRequest) — parse via headers.trim().split(/[\r\n]+/)
+    response.response;        // Parsed response when responseType set — type depends on responseType; null if not yet complete or incompatible (verified 2026-08-25 — MDN Web/API/XMLHttpRequest/response)
+    response.responseText;    // Raw response text — only provided when available per Violentmonkey docs (verified 2026-08-25 — violentmonkey.github.io/api/gm)
+    response.responseXML;     // Parsed XML (if applicable) — since Violentmonkey 2.13.4, only when available (verified 2026-08-25 — violentmonkey.github.io/api/gm)
     response.context;         // Custom context from request
-    // Progress fields when available: response.lengthComputable, response.loaded, response.total (Violentmonkey, verified 2026-08-24)
+    // Progress fields when available: response.lengthComputable, response.loaded, response.total (Violentmonkey, verified 2026-08-25 — violentmonkey.github.io/api/gm)
 }
 ```
 
-> **Parsing `responseHeaders`:** `getAllResponseHeaders()`-style CRLF string (e.g. `content-type: text/html\r\n…`). Exclude `Set-Cookie` in modern browsers per MDN (verified 2026-08-24). Mapping example: `Object.fromEntries(headers.trim().split(/[\r\n]+/).map(l => { const i=l.indexOf(':'); return [l.slice(0,i).trim().toLowerCase(), l.slice(i+1).trim()]; }))`.
+> **Parsing `responseHeaders`:** `getAllResponseHeaders()`-style CRLF string (e.g. `content-type: text/html\r\n…`). Exclude `Set-Cookie` in modern browsers per MDN (verified 2026-08-25 — MDN Web/API/XMLHttpRequest/getAllResponseHeaders). Mapping example: `Object.fromEntries(headers.trim().split(/[\r\n]+/).map(l => { const i=l.indexOf(':'); return [l.slice(0,i).trim().toLowerCase(), l.slice(i+1).trim()]; }))`.
 
-> **Conditional availability:** `response`/`responseText`/`responseXML` and progress fields may be `undefined`/`null` until the relevant `readyState`/event — guard with `if (response.responseText !== undefined)` per Violentmonkey "only provided when available" (verified 2026-08-24).
+> **Conditional availability:** `response`/`responseText`/`responseXML` and progress fields may be `undefined`/`null` until the relevant `readyState`/event — guard with `if (response.responseText !== undefined)` per Violentmonkey "only provided when available" (verified 2026-08-25 — violentmonkey.github.io/api/gm).
 
 ---
 
@@ -297,13 +297,13 @@ Whitelist domains for `GM_xmlhttpRequest`. Canonical syntax and additional value
 Best practice (portable, Tampermonkey-compatible, good hygiene):
 
 1. Declare all known domains explicitly.
-2. Optionally add `@connect *` as a fallback to let users allow unlisted hosts — Tampermonkey then offers an "Always allow all domains" button (verified 2026-08-24 via tampermonkey.net/documentation.php?q=connect); users may also whitelist `*` in script settings.
+2. Optionally add `@connect *` as a fallback to let users allow unlisted hosts — Tampermonkey then offers an "Always allow all domains" button (verified 2026-08-25 — tampermonkey.net/documentation.php?q=connect); users may also whitelist `*` in script settings.
 3. Expect both initial and final URLs to be checked where enforcement applies.
 4. Subdomain-wildcard coverage (`*` and bare-domain subdomain inclusion) — **verify per manager docs**; do not assume identical glob semantics.
 
-> **Tampermonkey `fetch`/`anonymous` caveat:** `anonymous: true` and `fetch: true` enforce fetch mode — at Chrome `details.timeout` and `xhr.onprogress` do not work and `onreadystatechange` receives only `DONE` (verified 2026-08-24 via tampermonkey.net). Avoid combining `anonymous`/`fetch` with `timeout`/`onprogress`/`stream` where this matters.
+> **Tampermonkey `fetch`/`anonymous` caveat:** `anonymous: true` and `fetch: true` enforce fetch mode — at Chrome `details.timeout` and `xhr.onprogress` do not work and `onreadystatechange` receives only `DONE` (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_xmlhttpRequest). Avoid combining `anonymous`/`fetch` with `timeout`/`onprogress`/`stream` where this matters.
 
-> **Blob/File URL distinction (verified 2026-08-24):** `url: Blob|File` (Tampermonkey 5.4.6226+) loads from a Blob/File as the source URL; `data: Blob|File` sends a Blob/File as the request body. They are independent — do not conflate.
+> **Blob/File URL distinction (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_xmlhttpRequest):** `url: Blob|File` (Tampermonkey 5.4.6226+) loads from a Blob/File as the source URL; `data: Blob|File` sends a Blob/File as the request body. They are independent — do not conflate.
 
 ---
 
@@ -389,14 +389,14 @@ if (supportsStream) {
 
 Greasemonkey 4+ offers `responseType: 'ms-stream'` as its own streaming variant — verify per Greasemonkey docs; not portable.
 
-Native `fetch` streaming equivalent is `Response.body` → `ReadableStream` (`response.body.getReader()` or `getReader({mode:"byob"})` for zero-copy) — MDN `Response: body` (verified 2026-08-24).
+Native `fetch` streaming equivalent is `Response.body` → `ReadableStream` (`response.body.getReader()` or `getReader({mode:"byob"})` for zero-copy) — MDN `Response: body` (verified 2026-08-25 — MDN Web/API/Response/body).
 
-### keepalive & sendBeacon for Unload (verified 2026-08-24)
+### keepalive & sendBeacon for Unload (verified 2026-08-25 — MDN Web/API/Request/keepalive + MDN Web/API/Navigator/sendBeacon)
 
 When sending analytics or pings during page unload, `GM_xmlhttpRequest` is not tied to the page lifecycle. Page `fetch` equivalents are:
 
-- **keepalive:** `fetch(url, { keepalive: true })` persists past page unload (e.g., analytics on `visibilitychange`) but payload is limited to **64 KiB** (MDN `RequestInit: keepalive`: "The body size for keepalive requests is limited to 64 kibibytes", defaults `false`; verified 2026-08-24).
-- **sendBeacon alternative:** `navigator.sendBeacon(url, data)` also caps at ~64 KiB, sends asynchronously without blocking unload, and is listed alongside `fetch` under CSP `connect-src` (MDN `Navigator: sendBeacon`). Prefer `fetch` + `keepalive` when you need custom methods/headers or access to the response Promise; fall back to `sendBeacon` for fire-and-forget before unload.
+- **keepalive:** `fetch(url, { keepalive: true })` persists past page unload (e.g., analytics on `visibilitychange`) but payload is limited to **64 KiB** (MDN `RequestInit: keepalive`: "The body size for keepalive requests is limited to 64 kibibytes", defaults `false`; verified 2026-08-25 — MDN Web/API/Request/RequestInit + WHATWG Fetch).
+- **sendBeacon alternative:** `navigator.sendBeacon(url, data)` also caps at ~64 KiB, sends asynchronously without blocking unload, and is listed alongside `fetch` under CSP `connect-src` (MDN `Navigator: sendBeacon` — verified 2026-08-25 — MDN Web/API/Navigator/sendBeacon). Prefer `fetch` + `keepalive` when you need custom methods/headers or access to the response Promise; fall back to `sendBeacon` for fire-and-forget before unload.
 
 ---
 
@@ -597,7 +597,7 @@ For Violentmonkey as the worked example (skill owner's manager), verify `GM.xmlH
 
 ## Error Handling
 
-Always include error handlers. All callbacks receive the **response object** (`status`/`statusText`/`responseHeaders`/`response` etc.), not a separate `Error` instance — `onerror`/`onabort`/`ontimeout` likewise get the response object (verified 2026-08-24 via violentmonkey.github.io/api/gm and wiki.greasespot.net). Inspect `response.status` and `response.statusText` to distinguish HTTP errors from network failures.
+Always include error handlers. All callbacks receive the **response object** (`status`/`statusText`/`responseHeaders`/`response` etc.), not a separate `Error` instance — `onerror`/`onabort`/`ontimeout` likewise get the response object (verified 2026-08-25 — violentmonkey.github.io/api/gm + wiki.greasespot.net/GM.xmlHttpRequest). Inspect `response.status` and `response.statusText` to distinguish HTTP errors from network failures.
 
 ```javascript
 GM_xmlhttpRequest({
@@ -623,4 +623,4 @@ GM_xmlhttpRequest({
 });
 ```
 
-> **Timeout note:** `timeout: 0` (default per Greasemonkey) means wait forever; omit or set `0` to disable timeout (verified 2026-08-24).
+> **Timeout note:** `timeout: 0` (default per Greasemonkey) means wait forever; omit or set `0` to disable timeout (verified 2026-08-25 — wiki.greasespot.net/GM.xmlHttpRequest).

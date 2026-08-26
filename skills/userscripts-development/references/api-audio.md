@@ -1,12 +1,12 @@
 # Audio API Reference
 
-Tab audio control — **Tampermonkey-only experimental API**. Violentmonkey, Greasemonkey, and the Safari Userscripts app do not implement any `GM_audio`/`GM.audio` surface (verified against their official API docs). For portable scripts, use the fallback in [Portable Alternatives](#portable-alternatives).
+Tab audio control — **Tampermonkey-only experimental API** *(verified 2026-08-25 — tampermonkey.net/changelog.php v5.4.0 Experimental, tampermonkey.net/documentation.php?q=GM_audio)*. Violentmonkey, Greasemonkey, and the Safari Userscripts app do not implement any `GM_audio`/`GM.audio` surface *(verified 2026-08-25 — violentmonkey.github.io/api/gm/ absence; wiki.greasespot.net/Greasemonkey_Manual:API absence)*. For portable scripts, use the fallback in [Portable Alternatives](#portable-alternatives).
 
 ---
 
 ## Overview
 
-`GM_audio` (Tampermonkey **beta 5.3.6230**, stable **5.4**+) lets a userscript:
+`GM_audio` (Tampermonkey **beta 5.4.6230** *(verified 2026-08-25 — tampermonkey.net/changelog.php beta v5.4.6230 2025-08-20 Experimental)*, stable **5.4.0** *(verified 2026-08-25 — tampermonkey.net/changelog.php v5.4.0 2025-09-15 Experimental)*+) lets a userscript:
 
 - Mute/unmute **the current tab only** (inter-tab control is not supported — Tampermonkey issue #2472)
 - Check whether the tab is currently audible
@@ -77,7 +77,7 @@ const state = await GM.audio.getState();
 | `muteReason` | `string \| undefined` (optional — only present when muted) | Why it was muted: `user` \| `capture` \| `extension` |
 | `isAudible` | `boolean \| undefined` (optional) | Whether the tab is currently playing sound |
 
-> The mute-reason enum mirrors Chrome's `tabs.MutedInfoReason` values (`user`, `capture`, `extension`) — treat it as Tampermonkey's mapping of that browser concept.
+> The mute-reason enum mirrors Chrome's `tabs.MutedInfoReason` values (`user`, `capture`, `extension`) — treat it as Tampermonkey's mapping of that browser concept. *(verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_audio GM_audio.getState muteReason)*
 
 ---
 
@@ -161,7 +161,7 @@ GM_audio.setMute({ isMuted: true }, (error) => {
 
 ## Portable Alternatives (all managers)
 
-A userscript cannot mute the *tab* outside Tampermonkey, but it can mute the page's media elements — usually the actual goal:
+A userscript cannot mute the *tab* outside Tampermonkey, but it can mute the page's media elements — usually the actual goal *(verified 2026-08-25 — MDN HTMLMediaElement.muted, HTMLMediaElement.volume; tampermonkey.net/documentation.php?q=GM_audio — GM_audio is Tampermonkey-only, no VM/GM equivalent)*:
 
 ```javascript
 // Works in every manager; re-run after DOM changes or SPA navigation.

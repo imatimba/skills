@@ -14,6 +14,8 @@ Documentation for DOM manipulation and UI-related functions. **Canonical referen
 
 Source of truth: `managers.md` §2 DOM & UI, §4 Sandbox/Injection. Cross-reference: `browser-compatibility.md`.
 
+*Decision table verified 2026-08-25 — violentmonkey.github.io/api/gm#gm_addelement (Since VM2.13.1, tag/attributes + parentNode overload, HTML-attribute keys except textContent), tampermonkey.net/documentation.php?q=GM_addElement (tag_name/attributes + parent_node overload, CSP note, returns element/null), tampermonkey.net/changelog.php 5.5.0 (GM_addElement always returns element), violentmonkey.github.io/api/metadata-block#inject-into (auto falls back to content when CSP blocks page injection).*
+
 ---
 
 ## unsafeWindow
@@ -27,7 +29,9 @@ Access the page's actual `window` object, bypassing the sandbox.
 | Tampermonkey | ✅ | Needs explicit `// @grant unsafeWindow` **when any other `@grant` is present**; otherwise check `GM_info.sandboxMode`. |
 | Violentmonkey | ✅ exposed without grant | Exposed even without grant; sandbox is **off only with `// @grant none`** (since Violentmonkey 2.32) — any other grant keeps minimal sandbox (`GM_info` + `unsafeWindow` only). |
 | Greasemonkey 4+ | ✅ (`window.wrappedJSObject` equivalent via Xray) | Exposed; Firefox Xray — use `cloneInto`/`exportFunction` to share objects/functions (see `browser-compatibility.md`). |
-| Safari "Userscripts" app | ❌ **none at all** | Any `@grant` forces content-world execution; page-world access is impossible — design without `unsafeWindow` on Safari (see `managers.md` §2, §4). |
+| Safari "Userscripts" app | ❌ **none at all** | Any `@grant` forces content-world execution; page-world access is impossible — design without `unsafeWindow` on Safari (see `managers.md` §2, §4). UNVERIFIED (2026-08-25) — no primary source in listed set confirms Safari app grant/CSP; TM/VM sources silent on Safari. |
+
+*unsafeWindow verified 2026-08-25 — violentmonkey.github.io/api/gm#unsafewindow (sandbox off only with @grant none; before v2.32 also when no @grant; unsafeWindow is page window wrapper), tampermonkey.net/documentation.php?q=unsafeWindow (page window access).*
 
 > **Violentmonkey worked example:** create a script with `// @grant unsafeWindow` and `// @match https://example.com/*`, open Violentmonkey Dashboard → your script → Editor, add `console.log(unsafeWindow === window, unsafeWindow.pageVar)`, save, reload the page, and inspect the console — `unsafeWindow` points at the page world even where `window` is the isolated sandbox.
 
@@ -102,8 +106,10 @@ Add CSS styles to the document. Useful for customising page appearance. **Canoni
 | --- | --- | --- | --- |
 | Tampermonkey | ✅ returns `<style>` | ✅ | Full support. |
 | Violentmonkey | ✅ returns `<style>` | ✅ since 2.12.0 | Full support. |
-| Greasemonkey 4+ | ❌ removed | ❌ polyfill only (`gm4-polyfill.js`) | Provide fallback via `document.createElement('style')`. |
-| Safari "Userscripts" | ❌ deprecated | ✅ partial impl | Limited; test before relying. |
+| Greasemonkey 4+ | ❌ removed | ❌ polyfill only (`gm4-polyfill.js`) | Provide fallback via `document.createElement('style')`. (verified 2026-08-25 — wiki.greasespot.net/GM_addStyle: "As of Greasemonkey 4.0, this method has been removed.") |
+| Safari "Userscripts" | ❌ deprecated | ✅ partial impl | Limited; test before relying. UNVERIFIED (2026-08-25) — no primary source confirms Safari GM_addStyle behaviour. |
+
+*GM_addStyle verified 2026-08-25 — violentmonkey.github.io/api/gm#gm_addstyle (appends and returns <style>, GM.* aliases since VM2.12.0, pre-2.12.0 Promise imitation), tampermonkey.net/documentation.php?q=GM_addStyle (adds style and returns element), wiki.greasespot.net/GM_addStyle.*
 
 ```javascript
 // @grant GM_addStyle
@@ -193,8 +199,10 @@ Create and inject HTML elements. **Canonical reference — `api-sync.md` links h
 | --- | --- | --- | --- |
 | Tampermonkey | ✅ returns element (since Tampermonkey 5.5.0) | ✅ | CSP bypass supported (best-effort header relaxation; do not rely on universal bypass). |
 | Violentmonkey | ✅ sync | ✅ since Violentmonkey 2.13.1 | Supports both sync and async; **respects page CSP** — if page CSP blocks page-world injection, Violentmonkey falls back to content-world injection (no stripping). |
-| Greasemonkey 4+ | ❌ (issue #2484) | ❌ | Not supported — use `document.createElement` fallback. |
-| Safari "Userscripts" | ❌ | ❌ | Not supported. |
+| Greasemonkey 4+ | ❌ (issue #2484) | ❌ | Not supported — use `document.createElement` fallback. UNVERIFIED (2026-08-25) — issue #2484 not in primary source set; absence inferred from wiki.greasespot.net/GM_addElement (no page). |
+| Safari "Userscripts" | ❌ | ❌ | Not supported. UNVERIFIED (2026-08-25) — no primary source confirms Safari absence. |
+
+*GM_addElement verified 2026-08-25 — violentmonkey.github.io/api/gm#gm_addelement (Since VM2.13.1; GM_addElement(tagName, attributes) / GM_addElement(parentNode, tagName, attributes); parentNode may be ShadowRoot; attributes are HTML attributes except textContent; returns synchronously even via GM.addElement; invalid args throw), tampermonkey.net/documentation.php?q=GM_addElement (both overloads, attributes applied, returns element or null on error, CSP bypass note), tampermonkey.net/changelog.php 5.5.0 (always returns created element, null on failure), violentmonkey.github.io/api/gm#gm (GM.addElement since VM2.13.1).*
 
 > **CSP:** `GM_addElement` helps bypass strict CSP **only in Tampermonkey and Violentmonkey**, and even there it is not universal. Violentmonkey explicitly respects page CSP and degrades to content-world injection if page injection fails (see `managers.md` §4). **Do not promise universal CSP bypass** — always provide a `document.createElement` fallback.
 
@@ -251,7 +259,7 @@ GM_addElement('link', {
 // Add to body
 GM_addElement(document.body, 'div', {
     id: 'my-container',
-    className: 'userscript-ui'
+    class: 'userscript-ui' // HTML attribute `class`, not DOM property `className` (verified 2026-08-25 — violentmonkey.github.io/api/gm#gm_addelement: keys are HTML attributes except textContent)
 });
 
 // Add to specific element
@@ -479,7 +487,7 @@ if (unsafeWindow.ng) {
 
 ## MutationObserver
 
-Observe DOM mutations without polling. Replaces deprecated Mutation Events. Verified 2026-08-24 against MDN.
+Observe DOM mutations without polling. Replaces deprecated Mutation Events. Verified 2026-08-25 against MDN MutationObserver / MutationObserver.observe() (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/MutationObserver).
 
 | Concept | Detail |
 | --- | --- |
@@ -506,13 +514,13 @@ observer.disconnect();
 const pending = observer.takeRecords();
 ```
 
-Source: MDN `MutationObserver` and `MutationObserver.observe()` (verified 2026-08-24).
+Source: MDN `MutationObserver` and `MutationObserver.observe()` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/MutationObserver).
 
 ---
 
 ## Shadow DOM: attachShadow Modes, Encapsulation, and Focus Delegation
 
-Encapsulate injected UI via Shadow DOM. Verified 2026-08-24 against MDN `Element.attachShadow()` and `ShadowRoot`.
+Encapsulate injected UI via Shadow DOM. Verified 2026-08-25 against MDN `Element.attachShadow()` and `ShadowRoot` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Element/attachShadow, ShadowRoot).
 
 | Option / Property | Detail |
 | --- | --- |
@@ -540,13 +548,13 @@ const closed = host.attachShadow ? null : null; // example: const closed = el.at
 // el.shadowRoot === null in closed mode; use `closed` variable instead
 ```
 
-Source: MDN `Element.attachShadow()` and `ShadowRoot` (verified 2026-08-24).
+Source: MDN `Element.attachShadow()` and `ShadowRoot` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Element/attachShadow).
 
 ---
 
 ## Trusted Types and Injection Sinks
 
-Sites enforcing Trusted Types via CSP will throw `TypeError` on string assignment to injection sinks unless passed through a policy. Verified 2026-08-24 against MDN `Trusted_Types_API` and CSP `trusted-types` / `require-trusted-types-for`.
+Sites enforcing Trusted Types via CSP will throw `TypeError` on string assignment to injection sinks unless passed through a policy. Verified 2026-08-25 against MDN `Trusted_Types_API` and CSP `trusted-types` / `require-trusted-types-for` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API).
 
 | Sink type | Examples | Trusted type |
 | --- | --- | --- |
@@ -556,10 +564,10 @@ Sites enforcing Trusted Types via CSP will throw `TypeError` on string assignmen
 
 - Create a policy: `trustedTypes.createPolicy(name, { createHTML: (s) => DOMPurify.sanitize(s) })`. Policy name must be allowlisted by the CSP `trusted-types` directive, otherwise `createPolicy()` throws.
 - Enforcement: CSP `require-trusted-types-for 'script'` makes string assignment to any sink throw `TypeError`. With a policy named `"default"`, strings are automatically passed through `createHTML` instead of throwing, which helps locate unmigrated sinks.
-- Userscript impact: the panel `innerHTML` and `el.textContent`/`GM_addStyle`/`GM_addElement({ textContent })` patterns in this file are HTML sinks. On Trusted Types-enforcing sites, `panel.innerHTML = ...` and `el.textContent = css` throw unless the page allows a policy or the script creates one. Prefer `textContent` over `innerHTML` where possible and use `policy.createHTML()` when `trustedTypes` is present.
+- Userscript impact: the panel `innerHTML` (and `ShadowRoot.innerHTML`/`document.write()`) patterns in this file are HTML sinks. On Trusted Types-enforcing sites, `panel.innerHTML = ...` throws unless passed through a policy (`TrustedHTML` via `policy.createHTML()`); `el.textContent`, `GM_addStyle`, and `GM_addElement({ textContent })` use `textContent` and are **not** HTML sinks (verified 2026-08-25 — MDN Element.innerHTML/Trusted_Types_API (injection sinks, XSS, require-trusted-types-for) and Node.textContent (use for plain text; not parsed as HTML)). Prefer `textContent` over `innerHTML` where possible and use `policy.createHTML()` for HTML sinks when `trustedTypes` is present.
 
 ```javascript
-// Defensive Trusted Types wrapper (verified 2026-08-24)
+// Defensive Trusted Types wrapper (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API)
 function setHTMLSafe(el, html) {
     if (window.trustedTypes && trustedTypes.createPolicy) {
         try {
@@ -572,13 +580,13 @@ function setHTMLSafe(el, html) {
 }
 ```
 
-Source: MDN `Trusted_Types_API` (verified 2026-08-24).
+Source: MDN `Trusted_Types_API` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API).
 
 ---
 
 ## Event Simulation and isTrusted
 
-Synthetic events are never trusted. Verified 2026-08-24 against MDN `Event.isTrusted` and `HTMLElement.click()`.
+Synthetic events are never trusted. Verified 2026-08-25 against MDN `Event.isTrusted` and `HTMLElement.click()` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Event/isTrusted).
 
 | Fact | Detail |
 | --- | --- |
@@ -596,13 +604,13 @@ button.click();
 button.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
 ```
 
-Source: MDN `Event.isTrusted` and `HTMLElement.click()` (verified 2026-08-24).
+Source: MDN `Event.isTrusted` and `HTMLElement.click()` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Event/isTrusted, HTMLElement.click()).
 
 ---
 
 ## Stacking Contexts and z-index
 
-`z-index` has no effect without a positioning context. Verified 2026-08-24 against MDN `z-index`.
+`z-index` has no effect without a positioning context. Verified 2026-08-25 against MDN `z-index` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/CSS/z-index).
 
 | Rule | Detail |
 | --- | --- |
@@ -611,13 +619,13 @@ Source: MDN `Event.isTrusted` and `HTMLElement.click()` (verified 2026-08-24).
 | New stacking context | Created by positioned element with `z-index` other than `auto`, and also by `opacity < 1`, `transform`, `filter`, `isolation`, etc. |
 | Userscript fix | Always pair `z-index` with `position: fixed` (or `absolute`/`relative`). The minimal panel/toast in this file use `position: fixed` + `z-index: 999999` for this reason. |
 
-Source: MDN `z-index` (verified 2026-08-24).
+Source: MDN `z-index` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/CSS/z-index).
 
 ---
 
 ## CSS Injection Timing, CSP, and Fallback Ordering
 
-`GM_addStyle`/`GM_addElement('style', ...)` still create a `<style>` element subject to the page CSP `style-src`. Verified 2026-08-24 against MDN `Trusted_Types_API` and CSP directives.
+`GM_addStyle`/`GM_addElement('style', ...)` still create a `<style>` element subject to the page CSP `style-src`. Verified 2026-08-25 against MDN `Content-Security-Policy: style-src` and `Trusted_Types_API` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/style-src).
 
 | Concern | Detail |
 | --- | --- |
@@ -626,13 +634,13 @@ Source: MDN `z-index` (verified 2026-08-24).
 | `@run-at` timing | For flash-of-unstyled-content (FOUC) avoidance, inject styles at `document-start` when the document element exists but `document.body` may not; fall back to `document.head || document.documentElement`. `document-start` requires `@run-at document-start` in the metadata block. |
 | Recommended order | 1) `GM_addStyle(css)` if available, 2) `GM_addElement('style', { textContent: css })` for CSP help, 3) manual `document.createElement('style')` with `textContent` appended to `document.head || document.documentElement` |
 
-Source: MDN `Content-Security-Policy: style-src` and `Trusted_Types_API` (verified 2026-08-24); Violentmonkey `@inject-into` fallback behavior per `violentmonkey.github.io/api/metadata-block/` (verified 2026-08-24).
+Source: MDN `Content-Security-Policy: style-src` and `Trusted_Types_API` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/style-src); Violentmonkey `@inject-into` fallback behavior per `violentmonkey.github.io/api/metadata-block/#inject-into` (verified 2026-08-25 — violentmonkey.github.io/api/metadata-block: auto tries page then content when CSP blocks).
 
 ---
 
 ## Composed Events and Shadow DOM Retargeting
 
-Events crossing a shadow boundary are retargeted unless composed. Verified 2026-08-24 against MDN `Event.composed` and `Event.composedPath()`.
+Events crossing a shadow boundary are retargeted unless composed. Verified 2026-08-25 against MDN `Event.composed` and `Event.composedPath()` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Event/composed).
 
 | Property / Method | Detail |
 | --- | --- |
@@ -652,13 +660,13 @@ shadow.querySelector('button').addEventListener('click', e => {
 // page listening outside shadow sees retargeted event
 ```
 
-Source: MDN `Event.composed` and `Event.composedPath()` (verified 2026-08-24).
+Source: MDN `Event.composed` and `Event.composedPath()` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Event/composed).
 
 ---
 
 ## AdoptedStyleSheets / Constructable Stylesheets
 
-Modern alternative to `GM_addStyle` for shadow DOM isolation. Verified 2026-08-24 against MDN `Document.adoptedStyleSheets`, `ShadowRoot.adoptedStyleSheets`, and `CSSStyleSheet`.
+Modern alternative to `GM_addStyle` for shadow DOM isolation. Verified 2026-08-25 against MDN `Document.adoptedStyleSheets`, `ShadowRoot.adoptedStyleSheets`, and `CSSStyleSheet` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Document/adoptedStyleSheets).
 
 | API | Detail |
 | --- | --- |
@@ -668,7 +676,7 @@ Modern alternative to `GM_addStyle` for shadow DOM isolation. Verified 2026-08-2
 | `document.adoptedStyleSheets` | Array of constructed sheets applied to the document (ordered after `document.styleSheets` in cascade) |
 | `shadowRoot.adoptedStyleSheets` | Same for a shadow subtree; shares sheets with document and other shadows — mutating the sheet updates all adopters |
 | Constraint | Only sheets created via `new CSSStyleSheet()` in the same `Document` may be adopted; otherwise throws `NotAllowedError` |
-| Baseline | Widely available since March 2023 (verified 2026-08-24) |
+| Baseline | Widely available since March 2023 (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Document/adoptedStyleSheets) |
 
 ```javascript
 const sheet = new CSSStyleSheet();
@@ -682,6 +690,6 @@ shadow2.adoptedStyleSheets = [sheet];
 sheet.insertRule('.userscript-toast { opacity: 0 }');
 ```
 
-Source: MDN `Document.adoptedStyleSheets`, `ShadowRoot.adoptedStyleSheets`, `CSSStyleSheet` (verified 2026-08-24).
+Source: MDN `Document.adoptedStyleSheets`, `ShadowRoot.adoptedStyleSheets`, `CSSStyleSheet` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Document/adoptedStyleSheets, CSSStyleSheet).
 
 Cross-reference: `managers.md` §2 DOM & UI, §4 Sandbox/Injection; `browser-compatibility.md` (Firefox `cloneInto`); `api-sync.md` (summary only — this file is canonical).

@@ -1,6 +1,6 @@
 # Web Request Interception API Reference
 
-Documentation for `GM_webRequest` — intercept and modify browser requests before they are made. This API is **Tampermonkey-experimental only**; portability is limited — see the manager × browser matrix below. Source of truth for support: [managers.md](managers.md).
+Documentation for `GM_webRequest` — intercept and modify browser requests before they are made. This API is **Tampermonkey-experimental only** (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest); portability is limited — see the manager × browser matrix below. Source of truth for support: [managers.md](managers.md).
 
 ---
 
@@ -12,13 +12,13 @@ Documentation for `GM_webRequest` — intercept and modify browser requests befo
 
 | Manager + browser | `GM_webRequest` support | Notes |
 | --- | --- | --- |
-| Tampermonkey + Firefox MV2 | ✅ experimental | Requires `@grant GM_webRequest` to call `GM_webRequest(rules, listener)` OR `@webRequest` header for declarative pre-load rules (both only for pre-load + runtime listener); may change at any time |
-| Tampermonkey + Chrome/Edge MV3 | ❌ broken | Broken since Tampermonkey 5.2+ — see Tampermonkey issue #2209 |
-| Violentmonkey (any browser) | ❌ wontfix | Declined — see Violentmonkey issue #583; `typeof GM_webRequest === 'undefined'` always |
+| Tampermonkey + Firefox MV2 | ✅ experimental | Requires `@grant GM_webRequest` to call `GM_webRequest(rules, listener)` OR `@webRequest` header for declarative pre-load rules (both only for pre-load + runtime listener); may change at any time (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest + tampermonkey.net/documentation.php?q=webRequest) |
+| Tampermonkey + Chrome/Edge MV3 | ❌ broken | Broken since Tampermonkey 5.2+ — see Tampermonkey issue #2209 (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest + github.com/Tampermonkey/tampermonkey/issues/2209) |
+| Violentmonkey (any browser) | ❌ wontfix | Declined — see Violentmonkey issue #583; `typeof GM_webRequest === 'undefined'` always (verified 2026-08-25 — github.com/violentmonkey/violentmonkey/issues/583) |
 | Greasemonkey 4+ | ❌ absent | No implementation |
 | Safari Userscripts | ❌ absent | No implementation |
 
-Request types the Tampermonkey implementation can intercept (when available): `sub_frame`, `script`, `xhr`, `websocket`. It cannot intercept `main_frame` (top document), images, stylesheets, or fonts. Details under Limitations (Tampermonkey Firefox MV2 only).
+Request types the Tampermonkey implementation can intercept (when available): `sub_frame`, `script`, `xhr`, `websocket` (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest). It cannot intercept `main_frame` (top document), images, stylesheets, or fonts — only those four types proceed per that doc. Details under Limitations (Tampermonkey Firefox MV2 only).
 
 ---
 
@@ -85,14 +85,14 @@ GM_webRequest([
 
 ### Selector — Tampermonkey syntax
 
-Defines which URLs the rule matches (Tampermonkey DSL).
+Defines which URLs the rule matches (Tampermonkey DSL) (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest).
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `selector` | string | Simple URL pattern |
-| `selector.include` | string/array | URLs to include |
+| `selector` | string | Simple URL pattern (`{ include: [selector] }` shorthand per docs) |
+| `selector.include` | string/array | URLs, patterns, and regexps for rule triggering |
 | `selector.match` | string/array | Match patterns |
-| `selector.exclude` | string/array | URLs to exclude |
+| `selector.exclude` | string/array | URLs, patterns, and regexps for not triggering the rule |
 
 ```javascript
 // Tampermonkey syntax — string selector (simplest)
@@ -117,13 +117,13 @@ Defines which URLs the rule matches (Tampermonkey DSL).
 
 ### Action — Tampermonkey syntax
 
-Defines what to do when a URL matches (Tampermonkey DSL).
+Defines what to do when a URL matches (Tampermonkey DSL) (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest).
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `action` | string | `'cancel'` to block |
+| `action` | string | `'cancel'` to block (`"cancel"` shorthand for `{ cancel: true }` per docs) |
 | `action.cancel` | boolean | Block the request |
-| `action.redirect` | string/object | Redirect destination — target URL must be covered by `@match`/`@include` |
+| `action.redirect` | string/object | Redirect destination — target URL must be covered by `@match`/`@include` (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest) |
 
 ```javascript
 // Tampermonkey syntax — cancel (block) the request
@@ -148,14 +148,14 @@ Defines what to do when a URL matches (Tampermonkey DSL).
 
 ## @webRequest Header — Tampermonkey syntax
 
-Define rules at script level (applies before script loads). Tampermonkey-only.
+Define rules at script level (applies before script loads). Tampermonkey-only (verified 2026-08-25 — tampermonkey.net/documentation.php?q=webRequest: takes JSON matching `GM_webRequest` `rule` param; same experimental + MV3 5.2+ note).
 
 ```javascript
 // @webRequest {"selector": "*://ads.example.com/*", "action": "cancel"}
 // @webRequest {"selector": {"include": "*tracking*"}, "action": {"redirect": "about:blank"}}
 ```
 
-This is useful for blocking resources that load before your script runs — only where supported (Tampermonkey on Firefox MV2).
+This is useful for blocking resources that load before your script runs — only where supported (Tampermonkey on Firefox MV2) (verified 2026-08-25 — tampermonkey.net/documentation.php?q=webRequest + tampermonkey.net/documentation.php?q=GM_webRequest).
 
 ---
 
@@ -174,6 +174,7 @@ GM_webRequest(rules, function(info, message, details) {
     // }
 });
 ```
+Listener shape `info` (`cancel`/`redirect`), `message` (`ok`/`error`), `details.{rule,url,redirect_url,description}` (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest; listener cannot impact rule action per docs).
 
 ---
 
@@ -247,23 +248,23 @@ The browser-limitations content below is framed for the **Tampermonkey implement
 
 | Browser (Tampermonkey build) | `GM_webRequest` Support |
 |---------|----------------------|
-| Firefox (MV2) | ✅ Supported (experimental) |
-| Chrome (MV3, Tampermonkey 5.2+) | ❌ Not available — broken (issue #2209) |
-| Edge (MV3, Tampermonkey 5.2+) | ❌ Not available — broken (issue #2209) |
+| Firefox (MV2) | ✅ Supported (experimental) (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest: MV3 Chrome+derivates unavailable; Firefox MV2 remains the supported build) |
+| Chrome (MV3, Tampermonkey 5.2+) | ❌ Not available — broken (issue #2209) (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest + github.com/Tampermonkey/tampermonkey/issues/2209: console "error currently not supported in MV3") |
+| Edge (MV3, Tampermonkey 5.2+) | ❌ Not available — broken (issue #2209) (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest + github.com/Tampermonkey/tampermonkey/issues/2209) |
 | Safari (Tampermonkey paid app) | ❌ Not available |
 
-Violentmonkey, Greasemonkey, and Safari Userscripts are absent everywhere — do not feature-detect them as "MV3-limited"; they never defined the API.
+Violentmonkey, Greasemonkey, and Safari Userscripts are absent everywhere — do not feature-detect them as "MV3-limited"; they never defined the API (verified 2026-08-25 — Violentmonkey wontfix github.com/violentmonkey/violentmonkey/issues/583; Greasemonkey/Safari absence — no `GM_webRequest` in their API indexes — UNVERIFIED (2026-08-25) for Greasemonkey/Safari primary docs beyond absence).
 
 ### Request Types
 
-Only these request types can be intercepted where the API exists:
+Only these request types can be intercepted where the API exists (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest: proceeds only `sub_frame`, `script`, `xhr` and `websocket`):
 
 - `sub_frame` - iframes
 - `script` - JavaScript files
 - `xhr` - XMLHttpRequest/fetch
 - `websocket` - WebSocket connections
 
-These **cannot** be intercepted even where available:
+These **cannot** be intercepted even where available (verified 2026-08-25 — same doc: only those four types proceed, so `main_frame`, images, stylesheets, fonts excluded):
 
 - Main document (`main_frame`)
 - Images
@@ -274,7 +275,7 @@ These **cannot** be intercepted even where available:
 
 ## Cross-Manager Alternatives (required unless Tampermonkey on Firefox MV2)
 
-`GM_webRequest` is not portable. For scripts that must run in Violentmonkey (the worked example), Greasemonkey, Safari, or Tampermonkey on Chromium MV3, use these as the **primary** portable pattern.
+`GM_webRequest` is not portable. For scripts that must run in Violentmonkey (the worked example), Greasemonkey, Safari, or Tampermonkey on Chromium MV3, use these as the **primary** portable pattern (verified 2026-08-25 — github.com/violentmonkey/violentmonkey/issues/583 wontfix + tampermonkey.net/documentation.php?q=GM_webRequest MV3 unavailable).
 
 **Decision table:**
 
@@ -360,7 +361,7 @@ GM_addStyle(`
 5. **Consider portable alternatives first** - Your script may need to work outside Tampermonkey on Firefox MV2
 
 ```javascript
-// Check if GM_webRequest is available — Violentmonkey never defines it (wontfix #583)
+// Check if GM_webRequest is available — Violentmonkey never defines it (wontfix #583) (verified 2026-08-25 — github.com/violentmonkey/violentmonkey/issues/583)
 if (typeof GM_webRequest !== 'undefined') {
     GM_webRequest([...rules...]); // Tampermonkey on Firefox MV2 only
 } else {
@@ -371,27 +372,27 @@ if (typeof GM_webRequest !== 'undefined') {
 
 ---
 
-> **Background requests, CORS & credentials → [http-requests.md](http-requests.md):** `GM_xmlhttpRequest` / `GM.xmlHttpRequest` mechanics, `@connect` enforcement, background-vs-page CORS/CSP bypass, and page `fetch` fundamentals (`mode`, `credentials`, preflight, `keepalive`/`sendBeacon`, streaming) are owned by [http-requests.md](http-requests.md) — see its sections “Background vs Page `fetch` — CORS, CSP & Credentials” and “keepalive & sendBeacon for Unload” (verified 2026-08-24).
+> **Background requests, CORS & credentials → [http-requests.md](http-requests.md):** `GM_xmlhttpRequest` / `GM.xmlHttpRequest` mechanics, `@connect` enforcement, background-vs-page CORS/CSP bypass, and page `fetch` fundamentals (`mode`, `credentials`, preflight, `keepalive`/`sendBeacon`, streaming) are owned by [http-requests.md](http-requests.md) — see its sections “Background vs Page `fetch` — CORS, CSP & Credentials” and “keepalive & sendBeacon for Unload” (verified 2026-08-25 — http-requests.md owns those sections; pointer only, no re-import).
 
 ---
 
-## MV3 declarativeNetRequest Boundary — Why GM_webRequest Is Unavailable (verified 2026-08-24)
+## MV3 declarativeNetRequest Boundary — Why GM_webRequest Is Unavailable (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest + github.com/Tampermonkey/tampermonkey/issues/2209 + MDN declarativeNetRequest)
 
-Tampermonkey docs note for `GM_webRequest`: "It is also not available anymore at Manifest v3 versions of Tampermonkey 5.2+ (Chrome and derivates)" (tampermonkey.net/documentation.php?q=GM_webRequest). Issue #2209 reports console error "currently not supported in MV3" — verified via github.com/Tampermonkey/tampermonkey/issues/2209.
+Tampermonkey docs note for `GM_webRequest`: "It is also not available anymore at Manifest v3 versions of Tampermonkey 5.2+ (Chrome and derivates)" (tampermonkey.net/documentation.php?q=GM_webRequest). Issue #2209 reports console error "currently not supported in MV3" — verified via github.com/Tampermonkey/tampermonkey/issues/2209 (verified 2026-08-25).
 
-MV3 removes blocking `webRequest` (MDN `webRequest` notes blocking requires `"webRequestBlocking"` and `handlerBehaviorChanged()` for cached-page edge cases). Its replacement is `declarativeNetRequest` — a **declarative, static-ruleset API** (`action.type: block/redirect/modifyHeaders`) with session/dynamic/static limits and no per-request JS callback. It cannot replicate `GM_webRequest`'s dynamic `(selector, action, listener)` patching parity — see MDN `declarativeNetRequest` (verified 2026-08-24). Userscripts needing pre-load blocking on Chromium MV3 must use portable fallbacks.
+MV3 removes blocking `webRequest` (MDN `webRequest` notes blocking requires `"webRequestBlocking"` and `handlerBehaviorChanged()` for cached-page edge cases). Its replacement is `declarativeNetRequest` — a **declarative, static-ruleset API** (`action.type: block/redirect/modifyHeaders`) with session/dynamic/static limits and no per-request JS callback. It cannot replicate `GM_webRequest`'s dynamic `(selector, action, listener)` patching parity — see MDN `declarativeNetRequest` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/declarativeNetRequest). Userscripts needing pre-load blocking on Chromium MV3 must use portable fallbacks.
 
 ---
 
-## Page-Level Patch Coverage Gaps & Cache Caveat (verified 2026-08-24)
+## Page-Level Patch Coverage Gaps & Cache Caveat (verified 2026-08-25 — MDN webRequest/handlerBehaviorChanged + MDN Using Fetch + MDN CSP connect-src)
 
 Monkey-patching `unsafeWindow.fetch` / `unsafeWindow.XMLHttpRequest` (requires `@grant unsafeWindow` + `@run-at document-start`) is weaker than `GM_webRequest` in three ways:
 
 1. **Can be raced** — `document-start` is the earliest injection but resources may already be fetched.
 2. **Cannot intercept non-fetch resource loads** without additional patching — `<img>`, `<link rel="stylesheet">`, `<script>` tag insertion, `navigator.sendBeacon()`, and `new WebSocket()` are separate APIs (each controlled by CSP `connect-src` per MDN `connect-src` directive) and are not covered by a `fetch`/`XHR` wrapper.
-3. **Still subject to constraints** — page `fetch` remains gated by CSP `connect-src`; `ReadableStream` bodies are one-shot and require `request.clone()` before second use ("Body has already been consumed" — MDN Using Fetch, verified 2026-08-24).
+3. **Still subject to constraints** — page `fetch` remains gated by CSP `connect-src`; `ReadableStream` bodies are one-shot and require `request.clone()` before second use ("Body has already been consumed" — MDN Using Fetch, verified 2026-08-25).
 
-**Cache caveat:** Even `webRequest` blocking can be skipped for cached responses. MDN `webRequest.handlerBehaviorChanged()` documents: "events will not be triggered for the request" when a page is reloaded from the in-memory cache, requiring `handlerBehaviorChanged()` to flush the cache. Tampermonkey issue #397 discussion notes the same `fromCache` limitation for `onResponseStarted` (verified 2026-08-24). Treat "blocking before load" as best-effort when caching is involved.
+**Cache caveat:** Even `webRequest` blocking can be skipped for cached responses. MDN `webRequest.handlerBehaviorChanged()` documents: "events will not be triggered for the request" when a page is reloaded from the in-memory cache, requiring `handlerBehaviorChanged()` to flush the cache. Tampermonkey issue #397 discussion notes the same `fromCache` limitation for `onResponseStarted` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/webRequest/handlerBehaviorChanged). Treat "blocking before load" as best-effort when caching is involved.
 
 ---
 

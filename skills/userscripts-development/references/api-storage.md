@@ -14,14 +14,14 @@ Userscript managers provide a per-script key-value store that:
 
 ### Value-type support by manager
 
-Source of truth: `managers.md` §2 Storage. Gaps = UNVERIFIED — do not assume.
+Source of truth: `managers.md` §2 Storage. Gaps = UNVERIFIED — do not assume. (verified 2026-08-25 — wiki.greasespot.net/GM.setValue: "Strings, booleans, and integers"; violentmonkey.github.io/api/gm/#gm_setvalue: JSON-serializable; tampermonkey.net/documentation.php?locale=en: GM_values)
 
 | Manager | Value types | Notes |
 | --- | --- | --- |
-| Tampermonkey | Structured-clone-ish with JSON fallback | Objects/arrays work; `Date`/`Map`/`Set` need manual conversion (see Handling Non-Serialisable Data). |
-| Violentmonkey | JSON-serialisable | No DOM nodes or circular references. Use `JSON.stringify`/`parse` patterns for complex types. |
-| Greasemonkey 4+ | **Strings, booleans, and integers ONLY** (floats excluded — wiki: “Strings, booleans, and integers”) | `JSON.stringify` objects yourself before `GM.setValue`; `JSON.parse` on read. |
-| Safari "Userscripts" app | JSON-serialisable | Promise-only API. |
+| Tampermonkey | Structured-clone-ish with JSON fallback — UNVERIFIED (2026-08-25) — not documented at tampermonkey.net/documentation.php | Objects/arrays work; `Date`/`Map`/`Set` need manual conversion (see Handling Non-Serialisable Data). |
+| Violentmonkey | JSON-serialisable (verified 2026-08-25 — violentmonkey.github.io/api/gm/#gm_setvalues: Must be JSON serializable) | No DOM nodes or circular references. Use `JSON.stringify`/`parse` patterns for complex types. |
+| Greasemonkey 4+ | **Strings, booleans, and integers ONLY** (floats excluded — wiki: “Strings, booleans, and integers", verified 2026-08-25 — wiki.greasespot.net/GM.setValue) | `JSON.stringify` objects yourself before `GM.setValue`; `JSON.parse` on read. |
+| Safari "Userscripts" app | JSON-serialisable — UNVERIFIED (2026-08-25) — no primary docs at violentmonkey.github.io/tampermonkey.net/wiki.greasespot.net | Promise-only API. |
 
 > **Violentmonkey worked example:** install a script with `// @grant GM_setValue` / `GM_getValue`, open the Violentmonkey Dashboard → your script → **Storage** tab to inspect keys, or query via DevTools console on any matched page with `await GM.getValue('key')`.
 
@@ -31,7 +31,7 @@ Source of truth: `managers.md` §2 Storage. Gaps = UNVERIFIED — do not assume.
 
 ### GM_setValue(key, value)
 
-Store a value. **Note:** Greasemonkey 4+ has **no** sync `GM_*` forms — Promise-only `GM.setValue`/`GM.getValue` (see Async Versions below).
+Store a value. **Note:** Greasemonkey 4+ has **no** sync `GM_*` forms — Promise-only `GM.setValue`/`GM.getValue` (see Async Versions below). (verified 2026-08-25 — wiki.greasespot.net/GM.setValue Compatibility: Greasemonkey 4.0+ Promise; greasespot.net/2017/09/greasemonkey-4-for-script-authors.html; violentmonkey.github.io/api/gm/: GM.* added in VM2.12.0)
 
 ```javascript
 // @grant GM_setValue
@@ -58,7 +58,7 @@ GM_setValue('userData', {
 });
 ```
 
-### GM_getValue(key, defaultValue)
+### GM_getValue(key, defaultValue) (verified 2026-08-25 — wiki.greasespot.net/GM.getValue: Returns Promise resolved with String/Integer/Boolean or default/undefined)
 
 Retrieve a value. Returns `defaultValue` if key does not exist.
 
@@ -76,7 +76,7 @@ if (value === null) {
 }
 ```
 
-### GM_deleteValue(key)
+### GM_deleteValue(key) (verified 2026-08-25 — wiki.greasespot.net/GM.deleteValue: Promise rejected with no value on failure, Compatibility Greasemonkey 4.0+)
 
 Remove a stored value.
 
@@ -87,9 +87,9 @@ GM_deleteValue('temporaryData');
 GM_deleteValue('cache');
 ```
 
-### GM_listValues()
+### GM_listValues() (verified 2026-08-25 — wiki.greasespot.net/GM.listValues: Promise resolved with Array of Strings; violentmonkey.github.io/api/gm/#gm_listvalues)
 
-Get an array of all stored keys. No ordering guarantee — `.sort()` if order matters.
+Get an array of all stored keys. No ordering guarantee — `.sort()` if order matters. (ordering guarantee UNVERIFIED (2026-08-25) — not stated at wiki.greasespot.net/GM.listValues)
 
 ```javascript
 // @grant GM_listValues
@@ -106,7 +106,7 @@ keys.forEach(key => {
 
 ---
 
-## Batch Operations (Tampermonkey 5.3+, Violentmonkey 2.19.1+)
+## Batch Operations (Tampermonkey 5.3+, Violentmonkey 2.19.1+) (verified 2026-08-25 — tampermonkey.net/documentation.php?locale=en: GM_setValues v5.3+; violentmonkey.github.io/api/gm/#gm_setvalues: Since VM2.19.1)
 
 More efficient for multiple operations — reduces overhead. **Not supported in Greasemonkey 4+ or Safari** (`managers.md` §2). Use the `Promise.all` fallback below for those managers.
 
@@ -192,7 +192,7 @@ See also `managers.md` §2 Storage row for the full support matrix.
 
 ---
 
-## Change Listeners
+## Change Listeners (verified 2026-08-25 — violentmonkey.github.io/api/gm/#gm_addvaluechangelistener, tampermonkey.net/documentation.php?locale=en: GM_addValueChangeListener, wiki.greasespot.net/Greasemonkey_Manual:API — no listener in GM4)
 
 Listen for value changes, including from other tabs/windows where supported.
 
@@ -227,8 +227,8 @@ const listenerId = GM_addValueChangeListener('counter', (key, oldValue, newValue
 
 | Manager | `remote` semantics | Listener support |
 | --- | --- | --- |
-| Tampermonkey | `boolean` — `true` when change originated in another tab | ✅ `GM_addValueChangeListener` |
-| Violentmonkey | `boolean` — same as Tampermonkey | ✅ `GM_addValueChangeListener` |
+| Tampermonkey | `boolean` — `true` when change originated in another tab (verified 2026-08-25 — tampermonkey.net/documentation.php: GM_addValueChangeListener remote boolean) | ✅ `GM_addValueChangeListener` |
+| Violentmonkey | `boolean` — same as Tampermonkey (verified 2026-08-25 — violentmonkey.github.io/api/gm/#gm_addvaluechangelistener: "true if modified by the userscript instance of another tab") | ✅ `GM_addValueChangeListener` |
 | Greasemonkey 4+ | Signature differs; `remote` handling **UNVERIFIED** (see `managers.md`) | ⚠️ Verify against official docs before relying |
 | Safari "Userscripts" app | No listeners | ❌ Not supported |
 
@@ -405,7 +405,7 @@ console.log(`You've visited this page ${visitCount} times`);
 
 ---
 
-## Data Types and Limits
+## Data Types and Limits (verified 2026-08-25 — wiki.greasespot.net/GM.setValue: Strings/booleans/integers only; violentmonkey.github.io/api/gm/#gm_setvalues: JSON serializable; developer.mozilla.org JSON)
 
 ### Supported Types
 
@@ -417,7 +417,7 @@ console.log(`You've visited this page ${visitCount} times`);
 | null | ✅ Portable | Prefer `null` over `undefined` for missing-value sentinel. |
 | undefined | ⚠️ Manager-dependent | Round-trip not guaranteed — some managers drop the key or coerce to `null`. **Recommend `null` instead.** |
 | Infinity / NaN | ⚠️ Manager-dependent | JSON cannot represent them; managers that JSON-serialise may coerce to `null` or drop. **Recommend null-safe primitives or string encoding.** |
-| object | ⚠️ Manager-dependent | Tampermonkey: structured-clone-ish with JSON fallback; Violentmonkey/Safari: JSON-serialisable; Greasemonkey 4+: **must `JSON.stringify` yourself** (integers-only primitive store). No DOM nodes or cycles. |
+| object | ⚠️ Manager-dependent | Tampermonkey: structured-clone-ish with JSON fallback — UNVERIFIED (2026-08-25) — not documented at tampermonkey.net/documentation.php; Violentmonkey/Safari: JSON-serialisable (verified 2026-08-25 — violentmonkey.github.io/api/gm/#gm_setvalue); Greasemonkey 4+: **must `JSON.stringify` yourself** (integers-only primitive store, verified 2026-08-25 — wiki.greasespot.net/GM.setValue) — No DOM nodes or cycles. |
 | array | ⚠️ Manager-dependent | Same as object. |
 | Date | Manual | Stored as string — `toISOString()` on write, `new Date()` on read. |
 | Map/Set | Manual | Convert to array/object first (see below). |
@@ -472,11 +472,11 @@ Cross-reference: `managers.md` §2 Storage, `api-async.md` (promise overloads), 
 
 ---
 
-## Quotas, Errors & Eviction (verified 2026-08-24)
+## Quotas, Errors & Eviction (verified 2026-08-25 — wiki.greasespot.net/GM.setValue, wiki.greasespot.net/GM.getValue, wiki.greasespot.net/GM.deleteValue, wiki.greasespot.net/GM.listValues)
 
 GM storage is **extension storage**, not Web Storage — limits are manager- and browser-dependent (no single spec number). Treat failures as **Promise rejections** and never as a fixed byte count.
 
-- **GM storage failure mode** (Greasespot, verified 2026-08-24): `GM.setValue` / `GM.deleteValue` / `GM.listValues` return `Promise` that is *rejected with no value on failure* (`wiki.greasespot.net/GM.setValue`, `GM.deleteValue`, `GM.listValues` — Compatibility: Greasemonkey 4.0+). Always `await` or `.catch()`:
+- **GM storage failure mode** (Greasespot, verified 2026-08-25 — wiki.greasespot.net/GM.setValue, wiki.greasespot.net/GM.deleteValue, wiki.greasespot.net/GM.listValues): `GM.setValue` / `GM.deleteValue` / `GM.listValues` return `Promise` that is *rejected with no value on failure* (`wiki.greasespot.net/GM.setValue`, `GM.deleteValue`, `GM.listValues` — Compatibility: Greasemonkey 4.0+). Always `await` or `.catch()`:
 
 ```javascript
 // @grant GM.setValue
@@ -487,30 +487,30 @@ try {
 }
 ```
 
-- **Web Storage quota (for comparison only)** — browsers throw `QuotaExceededError` when `localStorage`/`sessionStorage` exceed their per-origin quota: **5 MiB localStorage + 5 MiB sessionStorage = 10 MiB max per origin** on all browsers (`developer.mozilla.org — Storage quotas and eviction criteria`, verified 2026-08-24). Guard with `try…catch` around `Storage.setItem()`.
+- **Web Storage quota (for comparison only)** — browsers throw `QuotaExceededError` when `localStorage`/`sessionStorage` exceed their per-origin quota: **5 MiB localStorage + 5 MiB sessionStorage = 10 MiB max per origin** on all browsers (developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria, verified 2026-08-25). Guard with `try…catch` around `Storage.setItem()`.
 - **Do not conflate** GM storage limits with Web Storage limits. Readers who confuse the two underestimate GM capacity on some managers or hit silent rejections. See also `Storage quotas and eviction criteria` for the Storage Standard bucket model (best-effort vs `navigator.storage.persist()` persistent).
 
 ---
 
-## Web Storage & IndexedDB Alternatives (verified 2026-08-24)
+## Web Storage & IndexedDB Alternatives (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Window/localStorage, developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API/Using_the_Web_Storage_API, developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria)
 
 `localStorage` / `sessionStorage` / `IndexedDB` are **page-origin** stores — distinct from `GM_*` extension storage. Availability inside a userscript depends on the sandbox.
 
-| API | Partitioning & persistence (MDN, verified 2026-08-24) | Availability in userscripts |
+| API | Partitioning & persistence (MDN, verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API/Using_the_Web_Storage_API) | Availability in userscripts |
 | --- | --- | --- |
 | `localStorage` | Partitioned **by origin** only; persists across sessions. In private browsing, treated like `sessionStorage` — cleared when the last private tab is closed (`Window.localStorage`). | Only when sandbox is disabled (`@grant none`) or injected to page context (`@inject-into page`, `@sandbox raw`/`JavaScript` on TM — see `tampermonkey.net/documentation.php?q=sandbox`). Sandboxed scripts (`@grant GM_*`) see a wrapper `window` — direct `localStorage` access is isolated/not the page's storage. |
 | `sessionStorage` | Partitioned **by origin + top-level tab**; cleared when the tab closes (`Web Storage API`). | Same sandbox rule as `localStorage`. |
-| `IndexedDB` | Async transactional, same-origin policy; structured-clone values. Quotas per Storage Standard (`Storage quotas and eviction criteria`, verified 2026-08-24): Chromium ≈ **60% of total disk per origin**; Firefox **min(10% of disk, 10 GiB group limit)** best-effort, **50% capped at 8 TiB** if persistent; Safari ≈ 60% (browser app) / 15% (embedded WebView) on macOS 14+/iOS 17+. | Same sandbox rule; additionally depends on `injectInto` / `@inject-into` (`violentmonkey.github.io/api/metadata-block/`). Like GM storage, use async patterns (`IDBRequest` / `navigator.storage.estimate()`). |
+| `IndexedDB` | Async transactional, same-origin policy; structured-clone values. Quotas per Storage Standard (`Storage quotas and eviction criteria`, verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria): Chromium ≈ **60% of total disk per origin**; Firefox **min(10% of disk, 10 GiB group limit)** best-effort, **50% capped at 8 TiB** if persistent; Safari ≈ 60% (browser app) / 15% (embedded WebView) on macOS 14+/iOS 17+. | Same sandbox rule; additionally depends on `injectInto` / `@inject-into` (`violentmonkey.github.io/api/metadata-block/`). Like GM storage, use async patterns (`IDBRequest` / `navigator.storage.estimate()`). |
 
 **When to prefer what:**
 - **GM storage** — small per-script settings/flags; extension-isolated, cross-origin by design.
-- **IndexedDB** — large structured data, indices, blobs, or when you need higher quota via the Storage Standard and `navigator.storage.persist()` / `estimate()` (see `Storage_API`, `IndexedDB_API` on MDN, verified 2026-08-24). Web Storage (`localStorage`) is synchronous and string-only — avoid for large/complex data (MDN: "Both sessionStorage and localStorage are synchronous … Asynchronous alternatives, such as IndexedDB, may be more suitable").
+- **IndexedDB** — large structured data, indices, blobs, or when you need higher quota via the Storage Standard and `navigator.storage.persist()` / `estimate()` (see Storage_API, IndexedDB_API on MDN, verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria). Web Storage (`localStorage`) is synchronous and string-only — avoid for large/complex data (MDN: "Both sessionStorage and localStorage are synchronous … Asynchronous alternatives, such as IndexedDB, may be more suitable").
 
 ---
 
-## Sync vs Async Contract & GM4 Polyfill (verified 2026-08-24)
+## Sync vs Async Contract & GM4 Polyfill (verified 2026-08-25 — greasespot.net/2017/09/greasemonkey-4-for-script-authors.html, wiki.greasespot.net/GM.setValue, violentmonkey.github.io/api/gm/)
 
-Single rule (as of 2026-08-24; sources: `greasespot.net/2017/09/greasemonkey-4-for-script-authors.html`, `wiki.greasespot.net/GM.setValue`, `violentmonkey.github.io/api/gm/`):
+Single rule (as of 2026-08-25; sources: greasespot.net/2017/09/greasemonkey-4-for-script-authors.html, wiki.greasespot.net/GM.setValue, violentmonkey.github.io/api/gm/, verified 2026-08-25):
 
 - **`GM_*` (underscore) = synchronous** — available on **Tampermonkey** and **Violentmonkey** only. **Absent on Greasemonkey 4+**.
 - **`GM.*` (dot) = Promise-based async** — available everywhere: **Greasemonkey 4+ is Promise-only** (`GM.getValue` returns `Promise`), **Violentmonkey ≥2.12.0** added `GM.*` aliases (`Violentmonkey APIs … GM.* Greasemonkey v4-compatible aliases were added in VM2.12.0`), Tampermonkey ships both with async pendants (`tampermonkey.net/documentation.php?q=GM_values`).
@@ -525,7 +525,7 @@ await GM.setValue('key', v);
 // GM.getValue('key', null).then(v => GM.setValue('key', v));
 ```
 
-**Cross-manager compatibility:** for GM4 + TM/VM support, grant both names and `require` the official polyfill (`github.com/greasemonkey/gm4-polyfill`, verified 2026-08-24):
+**Cross-manager compatibility:** for GM4 + TM/VM support, grant both names and `require` the official polyfill (github.com/greasemonkey/gm4-polyfill, verified 2026-08-25 — greasespot.net/2017/09/greasemonkey-4-for-script-authors.html):
 
 ```javascript
 // ==UserScript==
@@ -540,11 +540,11 @@ await GM.setValue('key', v);
 
 ---
 
-## Storage Event Model vs GM Listeners (verified 2026-08-24)
+## Storage Event Model vs GM Listeners (verified 2026-08-25 — violentmonkey.github.io/api/gm/#gm_addvaluechangelistener, developer.mozilla.org/en-US/docs/Web/API/StorageEvent, developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API/Using_the_Web_Storage_API)
 
 `GM_addValueChangeListener` is **not** the DOM `StorageEvent` — they observe different stores and have different semantics.
 
-| Aspect | `GM_addValueChangeListener` (`GM_values`, `violentmonkey.github.io/api/gm/`, verified 2026-08-24) | DOM `StorageEvent` (`MDN StorageEvent`, verified 2026-08-24) |
+| Aspect | `GM_addValueChangeListener` (GM_values, violentmonkey.github.io/api/gm/#gm_addvaluechangelistener, verified 2026-08-25) | DOM `StorageEvent` (MDN StorageEvent, verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/StorageEvent) |
 | --- | --- | --- |
 | Store observed | **GM extension storage** (`GM_setValue` / `GM.setValue`) | **Web Storage** (`localStorage` / `sessionStorage` `Storage` area) |
 | Fires for | GM storage changes only; does **not** fire for `localStorage.setItem()` | Web Storage changes only; does **not** fire for GM storage |
@@ -555,21 +555,21 @@ Do not mix the two event models in cross-tab broadcast designs — use GM listen
 
 ---
 
-## Security & Privacy (verified 2026-08-24)
+## Security & Privacy (verified 2026-08-25 — wiki.greasespot.net/GM.setValue, violentmonkey.github.io/api/gm/#gm_getvalue, tampermonkey.net/documentation.php)
 
 - **Per-script isolation:** key is *unique (within this script)* (`wiki.greasespot.net/GM.setValue`; VM: "for current script" / "within this script"; TM: "userscript's storage"). No other script can read, list, or delete another script's GM storage — same guarantee as the API's `@grant` boundary.
 - **Page isolation:** GM storage lives in **extension storage**, not the page origin's `Storage`. Page JavaScript (`window.localStorage`, `document.cookie`, `indexedDB`) **cannot read or tamper** with `GM_*`/`GM.*` values — unlike `localStorage` which is origin-shared and XSS-exfiltratable. This makes GM storage appropriate for tokens/flags that must not be exposed to page context.
 
 ---
 
-## Version Gates — Central Support Matrix (verified 2026-08-24)
+## Version Gates — Central Support Matrix (verified 2026-08-25 — wiki.greasespot.net/Greasemonkey_Manual:API, violentmonkey.github.io/api/gm/, tampermonkey.net/documentation.php?locale=en)
 
-Single lookup for storage-related gates ("as of" 2026-08-24; absent = not supported). Source of truth per feature remains `managers.md` §2 and the first-party pages cited.
+Single lookup for storage-related gates ("as of" 2026-08-25; absent = not supported, verified 2026-08-25 — wiki.greasespot.net/Greasemonkey_Manual:API, violentmonkey.github.io/api/gm/, tampermonkey.net/documentation.php?locale=en). Source of truth per feature remains `managers.md` §2 and the first-party pages cited.
 
 | Feature | Tampermonkey | Violentmonkey | Greasemonkey 4+ | Safari "Userscripts" app |
 | --- | --- | --- | --- | --- |
 | Single-value `GM_setValue` / `GM_getValue` / `GM_deleteValue` / `GM_listValues` | ✅ sync `GM_*` + async `GM.*` pendant (`GM_values`) | ✅ sync `GM_*` + async `GM.*` since **VM2.12.0** (`violentmonkey.github.io/api/gm/`) | ✅ async `GM.*` only (`GM.setValue` etc. — Greasemonkey 4.0+; no sync `GM_*` — `greasespot.net/2017/09/greasemonkey-4-for-script-authors.html`) | ✅ async Promise-only (JSON-serialisable) |
 | Batch `GM_setValues` / `GM_getValues` / `GM_deleteValues` | **v5.3+** (`GM_setValues v5.3+` — `tampermonkey.net/documentation.php?q=GM_values`) | **Since VM2.19.1** (`Since VM2.19.1` — `violentmonkey.github.io/api/gm/`) | ❌ Not supported | ❌ Not supported |
-| Listeners `GM_addValueChangeListener` / `GM_removeValueChangeListener` (`remote` boolean) | ✅ `remote` boolean (`GM_addValueChangeListener … remote is a boolean indicating whether the change originated from a different userscript instance`) | ✅ `remote` boolean ("true if modified … of another tab or false for this script instance") | ❌ Not available — GM4 API defines no listener methods (`wiki.greasespot.net/Greasemonkey_Manual:API`, verified 2026-08-24) | ❌ Not supported |
+| Listeners `GM_addValueChangeListener` / `GM_removeValueChangeListener` (`remote` boolean) | ✅ `remote` boolean (`GM_addValueChangeListener … remote is a boolean indicating whether the change originated from a different userscript instance`, verified 2026-08-25 — tampermonkey.net/documentation.php) | ✅ `remote` boolean ("true if modified … of another tab or false for this script instance", verified 2026-08-25 — violentmonkey.github.io/api/gm/#gm_addvaluechangelistener) | ❌ Not available — GM4 API defines no listener methods (`wiki.greasespot.net/Greasemonkey_Manual:API`, verified 2026-08-25) | ❌ Not supported — UNVERIFIED (2026-08-25) for Safari app (no primary docs) |
 | Fallback pattern | — | — | — | Use `Promise.all` over `GM.getValue`/`GM.setValue`/`GM.deleteValue` (see Batch fallback above) |
 

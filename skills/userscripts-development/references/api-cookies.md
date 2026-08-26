@@ -2,7 +2,7 @@
 
 Documentation for browser cookie manipulation functions.
 
-> **Support banner — GM_cookie is Tampermonkey (stable) & Violentmonkey (since 2.35.1) only. Greasemonkey 4+ and Safari "Userscripts" app: not supported — use `document.cookie` fallback.** See `managers.md` §2 Browser/OS integration → Cookies row and `browser-compatibility.md` for the broader compatibility matrix. **Tampermonkey enforces `@match`/`@include` host access for target URLs** — a script can only list/set/delete cookies for hosts its metadata grants access to.
+> **Support banner — GM_cookie is Tampermonkey (stable) & Violentmonkey (since 2.35.1) only. Greasemonkey 4+ and Safari "Userscripts" app: not supported — use `document.cookie` fallback.** (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_cookie; violentmonkey.github.io/api/gm#gm_cookie @since VM2.35.1; wiki.greasespot.net/Greasemonkey_Manual:API — no GM_cookie entry as of 2026-08-09; Safari Userscripts app: UNVERIFIED 2026-08-25 — no primary source in listed set) See `managers.md` §2 Browser/OS integration → Cookies row and `browser-compatibility.md` for the broader compatibility matrix. **Tampermonkey enforces `@match`/`@include` host access for target URLs** — a script can only list/set/delete cookies for hosts its metadata grants access to (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_cookie: "Tampermonkey checks if the script has @include or @match access to given details.url arguments!").
 
 ---
 
@@ -28,7 +28,7 @@ The `GM_cookie` / `GM.cookie` API allows userscripts where supported to:
 | `GM_cookie.list/set/delete(details[, callback])` | Tampermonkey (stable), Violentmonkey since 2.35.1 — callback style | `callback(result, error)` or `callback(error)` for set/delete |
 | `GM.cookie.list/set/delete(details)` | Same managers — promise style | `await GM.cookie.list(details)` → `Promise<Cookie[]>` |
 
-Greasemonkey 4+ and Safari do not implement either form — guard with `typeof GM_cookie !== 'undefined'` or `typeof GM?.cookie !== 'undefined'` and fall back to `document.cookie`.
+Greasemonkey 4+ and Safari do not implement either form — guard with `typeof GM_cookie !== 'undefined'` or `typeof GM?.cookie !== 'undefined'` and fall back to `document.cookie` (verified 2026-08-25 — GM4 absence: wiki.greasespot.net/Greasemonkey_Manual:API lists GM_info/GM_getValue etc. with no GM_cookie as of 2026-08-09; VM/TM support above).
 
 ---
 
@@ -87,7 +87,7 @@ GM_cookie.list({
 GM_cookie.list({ partitionKey: {} }, callback);
 ```
 
-> **Error handling (verified 2026-08-24):** `GM_cookie.list({})` resolves, but `GM_cookie.list()` with no argument never resolves — always pass an object, even if empty (Tampermonkey issue #2244). `GM_cookie.set` with an invalid `sameSite` hangs or rejects with an error string; validate against `"strict"|"lax"|"no_restriction"|"unspecified"` and always handle the `error` callback / rejection.
+> **Error handling (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_cookie shows promise example `await GM.cookie.list()`; callback no-arg hang: UNVERIFIED 2026-08-25 — primary set listed above does not document issue #2244; sameSite hang: UNVERIFIED 2026-08-25 — primary TM/VM docs do not enumerate invalid-sameSite behaviour):** `GM_cookie.list({})` resolves, but `GM_cookie.list()` with no argument never resolves — always pass an object, even if empty (Tampermonkey issue #2244 — UNVERIFIED via listed primaries). `GM_cookie.set` with an invalid `sameSite` hangs or rejects with an error string; validate against `"strict"|"lax"|"no_restriction"|"unspecified"` (valid values per extension cookies.SameSiteStatus — MDN cookies.SameSiteStatus) and always handle the `error` callback / rejection.
 
 ### Cookie Object Properties
 
@@ -188,9 +188,9 @@ GM_cookie.set({
 await GM.cookie.set({ name: 'x', value: 'y', url: 'https://example.com/' });
 ```
 
-> **httpOnly — gated in BOTH managers (resolves contradiction with earlier overview):**
-> - **Tampermonkey:** enable Config Mode **Advanced** → Security → allow httpOnly cookies (no longer “BETA only” as of stable 5.3.1+).
-> - **Violentmonkey:** needs **BOTH** the global httpOnly toggle **and** the per-script toggle enabled.
+> **httpOnly — gated in BOTH managers (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_cookie still states "httpOnly cookies are supported at the BETA versions of Tampermonkey only for now" in 5.3.1 docs; violentmonkey.github.io/api/gm#gm_cookie: "httpOnly cookies are listed/allowed only when the HTTP-only option is enabled for the script and globally in the extension"):**
+> - **Tampermonkey:** primary docs still mark httpOnly as BETA-only as of 2026-08-25; Advanced → Security toggle location claimed since stable 5.3.1+ is UNVERIFIED (2026-08-25) — not enumerated in listed primary TM API page.
+> - **Violentmonkey:** needs **BOTH** the global httpOnly toggle **and** the per-script toggle enabled (verified 2026-08-25 — violentmonkey.github.io/api/gm#gm_cookie).
 > - Without these toggles, `httpOnly: true` is ignored or errors. `managers.md` §2 Cookies row is the source of truth.
 
 > **expirationDate — both managers use seconds since epoch** (not milliseconds). Compute with `Math.floor(Date.now() / 1000) + seconds` or `new Date('2025-12-31').getTime() / 1000`.
@@ -283,7 +283,7 @@ GM_cookie.delete({
 
 > **Note:** `domain` is **not** a valid delete identifier — use `url` + `name`. The `CookieManager` example below has been fixed accordingly.
 
-> **Delete URL scope (verified 2026-08-24 — MDN `cookies.remove` / RFC 6265bis §5.1.4):** `url` must match the cookie's scope (scheme + host + effective path). If the path/domain used at `set` was `/admin`, `GM_cookie.delete({ name, url: 'https://example.com/' })` will silently fail to match — use the same path/domain scope via `url` (e.g., `https://example.com/admin/`). If no match is found the promise fulfills with `null` / callback receives no error.
+> **Delete URL scope (verified 2026-08-25 — MDN `cookies.remove` / RFC 6265bis §5.1.4; tampermonkey.net/documentation.php?q=GM_cookie delete details require `url`+`name`):** `url` must match the cookie's scope (scheme + host + effective path). If the path/domain used at `set` was `/admin`, `GM_cookie.delete({ name, url: 'https://example.com/' })` will silently fail to match — use the same path/domain scope via `url` (e.g., `https://example.com/admin/`). If no match is found the promise fulfills with `null` / callback receives no error.
 
 ---
 
@@ -448,64 +448,64 @@ function setDocumentCookie(name, value, { days = 7, path = '/', secure = true, s
 
 ---
 
-## HTTP Cookie Semantics & Platform Limits (verified 2026-08-24)
+## HTTP Cookie Semantics & Platform Limits (verified 2026-08-25)
 
-> Sources: MDN `Set-Cookie` / `Using HTTP cookies` / `Document.cookie` / `cookies.Cookie` / `cookies.remove` / `Cookie Store API` / `Partitioned cookies` / `Third-party cookies`; RFC 6265bis draft `httpwg/http-extensions` (Cookie Lifetime Limits §5.5, Limits §6.1, §5.6 parsing, §4.1.3 Cookie Name Prefixes, Privacy §7). Quoted limits below reflect implementations as of 2026-08-24 — re-verify before relying on exact caps.
+> Sources: MDN `Set-Cookie` / `Using HTTP cookies` / `Document.cookie` / `cookies.Cookie` / `cookies.remove` / `Cookie Store API` / `Partitioned cookies` / `Third-party cookies`; RFC 6265bis draft `httpwg/http-extensions` (Cookie Lifetime Limits §5.5, Limits §6.1, §5.6 parsing, §4.1.3 Cookie Name Prefixes, Privacy §7). Quoted limits below reflect implementations as of 2026-08-25 — re-verify before relying on exact caps (verified 2026-08-25 — MDN Set-Cookie HttpOnly/SameSite/Partitioned/Secure; MDN Document.cookie).
 
-### Size & count limits
+### Size & count limits (verified 2026-08-25 — MDN Set-Cookie / RFC 6265bis §5.6, §6.1)
 
 - **Per-cookie:** name+value must be ≤ 4096 octets; longer `set-cookie-string` is ignored (RFC 6265bis §5.6 step 5). `Path`/`attribute-value` > 1024 octets is ignored. Browsers enforce ~4096 bytes for the whole `Set-Cookie` line (name+value+attributes) — MDN describes this as "usually 4KB".
 - **Per-domain / total (RFC 6265bis §6.1, Implementation Considerations):** user agents SHOULD provide *at least* 50 cookies per domain and 3000 total; they MAY evict any cookie at any time. In practice MDN notes "generally in the hundreds" per domain. Header limits apply: the `Cookie` header sent on every request is capped (commonly ~8192 octets), and large cookie jars worsen performance.
 - **Practical tip:** keep cookies small and few; graceful degradation is expected — `GM_cookie.list` may return fewer entries if evicted.
 
-### Lifetime cap — 400 days
+### Lifetime cap — 400 days (verified 2026-08-25 — RFC 6265bis §5.5; MDN Set-Cookie Expires/Max-Age)
 
-- As of RFC 6265bis §5.5 (verified 2026-08-24) and enforced by Chrome/Firefox/Safari since 2022+, `Expires`/`Max-Age` beyond **400 days (34560000 seconds)** MUST be clamped to 400 days. `managers.md` and this file's expiry examples (30 days, etc.) are within the cap; setting `expirationDate` farther future will be silently capped. User agents MAY use a lower limit via cookie policy (see RFC 6265bis §7.2).
+- As of RFC 6265bis §5.5 (verified 2026-08-25) and enforced by Chrome/Firefox/Safari since 2022+, `Expires`/`Max-Age` beyond **400 days (34560000 seconds)** MUST be clamped to 400 days. `managers.md` and this file's expiry examples (30 days, etc.) are within the cap; setting `expirationDate` farther future will be silently capped. User agents MAY use a lower limit via cookie policy (see RFC 6265bis §7.2).
 
-### SameSite defaults & Secure pairing
+### SameSite defaults & Secure pairing (verified 2026-08-25 — MDN Set-Cookie SameSite/Secure)
 
 - If `SameSite` is omitted, modern browsers default to **`Lax`** (MDN `Set-Cookie` `SameSite`: "Some browsers use Lax as the default value if SameSite is not specified"). Lax allows top-level GET navigations only; cookie is not sent on cross-site POST/`fetch`/subresource requests.
-- `SameSite=None` **MUST** be paired with `Secure` or the cookie will be rejected (MDN `Set-Cookie` `SameSite=None`: "The Secure attribute must also be set when using this value"). In `GM_cookie` this maps to `sameSite: 'no_restriction'` + `secure: true` — using `sameSite: 'none'` does not exist and, per Tampermonkey #2070/#465, causes "message port closed" hangs.
+- `SameSite=None` **MUST** be paired with `Secure` or the cookie will be rejected (MDN `Set-Cookie` `SameSite=None`: "The Secure attribute must also be set when using this value"). In `GM_cookie` this maps to `sameSite: 'no_restriction'` + `secure: true` — using `sameSite: 'none'` does not exist and, per Tampermonkey #2070/#465, causes "message port closed" hangs — UNVERIFIED (2026-08-25) via listed primaries (issues not in TM/VM doc set; `no_restriction` mapping not enumerated in TM 5.3.1 docs).
 
-### Partitioned (CHIPS) cookies
+### Partitioned (CHIPS) cookies (verified 2026-08-25 — MDN Set-Cookie Partitioned/Secure; tampermonkey.net/documentation.php?q=GM_cookie partitionKey v5.2+)
 
 - `Partitioned` **requires `Secure`** (MDN `Set-Cookie` `Partitioned`: "if this is set, the Secure directive must also be set"). Recommended form (MDN `Partitioned cookies`): `Set-Cookie: __Host-example=…; SameSite=None; Secure; Path=/; Partitioned;`.
-- In `GM_cookie` this is `partitionKey: { topLevelSite: 'https://example.com' }` (Tampermonkey 5.2+ only; verified 2026-08-24). Violentmonkey 2.35.1 ignored `partitionKey`; current types may list it but underlying support remains Tampermonkey-only as of 2026-08-24 — re-check `violentmonkey.github.io/api/gm` after 2.36.
+- In `GM_cookie` this is `partitionKey: { topLevelSite: 'https://example.com' }` (Tampermonkey 5.2+ only; verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_cookie shows partitionKey v5.2+). Violentmonkey 2.35.1 ignored `partitionKey`; current docs at violentmonkey.github.io/api/gm#gm_cookie list no partitionKey — remains Tampermonkey-only as of 2026-08-25.
 - Use `__Host-` prefix + `Path=/` + no `Domain` when you don't need subdomain sharing.
 
-### Cookie name prefixes (`__Secure-` / `__Host-`)
+### Cookie name prefixes (`__Secure-` / `__Host-`) (verified 2026-08-25 — MDN Set-Cookie Cookie prefixes; RFC 6265bis §4.1.3)
 
 - **__Secure-** — requires `Secure` set from a secure (HTTPS) origin (MDN `Set-Cookie` Cookie prefixes; RFC 6265bis §4.1.3).
 - **__Host-** — requires `Secure` from HTTPS, **no `Domain`**, and `Path=/` (MDN: "must not have a Domain attribute specified, and the Path attribute must be set to /"). Guarantees host-only, host-wide scope — closest to origin-bound security.
 - **__Http- / __HostHttp-** (MDN, newer): require `Secure` + `HttpOnly`; `__HostHttp-` also requires `Path=/` + no `Domain`. Prefix checks are ignored by browsers without support — don't rely on them as sole security.
 
-### Max-Age vs Expires precedence & session definition
+### Max-Age vs Expires precedence & session definition (verified 2026-08-25 — MDN Set-Cookie Max-Age/Expires; MDN Using HTTP cookies)
 
-- If both `Expires` and `Max-Age` are set, **Max-Age takes precedence** (MDN `Using HTTP cookies`: "Max-Age is less error-prone, and takes precedence when both are set."; MDN `Set-Cookie` `Max-Age`: "If both Expires and Max-Age are set, Max-Age has precedence."). `GM_cookie` exposes only `expirationDate` (seconds since epoch, maps to Max-Age/Expires under the hood) — file's `Math.floor(Date.now()/1000)` formula is correct.
+- If both `Expires` and `Max-Age` are set, **Max-Age takes precedence** (MDN `Using HTTP cookies`: "Max-Age is less error-prone, and takes precedence when both are set."; MDN `Set-Cookie` `Max-Age`: "If both Expires and Max-Age are set, Max-Age has precedence."). `GM_cookie` exposes only `expirationDate` (seconds since epoch, maps to Max-Age/Expires under the hood) — file's `Math.floor(Date.now()/1000)` formula is correct (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_cookie: expirationDate in seconds since the Unix epoch).
 - Absent both attributes → **session cookie** (`session: true`, no `expirationDate`). Session ends when the client shuts down, but browsers with session restore (e.g., Firefox/Chrome restore tabs) will resurrect session cookies "as if the browser was never closed" (MDN `Set-Cookie` `Expires`).
 
-### Path default & matching
+### Path default & matching (verified 2026-08-25 — MDN Set-Cookie Path)
 
 - If `Path` is omitted it defaults to the **request URL's path component** (MDN `Set-Cookie` `Path`: e.g., `https://example.com/docs/Web/HTTP/index.html` → default `/docs/Web/HTTP/`). This is not a security boundary — it controls when browsers send `Cookie` headers, not JS readability.
 - Matching: `Path=/docs` matches `/docs`, `/docs/`, `/docs/Web/`, `/docs/Web/HTTP` but **not** `/`, `/docsets`, `/fr/docs` (MDN). File's `path: '/'` covers all paths; explicit narrower paths restrict sends.
 
-### Domain default — host-only vs Domain attribute
+### Domain default — host-only vs Domain attribute (verified 2026-08-25 — MDN Set-Cookie Domain)
 
 - **Without `Domain`:** cookie is **host-only** (`hostOnly: true`, returned only to exact host, not subdomains). MDN `Set-Cookie` `Domain`: "If omitted, the cookie is returned only to the host that sent them (i.e., it becomes a 'host-only cookie'). This is more restrictive than setting the host name, as the cookie is not made available to subdomains."
-- **With `Domain=.example.com`:** available to that host and all subdomains (MDN: "If a domain is specified, then subdomains are always included. Contrary to earlier specs leading dots are ignored."). `GM_cookie`'s `hostOnly` boolean reflects this distinction — critical for `delete` URL resolution.
+- **With `Domain=.example.com`:** available to that host and all subdomains (MDN: "If a domain is specified, then subdomains are always included. Contrary to earlier specs leading dots are ignored."). `GM_cookie`'s `hostOnly` boolean reflects this distinction — critical for `delete` URL resolution (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_cookie lists hostOnly boolean).
 
-### Document.cookie / Cookie Store API visibility vs GM_cookie
+### Document.cookie / Cookie Store API visibility vs GM_cookie (verified 2026-08-25 — MDN Document.cookie; MDN Set-Cookie HttpOnly/Secure; MDN Cookie Store API)
 
 - `Document.cookie` **cannot read `httpOnly` cookies** (MDN `Document.cookie`, `Set-Cookie` `HttpOnly`: "Forbids JavaScript from accessing the cookie, for example, through the Document.cookie property"). `Secure` cookies **are** still readable via `Document.cookie` if `httpOnly` is not set, though they are only *sent* over HTTPS (MDN `Set-Cookie` `Secure`). Both flags still cause the browser to send the cookie on `fetch`/`XMLHttpRequest`.
-- Modern alternative: **Cookie Store API** (`cookieStore.get/set`, `Window.cookieStore`, `ServiceWorkerRegistration.cookies`) — async, promise-based, available in windows and service workers (MDN `Cookie Store API`, Baseline 2025, newly available since June 2025). Unlike `Document.cookie` it is non-blocking and not tied to `Document`. `GM_cookie` remains the only way to touch `httpOnly` cookies from userscripts (when toggles allow).
+- Modern alternative: **Cookie Store API** (`cookieStore.get/set`, `Window.cookieStore`, `ServiceWorkerRegistration.cookies`) — async, promise-based, available in windows and service workers (MDN `Cookie Store API`, Baseline 2025, newly available since June 2025). Unlike `Document.cookie` it is non-blocking and not tied to `Document`. `GM_cookie` remains the only way to touch `httpOnly` cookies from userscripts (when toggles allow) (verified 2026-08-25 — GM_cookie httpOnly gating above).
 
-### Underlying `storeId` (Firefox containers) — not via GM_cookie
+### Underlying `storeId` (Firefox containers) — not via GM_cookie (verified 2026-08-25 — MDN cookies.Cookie storeId)
 
-- The browser `cookies.Cookie` type includes `storeId` (MDN `cookies.Cookie` `storeId`: "A string representing the ID of the cookie store containing this cookie, as provided by `cookies.getAllCookieStores()`"). Firefox Multi-Account Containers use distinct `storeId`s per container. `GM_cookie` does **not** expose `storeId` — it operates in the default store. For completeness the file's property table omits `storeId` intentionally (underlying extension API detail, not GM_cookie surface). Verified 2026-08-24 via MDN `cookies.Cookie`.
+- The browser `cookies.Cookie` type includes `storeId` (MDN `cookies.Cookie` `storeId`: "A string representing the ID of the cookie store containing this cookie, as provided by `cookies.getAllCookieStores()`"). Firefox Multi-Account Containers use distinct `storeId`s per container. `GM_cookie` does **not** expose `storeId` — it operates in the default store. For completeness the file's property table omits `storeId` intentionally (underlying extension API detail, not GM_cookie surface). Verified 2026-08-25 via MDN `cookies.Cookie`; tampermonkey.net/documentation.php?q=GM_cookie property list confirms no storeId.
 
-### Privacy: third-party phase-out & partitioned migration
+### Privacy: third-party phase-out & partitioned migration (verified 2026-08-25 — MDN Third-party cookies / Partitioned cookies; RFC 6265bis §7.1)
 
-- CHIPS / `Partitioned` is the **opt-in migration** as browsers phase out **unpartitioned third-party cookies** (MDN `Third-party cookies`: "some have started to block third-party cookies by default"; `Partitioned cookies`: CHIPS gives a separate cookie jar per top-level site). RFC 6265bis §7.1 notes most user agents now limit or block third-party cookies (partition or refuse). `GM_cookie`'s `partitionKey` is the userscript surface for this migration (Tampermonkey 5.2+); prefer partitioned cookies for embedded third-party contexts.
+- CHIPS / `Partitioned` is the **opt-in migration** as browsers phase out **unpartitioned third-party cookies** (MDN `Third-party cookies`: "some have started to block third-party cookies by default"; `Partitioned cookies`: CHIPS gives a separate cookie jar per top-level site). RFC 6265bis §7.1 notes most user agents now limit or block third-party cookies (partition or refuse). `GM_cookie`'s `partitionKey` is the userscript surface for this migration (Tampermonkey 5.2+; verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_cookie partitionKey v5.2+); prefer partitioned cookies for embedded third-party contexts.
 
 Cross-reference: `managers.md` §2 Cookies row, `browser-compatibility.md`.
 
