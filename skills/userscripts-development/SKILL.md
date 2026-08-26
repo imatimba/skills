@@ -26,6 +26,25 @@ Do NOT use for Selenium/Puppeteer/Playwright automation, browser extensions (Web
 5. **Violentmonkey is the UI-workflow example** (FOSS, stable dashboard) for install/dashboard steps only — this implies nothing about API precedence. Other managers appear as labeled table rows; tier-2 divergences live in [manager-compat.md](references/manager-compat.md).
 6. Preserve existing behaviour when editing a user's script; relabel rather than erase manager-specific knowledge.
 
+## Core Digest
+
+Start here. Open a full reference only when the Execution Steps trigger fires.
+
+| Manager | API style | Divergence | Ref |
+| --- | --- | --- | --- |
+| Violentmonkey | `GM_*` sync + `GM.*` promise (VM 2.12.0+) | `@inject-into auto` default (tries page → content on CSP fall-back) | [managers.md](references/managers.md) §1–2 |
+| Tampermonkey | `GM_*` sync + `GM.*` promise | Largest surface; `@connect` strictly enforced; Chrome MV3 (TM 5.2+) breaks `GM_webRequest` | [managers.md](references/managers.md) §1–2 |
+| Greasemonkey 4+ (Firefox-only) | `GM.*` promise ONLY (sync removed 4.0; storage primitives only) | Always sandboxed (Xray); no `@sandbox`/`@inject-into` | [managers.md](references/managers.md) §2–4 |
+| Safari "Userscripts" | `GM.*` promise SUBSET | Any `@grant` forces `content` world; no `unsafeWindow` | [managers.md](references/managers.md) §1–4 |
+
+- `@run-at`: set explicitly — TM defaults `document-idle`, VM/GM4+/Safari default `document-end`; `document-body` invalid in GM4, `context-menu` TM-only — details in [header-reference.md](references/header-reference.md) + [managers.md](references/managers.md) §3.
+- `@grant`/`@sandbox`/`@inject-into`: TM uses `@sandbox raw|JavaScript|DOM` (default `raw`); VM/Safari use `@inject-into page|content|auto` (VM default `auto`); GM4+ ignores both — see [sandbox-modes.md](references/sandbox-modes.md) + [managers.md](references/managers.md) §4.
+- `@grant none` disables sandbox in TM and VM ≥2.32 (no `GM.*` except `GM_info`); no-grant = minimal sandbox in VM ≥2.32, enabled sandbox in TM — see [sandbox-modes.md](references/sandbox-modes.md).
+- `unsafeWindow` needs `@grant unsafeWindow` in TM; available without grant in VM (<2.32) and minimal-sandbox in VM ≥2.32; absent in Safari — see [sandbox-modes.md](references/sandbox-modes.md).
+- `@match` = Chrome match-pattern base everywhere (VM ≥2.10.4 adds `.tld`/extra wildcards); `@include` globs add `.tld` portably — see [url-matching.md](references/url-matching.md).
+- Header templates (no-APIs `grant none` + promise `GM.*` starter) live at top of [header-reference.md](references/header-reference.md).
+- If digest conflicts with observed behaviour, or task touches edge cases, open the owning reference ([managers.md](references/managers.md)/[url-matching.md](references/url-matching.md)/[sandbox-modes.md](references/sandbox-modes.md)/[header-reference.md](references/header-reference.md)) — see Execution Steps.
+
 ## Decision Gates
 
 | Need | Portable default | Manager caveat |
@@ -59,13 +78,14 @@ Before writing code in an area, READ its reference first — no exceptions:
 
 ## Execution Steps
 
-1. **Read FIRST**: load [managers.md](references/managers.md) before any other step — every later step assumes it.
-2. **Scope**: Read [url-matching.md](references/url-matching.md) before deriving `@match`/`@exclude`; set `@run-at` explicitly.
-3. **Permissions**: Read [sandbox-modes.md](references/sandbox-modes.md) before choosing `@grant` or injection directives (VM `@inject-into`, TM `@sandbox`).
-4. **Headers**: Read [header-reference.md](references/header-reference.md) (starter templates at top) before writing any header.
-5. **Implement**: Read [patterns.md](references/patterns.md) before writing script logic; apply the Touch → Reference Routing table for every area touched; guard manager-specific calls with feature detection.
-6. **Verify**: run Pre-Delivery Gates; read [security-checklist.md](references/security-checklist.md) against the final code. TypeScript/bundler work: [typescript.md](references/typescript.md).
-7. **Deliver** per Output Contract.
+Digest-first: start from Core Digest + Touch → Reference Routing. A full reference read is CONDITIONAL — open the file only when (a) observed behaviour conflicts with the digest, (b) the task touches edge cases (tier-2 manager, Firefox MV3/USER_SCRIPT world, cross-origin/`@connect`, CSP/injection world), or (c) you need depth beyond the digest.
+
+1. **Scope**: consult digest for `@match`/`@exclude` + `@run-at` defaults; open [url-matching.md](references/url-matching.md) only on trigger; set `@run-at` explicitly.
+2. **Permissions**: consult digest for `@grant`/`@sandbox`/`@inject-into` choice; open [sandbox-modes.md](references/sandbox-modes.md) only on trigger (add full read when injection world or `unsafeWindow`/CSP matters).
+3. **Headers**: copy starter template at top of [header-reference.md](references/header-reference.md) (digest pointer); open rest of that file only on trigger (e.g. new directive, SRI, `@webRequest`).
+4. **Implement**: use [patterns.md](references/patterns.md) via Touch → Reference Routing only for areas you touch; open section-scoped, not cover-to-cover; guard manager-specific calls with feature detection.
+5. **Verify**: run Pre-Delivery Gates; read [security-checklist.md](references/security-checklist.md) section-scoped against the FINAL code (full read only on trigger — e.g. DOM insertion, cross-origin, storage).
+6. **Deliver** per Output Contract. TypeScript/bundler work: [typescript.md](references/typescript.md) only if touched.
 
 ## Output Contract
 
