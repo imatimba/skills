@@ -1,6 +1,6 @@
 # Debugging Userscripts
 
-How to troubleshoot and fix broken userscripts. Per-manager facts follow [managers.md](managers.md); when a concrete manager is shown, **Violentmonkey** is the worked example.
+How to debug **PORTABLE** userscripts — what changes by manager and how degradation affects debugging. Per-manager facts follow [managers.md](managers.md); when a concrete manager is shown, **Violentmonkey** is the worked example.
 
 ---
 
@@ -24,28 +24,11 @@ When a script doesn't work, check these first — consolidated from the sections
 
 ### Browser Console (Recommended) (verified 2026-08-25 — https://developer.chrome.com/docs/devtools + https://firefox-source-docs.mozilla.org/devtools-user/)
 
-1. Open DevTools — **F12** (Windows/Linux) or **Cmd+Opt+I** (macOS) / **Cmd+Opt+J** for Console, **Safari: Cmd+Opt+I** → Web Inspector
-2. Go to **Console** tab
-3. Look for red error messages
-4. Filter by **script name** (type the script name in the Console filter) rather than a magic string
+Generic DevTools usage — open Console (F12 / Cmd+Opt+I/J; Safari Cmd+Opt+I) and filter by script name. See [Chrome DevTools](https://developer.chrome.com/docs/devtools) / [Firefox DevTools](https://firefox-source-docs.mozilla.org/devtools-user/) for full workflow.
 
 ### Userscript Manager Dashboard — Violentmonkey Worked Example
 
-Violentmonkey is the worked example for concrete UI steps (manager-neutral guidance; other managers follow the Manager × Browser table below).
-
-1. Open the **Violentmonkey Dashboard** — extension options page (verified 2026-08-25 — https://violentmonkey.github.io/guide/creating-a-userscript/ — toolbar icon → Dashboard; extension URL pattern `chrome-extension://<id>/options/index.html#/installed` UNVERIFIED (2026-08-25) against primary guide — standard WebExtension options page):
-   - Chrome/Edge: `chrome-extension://<id>/options/index.html#/installed`
-   - Firefox: `moz-extension://<id>/options/index.html#/installed`
-   - Or click the Violentmonkey toolbar icon → **Dashboard**
-2. Look for scripts with error indicators; click script name → **Editor** (CodeMirror modal with **Code / Settings / Storage** tabs) to see inline errors.
-3. **External editing:** serve the file locally and let Violentmonkey track it:
-   ```bash
-   npx http-server -c5 .
-   # open http://localhost:8080/script.user.js in browser, install, then enable "Track external edits" in dashboard
-   ```
-   The dashboard reloads the script on every save. See [managers.md](managers.md) §6 Violentmonkey workflow.
-
-Other managers: Tampermonkey has its own dashboard/editor via toolbar icon (verified 2026-08-25 — https://www.tampermonkey.net/faq.php?locale=en&q=Q600 — Dashboard via Tampermonkey icon); Greasemonkey 4+ uses `about:addons` → Greasemonkey (verified 2026-08-25 — https://wiki.greasespot.net/Greasemonkey_Manual); Safari "Userscripts" app uses Safari → Settings → Extensions. See the Manager × Browser table for debugging entry points.
+Dashboards and editors are manager-specific — see [managers.md](managers.md) §6 Workflows for install/manage/debug entry points per manager. Violentmonkey is the worked example for concrete UI steps; other managers follow the Manager × Browser table below.
 
 ### Logging: console.log vs GM_log (verified 2026-08-25 — https://www.tampermonkey.net/documentation.php?locale=en&q=GM_log + https://violentmonkey.github.io/types/functions/GM_log.html + https://wiki.greasespot.net/GM_log)
 
@@ -59,72 +42,13 @@ Tampermonkey hides verbose logs unless enabled. Before expecting output: Dashboa
 
 ---
 
-## Testing if Script Runs
+## Verifying Execution (Portable)
 
-### Method 1: Alert (Most Obvious)
-
-```javascript
-// ==UserScript==
-// @name         Test Script
-// @match        https://example.com/*
-// ==/UserScript==
-
-alert('Script is running!');  // Will definitely show if script loads
-```
-
-### Method 2: Console Log
-
-```javascript
-console.log('=== USERSCRIPT LOADED ===');
-console.log('URL:', location.href);
-console.log('Time:', new Date().toISOString());
-```
-
-### Method 3: Visual Indicator
-
-```javascript
-// @grant GM_addStyle
-
-GM_addStyle(`
-    body::before {
-        content: 'Script Active';
-        position: fixed;
-        top: 0;
-        right: 0;
-        background: green;
-        color: white;
-        padding: 5px 10px;
-        z-index: 999999;
-        font-size: 12px;
-    }
-`);
-```
+Generic `alert`/`console.log`/`GM_addStyle` probes are standard browser JS — see [MDN console](https://developer.mozilla.org/en-US/docs/Web/API/console) / [Chrome DevTools](https://developer.chrome.com/docs/devtools). For portable verification prefer `console.log` (see Logging above) with the Debug toggle noted for Tampermonkey, and feature-detect `GM_addStyle` (TM/VM only — see [managers.md](managers.md) §2) before using it for a visual probe.
 
 ---
 
 ## Common Error Messages
-
-### "Cannot read property 'X' of null"
-
-**Cause:** Element doesn't exist when script runs.
-
-```javascript
-// Error
-document.querySelector('#missing').textContent = 'Hi';
-
-// Fix: Check if element exists
-const el = document.querySelector('#missing');
-if (el) {
-    el.textContent = 'Hi';
-} else {
-    console.log('Element not found');
-}
-
-// Better fix: Wait for element
-waitForElement('#missing').then(el => {
-    el.textContent = 'Hi';
-});
-```
 
 ### "GM_xxx is not defined"
 
@@ -138,6 +62,8 @@ GM_setValue('key', 'value');  // ReferenceError
 // @grant GM_setValue
 GM_setValue('key', 'value');  // Works
 ```
+
+See [managers.md](managers.md) §3 for `@grant`/`@grant none` differences.
 
 ### "Access to XMLHttpRequest blocked by CORS"
 
@@ -208,41 +134,9 @@ See [managers.md](managers.md) §4 Sandbox/CSP and [api-dom-ui.md](api-dom-ui.md
 
 ## Debugging Techniques
 
-### 1. Isolate the Problem
+### Breakpoints (verified 2026-08-25 — https://firefox-source-docs.mozilla.org/devtools-user/debugger/how_to/debug_eval_sources/ — "debugger; statements in unnamed eval sources")
 
-Comment out sections to find what's breaking:
-
-```javascript
-console.log('Step 1');
-// doSomething();
-
-console.log('Step 2');
-// doSomethingElse();
-
-console.log('Step 3');
-// maybeBroken();  // Uncomment one at a time
-```
-
-### 2. Log Variables
-
-```javascript
-const element = document.querySelector('#target');
-console.log('Element:', element);
-console.log('Element exists:', !!element);
-console.log('Element HTML:', element?.outerHTML);
-```
-
-### 3. Breakpoints (verified 2026-08-25 — https://firefox-source-docs.mozilla.org/devtools-user/debugger/how_to/debug_eval_sources/ — "debugger; statements in unnamed eval sources")
-
-```javascript
-// Pause execution here
-debugger;
-
-// Or set breakpoints in DevTools:
-// 1. Open DevTools — F12 (Windows/Linux) or Cmd+Opt+I (macOS/Safari)
-// 2. Find your script via the Manager × Browser path below (search for script name)
-// 3. Click line number to set breakpoint
-```
+Add `debugger;` in your userscript — DevTools pauses there even inside `eval` sources.
 
 Per-manager breakpoint path — see the Manager × Browser Decision Table below. Summary (verified 2026-08-25 — https://www.tampermonkey.net/faq.php?locale=en&q=Q600 + https://firefox-source-docs.mozilla.org/devtools-user/browser_toolbox/ + https://developer.chrome.com/docs/devtools):
 - **Violentmonkey (Chrome/Firefox):** Sources → **Violentmonkey** tree; `@inject-into` controls realm.
@@ -250,13 +144,11 @@ Per-manager breakpoint path — see the Manager × Browser Decision Table below.
 - **Greasemonkey 4+:** `about:debugging` → Extensions → Inspect.
 - **Safari:** Web Inspector; GM only in content world.
 
-### 4. Network Tab
+Generic breakpoint UI (line-number clicks, stepping) is standard DevTools — see [Chrome breakpoints](https://developer.chrome.com/docs/devtools/javascript/breakpoints) / [Firefox debugger](https://firefox-source-docs.mozilla.org/devtools-user/debugger/).
 
-For `GM_xmlhttpRequest` / `GM.xmlHttpRequest` issues:
+### Network Tab
 
-1. Open DevTools → **Network** tab (F12 / Cmd+Opt+I → Network)
-2. Look for your request
-3. Check **Headers**, **Response**, **Timing** — red = failed
+Generic Network inspection is standard DevTools — see [Chrome Network](https://developer.chrome.com/docs/devtools/network) / [Firefox Network](https://firefox-source-docs.mozilla.org/devtools-user/network_monitor/). For portable `GM_xmlhttpRequest` debugging, rely on `onload`/`onerror`/`ontimeout` callbacks as ground truth:
 
 > **Caveat:** `GM_xmlhttpRequest` often runs **out-of-page via the manager** (especially in Tampermonkey/Violentmonkey) and **may NOT appear in the page Network tab**. Rely on `onload`/`onerror`/`ontimeout` logging as the ground truth. Any stronger claim about Network visibility is **UNVERIFIED** — verify against your manager's docs.
 
@@ -270,83 +162,6 @@ GM_xmlhttpRequest({
 });
 ```
 
-### 5. Test @match Pattern
-
-```javascript
-// Log when script runs to verify @match
-console.log('Script matched:', location.href);
-
-// Test pattern manually:
-// @match https://example.com/*
-// Should match: https://example.com/page
-// Should NOT match: https://other.com/example.com
-```
-
----
-
-## Debugging Async Code
-
-### Problem: Callback Not Firing
-
-```javascript
-GM_xmlhttpRequest({
-    url: 'https://api.example.com/data',
-    onload: (response) => {
-        console.log('Response received');  // Never logs
-    }
-});
-
-// Debug: Add all callbacks
-GM_xmlhttpRequest({
-    url: 'https://api.example.com/data',
-    onload: (r) => console.log('Success:', r.status),
-    onerror: (e) => console.log('Error:', e),
-    ontimeout: () => console.log('Timeout'),
-    onabort: () => console.log('Aborted')
-});
-```
-
-### Problem: Promise Never Resolves
-
-```javascript
-// Stuck promise
-const data = await someAsyncFunction();  // Never continues
-
-// Debug: Add timeout
-const data = await Promise.race([
-    someAsyncFunction(),
-    new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout after 10s')), 10000)
-    )
-]);
-```
-
----
-
-## Debugging Element Waiting
-
-### Check if Element Ever Appears
-
-```javascript
-// Watch for element in console
-const observer = new MutationObserver((mutations) => {
-    const el = document.querySelector('#target');
-    if (el) {
-        console.log('FOUND:', el);
-        observer.disconnect();
-    }
-});
-observer.observe(document.body, { childList: true, subtree: true });
-
-// After 30 seconds, report if not found
-setTimeout(() => {
-    if (document.querySelector('#target') === null) {
-        console.log('Element never appeared after 30s');
-        console.log('Current DOM:', document.body.innerHTML.substring(0, 1000));
-    }
-}, 30000);
-```
-
 ---
 
 ## Debugging Storage
@@ -358,47 +173,21 @@ setTimeout(() => {
 | Greasemonkey 4+ | `await GM.setValue` / `await GM.getValue` **only** | Sync `GM_*Value` removed in 4.0; values limited to strings/numbers/booleans — `JSON.stringify` objects |
 | Safari "Userscripts" | `await GM.setValue` / `await GM.getValue` (promise subset) | `GM_listValues` / `GM_deleteValue` via `GM.*` promises where available |
 
-### Verify Values Are Saved
+Portable pattern — use promise `GM.*` APIs and `JSON.stringify` for objects where GM4 stores primitives only:
 
 ```javascript
-// Tampermonkey / Violentmonkey — sync
-GM_setValue('test', { foo: 'bar' });
-console.log('Saved (sync)');
-const value = GM_getValue('test');
-console.log('Retrieved:', value);
-console.log('Type:', typeof value);
-const keys = GM_listValues();
-console.log('All keys:', keys);
-```
+// Portable (TM/VM/GM4+/Safari) — promise form
+await GM.setValue('test', JSON.stringify({ foo: 'bar' }));
+const raw = await GM.getValue('test');
+console.log('Retrieved:', JSON.parse(raw));
+console.log('All keys:', await GM.listValues());
 
-```javascript
-// Greasemonkey 4+ / Safari — promise (also works in TM/VM)
-await GM.setValue('test', { foo: 'bar' });  // Greasemonkey: await GM.setValue('test', JSON.stringify({foo:'bar'}))
-console.log('Saved (promise)');
-const value = await GM.getValue('test');
-console.log('Retrieved:', value);
+// Clear (portable)
 const keys = await GM.listValues();
-console.log('All keys:', keys);
+for (const k of keys) await GM.deleteValue(k);
 ```
 
-### Clear Storage for Fresh Start
-
-```javascript
-// Tampermonkey / Violentmonkey — sync
-GM_listValues().forEach(key => {
-    console.log('Deleting:', key);
-    GM_deleteValue(key);
-});
-
-// Promise — portable (Greasemonkey 4+ / Safari / TM / VM)
-const keys = await GM.listValues();
-for (const key of keys) {
-    console.log('Deleting:', key);
-    await GM.deleteValue(key);
-}
-```
-
-See [api-storage.md](api-storage.md) for value-type rules and batch helpers (`GM_getValues`/`GM_setValues` since Tampermonkey 5.3+, Violentmonkey since 2.19.1).
+Sync `GM_*Value` works in TM/VM only — guard or avoid for portability. See [api-storage.md](api-storage.md) for value-type rules and batch helpers (`GM_getValues`/`GM_setValues` since Tampermonkey 5.3+, Violentmonkey since 2.19.1).
 
 ---
 
@@ -406,7 +195,7 @@ See [api-storage.md](api-storage.md) for value-type rules and batch helpers (`GM
 
 ### Debugger Source Naming via `//# sourceURL` (verified 2026-08-25 — https://firefox-source-docs.mozilla.org/devtools-user/debugger/how_to/debug_eval_sources/)
 
-Violentmonkey names each userscript with a synthetic `//# sourceURL=` suffix (`'\\n//# sourceURL=' + browser.extension.getURL(`${name}.user.js#${scriptId}`)` — https://github.com/Tampermonkey/tampermonkey/issues/831 comment, Violentmonkey behavior) so it appears as a distinct file under **Sources → Violentmonkey**. Tampermonkey MV3 uses `userscript.html?name=<encoded name>&id=<uuid>` (same issue). Add `debugger;` anywhere — DevTools pauses there even inside `eval` sources (https://firefox-source-docs.mozilla.org/devtools-user/debugger/how_to/debug_eval_sources/ — "The debugger will also stop at debugger; statements in unnamed eval sources").
+Violentmonkey names each userscript with a synthetic `//# sourceURL=` suffix (`'\n//# sourceURL=' + browser.extension.getURL(`${name}.user.js#${scriptId}`)` — https://github.com/Tampermonkey/tampermonkey/issues/831 comment, Violentmonkey behavior) so it appears as a distinct file under **Sources → Violentmonkey**. Tampermonkey MV3 uses `userscript.html?name=<encoded name>&id=<uuid>` (same issue). Add `debugger;` anywhere — DevTools pauses there even inside `eval` sources (https://firefox-source-docs.mozilla.org/devtools-user/debugger/how_to/debug_eval_sources/ — "The debugger will also stop at debugger; statements in unnamed eval sources").
 
 ### Inline SourceMaps (`//# sourceMappingURL`) and Wrapper Offsets (verified 2026-08-25 — https://developer.chrome.com/docs/devtools/javascript/source-maps + https://firefox-source-docs.mozilla.org/devtools-user/debugger/how_to/use_a_source_map/)
 
@@ -416,12 +205,7 @@ Known offset bug (verified 2026-08-25 via https://github.com/violentmonkey/viole
 
 ### Exception Breakpoints & Stack Traces (verified 2026-08-25 — https://developer.chrome.com/docs/devtools/javascript/breakpoints + https://firefox-source-docs.mozilla.org/devtools-user/debugger/how_to/breaking_on_exceptions/)
 
-Don't rely only on `console.log`. Use **Break on exceptions** (pause on caught/uncaught throws) and inspect stack traces:
-
-- **Chrome/Edge:** Sources panel → right pane → **Breakpoints** → ☑ **Pause on exceptions** (and ☑ **Pause on caught exceptions**). See https://developer.chrome.com/docs/devtools/javascript/breakpoints — table row "Exception | Pause on the line of code that is throwing a caught or uncaught exception."
-- **Firefox:** Debugger → toolbar → **Pause on exceptions** (icon with pause + exception). See https://firefox-source-docs.mozilla.org/devtools-user/debugger/ — "Break on exceptions" under Pause execution.
-
-Stack traces then show the `sourceURL`-named userscript file, not just `VMXXX` eval frames.
+Portable use: enable **Pause on exceptions** in your DevTools — see [Chrome breakpoints](https://developer.chrome.com/docs/devtools/javascript/breakpoints) / [Firefox break on exceptions](https://firefox-source-docs.mozilla.org/devtools-user/debugger/how_to/breaking_on_exceptions/). Stack traces then show the `sourceURL`-named userscript file, not just `VMXXX` eval frames.
 
 ### Console Realms: Where `console.log` Actually Appears (verified 2026-08-25 — https://www.tampermonkey.net/faq.php?locale=en&q=Q600 + https://violentmonkey.github.io/api/gm/#gm_info)
 
@@ -453,12 +237,7 @@ Platform keys: **Windows/Linux:** F12, Ctrl+Shift+I (DevTools), Ctrl+Shift+J (Co
 
 ## Getting Help
 
-If you can't solve the issue:
-
-1. **Check the userscript manager's forums/help** — Search for similar issues
-2. **Provide minimal reproduction** — Smallest script that shows the bug
-3. **Include browser + manager + version** — Found in `GM_info` (see snippet below)
-4. **Share console errors** — Copy the exact error message
+If you can't solve the issue, provide a minimal reproduction with:
 
 ```javascript
 // Get debug info to share (verified 2026-08-25 — https://www.tampermonkey.net/documentation.php?locale=en&q=GM_info + https://violentmonkey.github.io/api/gm/#gm_info + https://wiki.greasespot.net/GM.info — GM_info.scriptHandler / GM_info.version / GM_info.script)
@@ -484,3 +263,4 @@ console.log('userAgentData:', GM_info.userAgentData); // Chromium 90+ high-entro
 
 > **No `// @debugFlag` metadata exists (verified 2026-08-25 — https://violentmonkey.github.io/api/metadata-block/ + https://www.tampermonkey.net/documentation.php?locale=en).** No Violentmonkey (https://violentmonkey.github.io/api/metadata-block/ — full key list contains @name, @namespace, @match, @grant, @inject-into, @run-at, etc., but no @debugFlag) nor Tampermonkey (https://www.tampermonkey.net/documentation.php?locale=en — documentation index lists all @grant/@sandbox/@run-at keys, no @debugFlag) defines such a key. If you need debug-only behavior, gate it yourself: `if (GM_info.script.version.includes('debug')) ...` or a stored flag via `GM_getValue`.
 
+> **Real profile (non-headless) testing — see [testing.md](testing.md).** For manual testing in your actual browser profile (persistent `user-data-dir`, real cookies/storage/extensions) with a visible browser rather than headless automation, see **testing.md → Non-headless / real-profile testing** (launch flags, profile persistence, and when to prefer it over headless). Debugging above uses headless and real profiles interchangeably; the guide in `testing.md` covers the launch and isolation differences.

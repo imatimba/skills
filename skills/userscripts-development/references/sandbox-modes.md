@@ -31,7 +31,7 @@ Script runs in an isolated context, separate from the page.
 - **Implemented as:** Tampermonkey `@sandbox DOM` or Violentmonkey/Safari `@inject-into content` (isolated/content world). Safari forces this world whenever any `@grant` is present. Greasemonkey 4+ always uses a sandboxed isolated world (Xray vision). (verified 2026-08-25 — https://www.tampermonkey.net/documentation.php?locale=en&q=sandbox, https://violentmonkey.github.io/api/metadata-block/, https://wiki.greasespot.net/Greasemonkey_Manual:Environment)
 - **Pros:** Protected from page scripts; can't be detected easily; safer execution.
 - **Cons:** Cannot directly access page variables — requires `unsafeWindow` bridge (unavailable in Safari) or DOM-only approach; some page APIs need explicit bridging.
-- **Clarification on `unsafeWindow` vs page vars:** In an isolated world, `window` is the sandbox's window, not the page's. Page variables (`window.pageVariable`) are `undefined` without a bridge. `unsafeWindow` (where available — Tampermonkey with explicit `@grant unsafeWindow`, Violentmonkey without grant before 2.32 and with grant handling after, Greasemonkey 4+ provides `unsafeWindow` but it is Xray-wrapped — page-defined properties require `window.wrappedJSObject`, sharing requires `cloneInto`/`exportFunction` per [MDN Sharing objects with page scripts](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Sharing_objects_with_page_scripts)) provides a reference to the page's `window`. In Safari, `unsafeWindow` does not exist — design DOM-only.
+- **Bridge note:** In an isolated world, `window` is the sandbox's window, not the page's. Page variables need a bridge: `unsafeWindow` where available (Tampermonkey requires explicit `@grant unsafeWindow`; Greasemonkey Xray needs `wrappedJSObject`/`cloneInto`/`exportFunction` per [MDN Sharing objects with page scripts](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Sharing_objects_with_page_scripts)); Safari has no `unsafeWindow` — design DOM-only.
 
 ### USERSCRIPT_WORLD (Tampermonkey `JavaScript` — Firefox Only; Chrome platform `USER_SCRIPT` separate)
 
@@ -40,7 +40,6 @@ Special context created for userscripts, with enhanced capabilities.
 - **Implemented as:** Tampermonkey's `@sandbox JavaScript` creates a Firefox-only `USERSCRIPT_WORLD` (falls back to `raw` on other browsers) and Greasemonkey 4+ internals run in a Firefox sandboxed world. Chrome 120+ separately exposes a platform-level `USER_SCRIPT` world via the `chrome.userScripts` API (`ExecutionWorld.MAIN` | `USER_SCRIPT`; `USER_SCRIPT` exempt from page CSP) which is NOT controlled by `@sandbox`/`@inject-into`. Safari/WebKit exposes no equivalent userscript world. (verified 2026-08-25 — https://www.tampermonkey.net/documentation.php?locale=en&q=sandbox, https://developer.chrome.com/docs/extensions/reference/api/userScripts)
 - **Pros:** Bypasses CSP; better isolation than MAIN_WORLD; supports `document-start` timing reliably in Firefox.
 - **Cons:** Firefox only; need `cloneInto`/`exportFunction` for page communication.
-- **Chrome 120+ note (verified 2026-08-25):** Chrome MV3 separately requires the extension to request the `userScripts` permission plus host permissions AND the user to enable a toggle — Developer Mode (< Chrome 138) or Allow User Scripts per-extension (≥ Chrome 138). `USER_SCRIPT` is exempt from the page's CSP via `chrome.userScripts.configureWorld({ csp: ... })`; Tampermonkey's Settings → Advanced → Content Script API selector chooses whether it injects via content-script or via the `userScripts` API. Sources: https://developer.chrome.com/docs/extensions/reference/api/userScripts, https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/userScripts/ExecutionWorld.
 
 ---
 
@@ -134,7 +133,7 @@ console.log(typeof GM_info !== 'undefined' ? GM_info.script.version : GM.info.sc
 
 ## Firefox: cloneInto and exportFunction
 
-When running in USERSCRIPT_WORLD (Firefox), you need special functions to share data with the page.
+When running in USERSCRIPT_WORLD (Firefox), you need special functions to share data with the page. See [MDN Sharing objects with page scripts](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Sharing_objects_with_page_scripts).
 
 ### cloneInto
 
@@ -166,58 +165,13 @@ unsafeWindow.myHandler = exportFunction(myHandler, unsafeWindow);
 // Page can now call: myHandler('hello')
 ```
 
-> **Xray unwrapping — transitive; rewrap and Promise limit (verified 2026-08-25):** `window.wrappedJSObject` unwrapping is transitive — every property of the unwrapped object is itself unwrapped and therefore untrusted. Rewrap once you have the object you need: `XPCNativeWrapper(window.wrappedJSObject.foo)`. A `Promise` cannot be cloned directly via `cloneInto` (structured-clone algorithm does not support `Promise`); use `new window.Promise((resolve) => { const val = {…}; resolve(cloneInto(val, window)); })` instead (see MDN Promise cloning section). Sources: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Sharing_objects_with_page_scripts.
-
-### Complete Example
-
-```javascript
-// Tampermonkey on Firefox: @sandbox JavaScript
-// Violentmonkey on Firefox: @inject-into auto or page
-
-// Async APIs preferred — works in Greasemonkey 4+ as well
-// @grant        GM.getValue
-// @grant        GM.setValue
-
-// Create an API for the page
-const scriptAPI = {
-    version: '1.0.0',
-    getData: async function () {
-        return GM.getValue('data', null);
-    },
-    setData: async function (data) {
-        await GM.setValue('data', data);
-    }
-};
-
-// Export to page
-if (typeof cloneInto !== 'undefined') {
-    // Firefox USERSCRIPT_WORLD — need to export
-    unsafeWindow.ScriptAPI = cloneInto(scriptAPI, unsafeWindow, {
-        cloneFunctions: true
-    });
-} else {
-    // Chrome or MAIN_WORLD — direct assignment works (unsafeWindow available in TM/VM, not Safari)
-    if (typeof unsafeWindow !== 'undefined') {
-        unsafeWindow.ScriptAPI = scriptAPI;
-    }
-}
-```
-
-### Legacy wrapper: `@unwrap` (verified 2026-08-25)
-
-Greasemonkey ≤0.9 wrapped every userscript in an anonymous function `(function(){ /* script */ })()` to avoid collisions with the sandbox; `var` and function declarations stayed local, unqualified `i = 5` landed on the sandbox global (`this`) not `window`. `// @unwrap` disabled that wrapper (debug-only, strongly discouraged). As of Greasemonkey 1.0 (2012-08-24) unwrapped is the default and `@unwrap` is obsolete; Violentmonkey still records `unwrap?: boolean` in `GM_info.script.unwrap` for compatibility. Sources: https://wiki.greasespot.net/Greasemonkey_Manual:Environment.
+Portable implication: feature-detect `cloneInto`/`exportFunction` — Firefox USERSCRIPT_WORLD needs them, other worlds use direct assignment. See Best Practices §3 for a portable helper.
 
 ---
 
 ## Content Security Policy (CSP)
 
-### What CSP Blocks
-
-CSP can prevent:
-- Inline `<script>` tags
-- `eval()` and `new Function()`
-- Inline event handlers
-- Loading scripts from non-whitelisted domains
+CSP can block inline scripts, `eval`/`new Function`, inline handlers, and non-whitelisted resources — see [MDN CSP](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP).
 
 ### How Managers Handle CSP (see [managers.md](managers.md) §4)
 
@@ -227,7 +181,7 @@ CSP can prevent:
 | ISOLATED_WORLD / `content` | Partial — script runs, but injected `<script>` may still be blocked | Script runs isolated; injected scripts still subject to CSP | Subject to Firefox sandbox rules / Content world only |
 | USERSCRIPT_WORLD | Yes — bypasses CSP (Firefox) | Yes on Firefox | Firefox sandbox rules |
 
-> **Chrome MV3 vs Firefox CSP nuance (verified 2026-08-25):** Violentmonkey's documented “injection fails in Firefox on sites with strict CSP” is Firefox-specific (page-context → content fallback). Chrome MV3 has a distinct split: content scripts run in an isolated world but opaque `<script>` injection is still page-CSP-bound; `USER_SCRIPT` world (Chrome 120+ `chrome.userScripts` / `ExecutionWorld.USER_SCRIPT`) is exempt from the page's CSP via `configureWorld({ csp })`. Sources: https://developer.chrome.com/docs/extensions/reference/api/userScripts, https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts, https://violentmonkey.github.io/posts/inject-into-context/.
+For Chrome 120+ `USER_SCRIPT` CSP exemption and Firefox-specific fallback details, see [managers.md](managers.md) §4, [Chrome userScripts docs](https://developer.chrome.com/docs/extensions/reference/api/userScripts), and [Violentmonkey inject-into context](https://violentmonkey.github.io/posts/inject-into-context/).
 
 **Use `GM_addElement` / `GM.addElement` instead of `createElement` for scripts:**
 
@@ -245,8 +199,6 @@ GM_addElement('script', {
 // await GM.addElement('script', { textContent: '...' });
 ```
 
-> **blob: vs data: nuance (verified 2026-08-25):** `GM.getResourceURL(name)` returns a `blob:` URL by default (short, cacheable) or a `data:` URL when `isBlobUrl=false` (long, synchronous decode). On strict CSP sites that forbid `blob:` or `data:`, resource URLs may still be blocked. Workaround in Chrome is `GM_addElement`/`GM.addElement`; in Firefox you must disable CSP via `about:config` or an extension that modifies headers. Sources: https://violentmonkey.github.io/api/gm/ (GM_getResourceURL / GM_addElement docs).
-
 **Use `@require` for external scripts:**
 
 ```javascript
@@ -256,33 +208,11 @@ GM_addElement('script', {
 
 ---
 
-## Tampermonkey: Content Script API Setting — Tampermonkey-only (Chrome MV3 modes)
+## Tampermonkey: Content Script API Setting — Tampermonkey-only
 
 This setting exists **only in Tampermonkey's dashboard (Settings → Advanced)**. Violentmonkey, Greasemonkey 4+, and Safari expose nothing equivalent.
 
-Tampermonkey on Chrome MV3 exposes three injection modes:
-
-### Content Script (Default)
-
-- Scripts injected via content script API
-- Retrieved via messaging
-- No true `document-start` support in this mode
-
-### UserScripts API
-
-- Uses browser's UserScripts API
-- Chrome: via messaging, no `document-start`
-- Firefox: instant execution, `document-start` works
-
-### UserScripts API Dynamic
-
-- Both wrapper and script injected via API
-- True `document-start` support
-- Most compatible on supporting browsers
-
-Other managers: no comparable toggle. Violentmonkey handles world selection per script via `@inject-into`; Greasemonkey 4+ always sandboxed; Safari always content-world when grants exist.
-
-> **Document-start reliability (verified 2026-08-25):** Tampermonkey `@run-at document-start` only reliably fires early when using Firefox with UserScripts API or UserScripts API Dynamic (Chrome's UserScripts API is message-based and has no true `document-start`). Violentmonkey on MV2 needs the default `page` mode plus Synchronous page mode (Chrome/Firefox) or Alternative page mode (Firefox-only, on by default), non-incognito, cookies not blocked for the site, and the site's CSP not blocking the inline injection — otherwise `document-start` degrades to `document-end`/`document-body`. Sources: https://www.tampermonkey.net/documentation.php?locale=en&q=content_script_api, https://violentmonkey.github.io/api/metadata-block/ (@run-at document-start / Synchronous page mode note).
+On Chrome MV3, Tampermonkey's Content Script API selector (Content Script / UserScripts API / UserScripts API Dynamic) determines injection mechanism and `document-start` reliability — it is a per-user dashboard toggle, not a script-declarable header. Portable scripts must not rely on a specific mode; explicitly set `@run-at` and test across managers. See [managers.md](managers.md) §4, [Tampermonkey content_script_api docs](https://www.tampermonkey.net/documentation.php?locale=en&q=content_script_api), and [header-reference.md](header-reference.md).
 
 ---
 
@@ -312,8 +242,6 @@ const hasDirectAccess = typeof unsafeWindow !== 'undefined'
     ? typeof unsafeWindow.somePageVariable !== 'undefined'
     : false;
 ```
-
-> **Firefox `globalThis` vs `window` (verified 2026-08-25):** In regular web pages `globalThis === window`, but in Firefox content scripts `globalThis` is a distinct object inheriting from `window`. The difference is usually invisible except when a global shadows a standard API (e.g., `structuredClone`) — `window.structuredClone` vs `globalThis.structuredClone` may diverge. Prefer `window.*` for page-bridge checks and feature-detect `window.structuredClone` vs `window.wrappedJSObject`. Source: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Content_scripts (Content script environment — Xray vision / globalThis note).
 
 ---
 

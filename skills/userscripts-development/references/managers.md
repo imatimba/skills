@@ -15,16 +15,16 @@ Managers covered: **TM** = Tampermonkey · **VM** = Violentmonkey · **GM4+** = 
 | Greasemonkey 4+ | Firefox only | `GM.*` promises ONLY | All sync `GM_*` removed in 4.0. Storage values limited to strings/numbers/booleans. | (verified 2026-08-25 — https://wiki.greasespot.net/GM.setValue — strings/booleans/integers ONLY; https://www.greasespot.net/2017/09/greasemonkey-4-for-script-authors.html — async-only GM.)
 | Safari "Userscripts" app | Safari (macOS + iOS 15.1+) | Async `GM.*` promise SUBSET | Open source. Any `@grant` forces content-world execution; no page-world access. | (verified 2026-08-25 — https://github.com/quoid/userscripts#api & #metadata: iOS 15.1+ / macOS 12+ Safari 14.1+, content-world only when using GM APIs)
 
-### Tier-2 snapshot (verified 2026-08-25 — https://docs.scriptcat.org, https://adguard.com/kb/general/extensions/, https://erosman.github.io/firemonkey/, https://chromewebstore.google.com/detail/orangemonkey/ekmeppjgajofkpiofbebgcbohbmfldaf) — see [manager-compat.md](manager-compat.md) for full divergences
+### Tier-2 snapshot — see [manager-compat.md](manager-compat.md) for full divergences
 
-| Manager | Browsers (verified 2026-08-25 — https://docs.scriptcat.org, https://adguard.com/kb/general/extensions/, https://erosman.github.io/firemonkey/) | License (verified 2026-08-25 — https://github.com/scriptscat/scriptcat, https://github.com/erosman/firemonkey, https://github.com/quoid/userscripts) | GM compatibility | Notes |
-| --- | --- | --- | --- | --- |
-| ScriptCat | Chrome, Edge, Firefox | GPL-3.0 | Full TM compatibility + background & scheduled scripts, rich APIs | Active — 1,589 commits, v1.4.0 (Jul 2026); Chrome Web Store + AMO + Edge Add-ons; docs at https://docs.scriptcat.org |
-| AdGuard | Windows / Android / Mac apps + Browser Extension (Chrome 138+ requires Developer mode + Allow user scripts) | Proprietary | Supports `GM_*` and `GM.*` for `getValue`/`setValue`/`deleteValue`/`listValues`/`getResourceText`/`getResourceURL`/`addStyle`/`log`/`setClipboard`/`xmlHttpRequest`/`openInTab`/`registerMenuCommand`/`addElement`/`window.onurlchange` (per https://adguard.com/kb/general/extensions/) | Acts as userscript manager; User Scripts API required on Chrome MV3 5.2+ (https://adguard.com/kb/adguard-browser-extension/user-scripts-api/) |
-| FireMonkey | Firefox (Firefox for Android experimental since 2.12) | MPL-2.0 | Supports GM3 (`GM_*`) & GM4 (`GM.*`) + `fetch` | Firefox native `userScripts` API (Firefox 65+); lightweight manager for scripts + styles; https://erosman.github.io/firemonkey/ |
-| OrangeMonkey | Chromium only | Proprietary | All `GM_*` functions (fork of Violentmonkey) | Lightweight VM fork, v2.0.16 (Aug 2026); Chrome Web Store only; https://chromewebstore.google.com/detail/orangemonkey/ekmeppjgajofkpiofbebgcbohbmfldaf |
+| Manager | Browsers | Portable GM subset | Notes |
+| --- | --- | --- | --- |
+| ScriptCat | Chrome, Edge, Firefox | Full TM compatibility including `GM.*` batch APIs | Background/scheduled scripts (`@background`/`@crontab`), `@inject-into page`/`content` only (no `auto`); `@storageName` for cross-script sharing |
+| AdGuard | Chrome (MV3 User Scripts API) + Windows/Mac/Android apps | `GM_*`/`GM.*` for `getValue`/`setValue`/`deleteValue`/`listValues`/`getResourceText`/`getResourceURL`/`addStyle`/`log`/`setClipboard`/`xmlHttpRequest`/`openInTab`/`registerMenuCommand`/`addElement`/`window.onurlchange` | System-level manager; finite allow-list — missing `GM_cookie`, `GM_addValueChangeListener`, streaming, etc. implies unsupported |
+| FireMonkey | Firefox (desktop + Android experimental) | `GM_*` & `GM.*` (prefers `GM.*`); `fetch` | Firefox `userScripts` API; `@grant NONE`/absent = page context, any `@grant` = sandboxed; `@allFrames` defaults `false` (`true` elsewhere) |
+| OrangeMonkey | Chromium only | All `GM_*` (VM fork) | Lightweight VM fork — verify against store listing; no independent API docs |
 
-Core manager licenses & status (verified 2026-08-25 — https://violentmonkey.github.io/, https://www.tampermonkey.net/documentation.php, https://wiki.greasespot.net/Greasemonkey_Manual:API, https://github.com/quoid/userscripts): Violentmonkey MIT — active, 3,888 commits; Tampermonkey proprietary (Jan Biniok) — active, MV3 migration 2025–2026; Greasemonkey MIT — maintenance mode, 795 commits, Firefox-only; Userscripts (Safari) GPL-3.0 — active, 1,320 commits.
+Tier-2 details (storage sharing, `@inject-into` defaults, `@allFrames`/`@run-at` deltas, `CAT_*`): see [manager-compat.md](manager-compat.md).
 
 ---
 
@@ -41,7 +41,6 @@ Legend: ✅ supported · ⚠️ partial/experimental · ❌ absent. Versions are
 | Value types | JSON-serialisable incl. objects | JSON-serialisable (no DOM nodes/cycles) | **Strings/numbers/booleans ONLY** — `JSON.stringify` objects yourself | JSON-serialisable | (verified 2026-08-25 — https://www.tampermonkey.net/documentation.php?q=GM_values, https://violentmonkey.github.io/api/gm/#gm_setvalue — JSON serializable, https://wiki.greasespot.net/GM.setValue — strings/booleans/integers ONLY, https://github.com/quoid/userscripts#api — Any JSON-serializable)
 | Batch `GM.getValues` / `setValues` / `deleteValues` (+ `GM_` forms) | ✅ 5.3+ | ✅ since 2.19.1 | ❌ | ❌ | (verified 2026-08-25 — https://www.tampermonkey.net/documentation.php?q=GM_values — v5.3+, https://violentmonkey.github.io/api/gm/#gm_getvalues — Since VM2.19.1)
 | `GM.addValueChangeListener` (cross-tab broadcast) | ✅ (`remote` flag = other tab) | ✅ (same semantics) | ⚠️ signature differs; `remote` handling UNVERIFIED (2026-08-25) | ❌ | (verified 2026-08-25 — https://www.tampermonkey.net/documentation.php?q=GM_values — remote flag; VM docs — same semantics)
-| Key ordering (`listValues`) | No ordering guarantee | None | None | None — always `.sort()` if order matters |
 
 ### Networking
 
@@ -54,7 +53,6 @@ Legend: ✅ supported · ⚠️ partial/experimental · ❌ absent. Versions are
 | `cookie` option (patched cookies) | ✅ | ❌ | ❌ | ❌ | (verified 2026-08-25 — https://www.tampermonkey.net/documentation.php?q=GM_xmlhttpRequest — cookie)
 | `responseType`: `arraybuffer`/`blob`/`json` | ✅ | ✅ | ✅ | ✅ standard XHR types | (verified 2026-08-25 — https://www.tampermonkey.net/documentation.php?q=GM_xmlhttpRequest, https://violentmonkey.github.io/api/gm/#gm_xmlhttprequest)
 | `responseType: 'stream'` + `onloadstart` reader | ✅ 5.4+ | ❌ | ❌ (`ms-stream` instead) | ❌ | (verified 2026-08-25 — https://www.tampermonkey.net/documentation.php?q=GM_xmlhttpRequest — responseType stream, https://www.tampermonkey.net/changelog.php — experimental stream in 5.4.0)
-| `binary: true` (legacy send mode) | ✅ | ✅ compat | ✅ | ⚠️ deprecated — pass Blob/ArrayBuffer directly | (verified 2026-08-25 — https://violentmonkey.github.io/api/gm/#gm_xmlhttprequest — binary since VM2.12.2; https://github.com/quoid/userscripts#api — Deprecated)
 | `onprogress` / `upload.onprogress` | ✅ | ✅ upload since 2.32.0 | ✅ | ✅ | (verified 2026-08-25 — https://violentmonkey.github.io/api/gm/#gm_xmlhttprequest — upload since VM2.32.0)
 | `redirect` option | ✅ (build 6180+) | ❌ | ❌ | ❌ | (verified 2026-08-25 — https://www.tampermonkey.net/documentation.php?q=GM_xmlhttpRequest — redirect build 6180+)
 | `proxy` option | ✅ Firefox-only builds | ❌ | ❌ | ❌ | (verified 2026-08-25 — https://www.tampermonkey.net/documentation.php?q=GM_xmlhttpRequest — proxy Firefox-only)
@@ -141,45 +139,22 @@ const canMuteTab = typeof GM_audio !== "undefined" || typeof GM?.audio !== "unde
 
 ## 6. Workflows
 
-### Violentmonkey (worked example)
-
-- **Dashboard**: extension options page (`chrome-extension://<id>/options/index.html#/installed`, `moz-extension://<id>/...` on Firefox). Routes: `#/installed`, `#/settings`.
-- **Create**: ➕ button, "Install from URL", drag-and-drop a `.user.js`, or install from GreasyFork/OpenUserJS links.
-- **Editor**: CodeMirror modal with **Code / Settings / Storage** tabs.
-- **External editor**: serve the file locally (`npx http-server -c5 .`) and open `http://localhost:8080/script.user.js`, then enable **Track external edits** — the dashboard reloads the script on every save.
-- **Sync**: Dropbox, OneDrive, Google Drive, WebDAV, S3-compatible (Settings → Sync).
-- **Backup**: ZIP export/import (scripts as `.user.js` + optional `.storage.json`; imports Tampermonkey-format files too).
-- **Debugging**: drop a `debugger;` statement → DevTools → Sources → **Violentmonkey** tree. Console output lands in the page console; the sandboxed console is captured separately.
-- **Mobile**: full features on Firefox for Android (AMO). Chromium-based mobile browsers are a volatile ecosystem (Kiwi archived Jan 2025; successor path via Microsoft Edge Canary with `Extension install by id` per https://github.com/kiwibrowser/src.next, verified 2026-08-25 — https://github.com/kiwibrowser/src.next) — verify before recommending.
-
-### Tampermonkey (brief)
-
-- Own dashboard/editor via toolbar icon; settings modes from Simple to Advanced (many TM-only toggles live under Advanced).
-- Chrome store build is **MV3** (Chrome 138 — Jul 24 2025 — disabled MV2 for all users, no re-enable; enterprise `ExtensionManifestV2Availability` removed at Chrome 139; final Chrome Web Store MV2 removal Aug 31 2026 per [MV2 deprecation timeline](https://developer.chrome.com/docs/extensions/develop/migrate/mv2-deprecation-timeline)); Firefox build remains MV2. Several capabilities differ between them (`GM_webRequest` is MV2/Firefox-only).
-- **Tampermonkey v5.4.1+ injection permission**: users must allow script injection per-site or globally (dashboard → Settings → Script Injection). Scripts cannot bypass this; surface it in troubleshooting.
-- Firefox debugging: `about:debugging` → This Firefox → Tampermonkey → Inspect.
-
-### Greasemonkey 4+ (brief)
-
-- Firefox only; manage/update scripts via `about:addons` → Greasemonkey.
-- Debugging: `about:debugging` → This Firefox → Extensions → Inspect.
-- Migration: every `GM_*` call becomes `await GM.*`; objects in storage must be stringified manually; `GM_addStyle`/`GM_log` need polyfill or replacement (`gm4-polyfill.js` provides shims).
-
-### Safari "Userscripts" app (brief)
-
-- Install from macOS/iOS App Store; enable under Settings → Safari → Extensions (set to Always Allow on sites).
-- Promise-only subset: `addStyle` (partial), `getValue/setValue/listValues/deleteValue`, `xmlHttpRequest`, `openInTab/closeTab`, `setClipboard` (deprecated), `info`. Everything else — including `unsafeWindow`, menu commands, notifications, cookies — does not exist there.
-- Debugging via Safari Web Inspector; `GM_info.scriptHandler === "Userscripts"`.
+| Manager | Install / Manage | Debugging | Portable note |
+| --- | --- | --- | --- |
+| Violentmonkey | Dashboard at extension options (`#/installed`); install via GreasyFork/openUserJS link, drag-and-drop `.user.js`, or "Install from URL" | `debugger;` → DevTools → **Violentmonkey** source tree; external-editor via local server + **Track external edits** | Owner example for UI steps; page-CSP is respected (see §4) |
+| Tampermonkey | Toolbar → Dashboard/Editor (settings modes Simple→Advanced) | Chrome: `chrome://extensions` → Inspect; Firefox: `about:debugging` → This Firefox → Inspect | Chrome store = **MV3**, Firefox = MV2; `GM_webRequest` Firefox-MV2 only; **Settings → Script Injection** must be allowed (TM 5.4.1+) or scripts silently fail |
+| Greasemonkey 4+ | `about:addons` → Greasemonkey | `about:debugging` → Inspect | `GM_*` → `await GM.*`; objects in storage must be `JSON.stringify`'d; `GM_addStyle`/`GM_log` need polyfill |
+| Safari "Userscripts" | App Store → Safari → Extensions → Always Allow | Safari Web Inspector | Promise-only subset — `addStyle` (partial), `getValue`/`setValue`/`listValues`/`deleteValue`, `xmlHttpRequest`, `openInTab`/`closeTab`, `setClipboard` (deprecated), `info` |
 
 ---
 
 ## 7. Universal Limitations (all managers)
 
-- No local filesystem access via any GM API. Adjacent capabilities don't change this: `GM_download` writes only through the browser's download subsystem; `GM_xmlhttpRequest` blob/arraybuffer responses stay in memory; `@require`/`@resource` are network-only fetches by default — Tampermonkey accepts `file://` requires only after the user opts in to local file access (FAQ Q402). The "allow file URLs" extension toggle grants permission to run scripts on local pages — it is not a filesystem API.
-- Cross-origin iframe DOM is unreachable from the top frame (browser same-origin policy), regardless of manager. To affect iframe content, match the iframe's own URL — every manager injects separate script instances into frames whose URLs match; `@noframes` = top-frame-only.
-- GM storage values are per-browser-profile and never cloud-synced: manager sync features (TM TESLA/GDrive/Dropbox/WebDAV, VM Dropbox/OneDrive/GDrive/WebDAV/S3, Greasemonkey Firefox Sync, Safari iCloud folder) cover scripts and settings only.
-- Very strict CSP can still defeat injection (VM degrades to content world; TM relaxation is best-effort; neither guarantees bypass; Safari CSP example: https://github.com/quoid/userscripts/issues/106, verified 2026-08-25 — https://github.com/quoid/userscripts/issues/106).
-- A userscript in an isolated/content world observes the DOM but shares no JS scope with the page — page variables require the bridges in §4. (Edge case: DOM prototypes such as `Element.prototype` live in the shared native realm — prototype mutations are visible cross-world.)
+- **No filesystem API** — `GM_download` writes via browser downloads only; `@require`/`@resource` are network fetches (TM-only: `file://` requires explicit opt-in per [FAQ Q402](https://www.tampermonkey.net/faq.php#Q402)); the "allow file URLs" toggle is for running on `file://` pages, not filesystem access.
+- **No cross-origin iframe DOM** — browser same-origin policy (see [MDN same-origin policy](https://developer.mozilla.org/en-US/docs/Web/API/Same-origin_policy)); `@noframes` = top-frame only; match the iframe URL to inject there.
+- **GM storage is per-profile, never cloud-synced** — manager sync covers scripts/settings only.
+- **Strict CSP can still defeat injection** — VM falls back to content world; TM relaxation is best-effort; neither is guaranteed.
+- **Isolated/content world shares DOM, not JS scope** — page variables need a bridge (§4); prototype mutations on native objects (e.g., `Element.prototype`) are visible cross-world.
 
 ---
 

@@ -30,21 +30,21 @@ The `GM.*` API provides promise-based versions of `GM_*` functions (verified 202
 
 ## Naming Conventions
 
-| Sync (`GM_*`) | Async (`GM.*`) | Casing origin | Per-manager availability |
-|---------------|----------------|---------------|--------------------------|
-| `GM_getValue` | `GM.getValue` | — | Tampermonkey + Violentmonkey: both forms; Greasemonkey 4+: `GM.*` only; Safari: promise subset only |
-| `GM_setValue` | `GM.setValue` | — | Tampermonkey + Violentmonkey: both; Greasemonkey 4+: `GM.*` only; Safari: ✅ |
-| `GM_deleteValue` | `GM.deleteValue` | — | Tampermonkey + Violentmonkey: both; Greasemonkey 4+: `GM.*` only; Safari: ✅ |
-| `GM_listValues` | `GM.listValues` | — | Tampermonkey + Violentmonkey: both; Greasemonkey 4+: `GM.*` only; Safari: ✅ |
-| `GM_getValues` / `GM_setValues` / `GM_deleteValues` (batch) | `GM.getValues` / `GM.setValues` / `GM.deleteValues` | — | **Tampermonkey 5.3+, Violentmonkey since 2.19.1** — both forms there; **Greasemonkey 4+ / Safari: not supported — use `Promise.all` over individual calls** (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_values#api:GM_getValues `v5.3+`, violentmonkey.github.io/api/gm/#gm_getvalues `Since VM2.19.1`, wiki.greasespot.net/GM.getValue `Promise.all()`) |
-| `GM_getResourceURL` | `GM.getResourceUrl` | Lowercase `rl` — **Greasemonkey 4 convention** (carried by Violentmonkey since 2.12.0) | Greasemonkey 4+ is the origin of the lowercase spelling; Tampermonkey accepts both but documents `getResourceUrl` for promise |
-| `GM_xmlhttpRequest` | `GM.xmlHttpRequest` | Capital `H` — **Tampermonkey convention** | Violentmonkey since 2.18.3, Greasemonkey 4+, Safari custom promise all use the capital-H spelling |
-| `GM_notification` | `GM.notification` | — | See notification section — `Promise<boolean>` is Tampermonkey-only |
-| `GM_setClipboard` | `GM.setClipboard` | — | Signature variants per manager — see clipboard section |
-| `GM_openInTab` | `GM.openInTab` | — | Per-manager option sets — see [api-tabs.md](api-tabs.md) |
-| `GM_addStyle` | `GM.addStyle` | — | Tampermonkey + Violentmonkey since 2.12.0; Greasemonkey 4+ via `gm4-polyfill.js` only; Safari partial impl |
-| `GM_addElement` | `GM.addElement` | — | Tampermonkey + Violentmonkey since 2.13.1; Greasemonkey 4+ / Safari: not supported |
-| `GM_download` | `GM.download` | — | Tampermonkey + Violentmonkey since 2.18.3 (verified 2026-08-25 — violentmonkey.github.io/api/gm/#gm `GM.download (async since VM2.18.3)`, tampermonkey.net/documentation.php?q=GM_download) — async `GM.download` returns `Promise<Blob>` with `abort()` per Violentmonkey types `download(): void \| Promise<Blob>` and Tampermonkey docs “If GM.download is used it returns a promise … also has an abort function”; sync `GM_download` uses callbacks / handle `abort()` |
+| Sync (`GM_*`) | Async (`GM.*`) | Per-manager availability |
+|---------------|----------------|--------------------------|
+| `GM_getValue` | `GM.getValue` | Tampermonkey + Violentmonkey: both forms; Greasemonkey 4+: `GM.*` only; Safari: promise subset only |
+| `GM_setValue` | `GM.setValue` | Tampermonkey + Violentmonkey: both; Greasemonkey 4+: `GM.*` only; Safari: ✅ |
+| `GM_deleteValue` | `GM.deleteValue` | Tampermonkey + Violentmonkey: both; Greasemonkey 4+: `GM.*` only; Safari: ✅ |
+| `GM_listValues` | `GM.listValues` | Tampermonkey + Violentmonkey: both; Greasemonkey 4+: `GM.*` only; Safari: ✅ |
+| `GM_getValues` / `GM_setValues` / `GM_deleteValues` (batch) | `GM.getValues` / `GM.setValues` / `GM.deleteValues` | **Tampermonkey 5.3+, Violentmonkey since 2.19.1** — both forms there; **Greasemonkey 4+ / Safari: not supported — use `Promise.all` over individual calls** (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_values#api:GM_getValues `v5.3+`, violentmonkey.github.io/api/gm/#gm_getvalues `Since VM2.19.1`, wiki.greasespot.net/GM.getValue `Promise.all()`) |
+| `GM_getResourceURL` | `GM.getResourceUrl` | Lowercase `rl` — **Greasemonkey 4 convention**; Tampermonkey accepts both but documents `getResourceUrl` for promise |
+| `GM_xmlhttpRequest` | `GM.xmlHttpRequest` | Capital `H` — **Tampermonkey convention**; all managers with promise support use the capital-H spelling |
+| `GM_notification` | `GM.notification` | See notification section — `Promise<boolean>` is Tampermonkey-only |
+| `GM_setClipboard` | `GM.setClipboard` | Signature variants per manager — see clipboard section |
+| `GM_openInTab` | `GM.openInTab` | Per-manager option sets — see [api-tabs.md](api-tabs.md) |
+| `GM_addStyle` | `GM.addStyle` | Tampermonkey + Violentmonkey; Greasemonkey 4+ via `gm4-polyfill.js` only; Safari partial impl |
+| `GM_addElement` | `GM.addElement` | Tampermonkey + Violentmonkey; Greasemonkey 4+ / Safari: not supported |
+| `GM_download` | `GM.download` | Tampermonkey + Violentmonkey (verified 2026-08-25 — violentmonkey.github.io/api/gm/#gm `GM.download (async since VM2.18.3)`, tampermonkey.net/documentation.php?q=GM_download) — async `GM.download` returns `Promise<Blob>` with `abort()`; sync `GM_download` uses callbacks / handle `abort()` |
 
 > **Note:** `GM.addValues` does not exist in any manager — the batch helpers are `getValues`/`setValues`/`deleteValues` only. Do not call `GM.addValues`/`GM_addValues`.
 
@@ -61,82 +61,25 @@ const canXhrPromise = typeof GM !== "undefined" && typeof GM.xmlHttpRequest === 
 
 ## Storage Functions
 
-### GM.getValue(key, defaultValue)
+Portable single-value storage via promises works on **TM, VM, GM4+, Safari**. Batch and listeners degrade per manager — see matrices below. Canonical value-type rules and listener patterns live in [api-storage.md](api-storage.md).
+
+### Single-value: GM.getValue / setValue / deleteValue / listValues
 
 ```javascript
 // @grant GM.getValue
-
-const username = await GM.getValue('username', 'Anonymous');
-const settings = await GM.getValue('settings', { theme: 'dark', lang: 'en' });
-```
-
-### GM.setValue(key, value)
-
-```javascript
 // @grant GM.setValue
-
-await GM.setValue('username', 'John');
-await GM.setValue('settings', { theme: 'light', lang: 'fr' });
-await GM.setValue('lastVisit', Date.now());
-```
-
-### GM.deleteValue(key)
-
-```javascript
 // @grant GM.deleteValue
-
-await GM.deleteValue('tempData');
-```
-
-### GM.listValues()
-
-```javascript
 // @grant GM.listValues
 
+const username = await GM.getValue('username', 'Anonymous');
+await GM.setValue('username', 'John');
+await GM.deleteValue('tempData');
 const keys = await GM.listValues();
-console.log('Stored keys:', keys);
 ```
 
-### GM.getValues(keysOrDefaults) — batch
+### Batch: GM.getValues / setValues / deleteValues
 
-```javascript
-// @grant GM.getValues
-// Availability: Tampermonkey 5.3+, Violentmonkey since 2.19.1; Greasemonkey 4+ / Safari: not supported
-
-// With array of keys
-const values = await GM.getValues(['foo', 'bar', 'baz']);
-
-// With default values
-const values2 = await GM.getValues({
-    foo: 1,
-    bar: 'default',
-    baz: null
-});
-```
-
-### GM.setValues(values) — batch
-
-```javascript
-// @grant GM.setValues
-// Availability: Tampermonkey 5.3+, Violentmonkey since 2.19.1; Greasemonkey 4+ / Safari: not supported
-
-await GM.setValues({
-    username: 'John',
-    theme: 'dark',
-    lastLogin: Date.now()
-});
-```
-
-### GM.deleteValues(keys) — batch
-
-```javascript
-// @grant GM.deleteValues
-// Availability: Tampermonkey 5.3+, Violentmonkey since 2.19.1; Greasemonkey 4+ / Safari: not supported
-
-await GM.deleteValues(['tempData', 'cache', 'oldSettings']);
-```
-
-**Batch availability**
+Availability: Tampermonkey 5.3+, Violentmonkey since 2.19.1; Greasemonkey 4+ / Safari: not supported — use `Promise.all` polyfill.
 
 | Manager | `GM.getValues` / `setValues` / `deleteValues` |
 | --- | --- |
@@ -146,6 +89,15 @@ await GM.deleteValues(['tempData', 'cache', 'oldSettings']);
 | Safari (Userscripts) | ❌ Not supported — use `Promise.all` over individual calls |
 
 *Batch gates verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_values#api:GM_getValues (`v5.3+`), violentmonkey.github.io/api/gm/#gm_getvalues (`Since VM2.19.1`); `Promise.all` batching verified 2026-08-25 — wiki.greasespot.net/GM.getValue (`Promise.all()` recommendation).*
+
+```javascript
+// @grant GM.getValues
+// Availability: Tampermonkey 5.3+, Violentmonkey since 2.19.1; Greasemonkey 4+ / Safari: not supported
+const values = await GM.getValues(['foo', 'bar', 'baz']);
+const values2 = await GM.getValues({ foo: 1, bar: 'default', baz: null });
+await GM.setValues({ username: 'John', theme: 'dark' });
+await GM.deleteValues(['tempData', 'cache']);
+```
 
 Polyfill for Greasemonkey 4+ / Safari (and any manager without batch):
 
@@ -165,62 +117,45 @@ async function getValuesPolyfill(keysOrDefaults) {
 }
 ```
 
-> `GM.addValues` does not exist in any manager — do not use it. If you see it in older examples, replace it with `GM.setValues` (batch) or a loop / `Promise.all` of `GM.setValue`.
+> `GM.addValues` does not exist in any manager — do not use it.
 
-### GM.addValueChangeListener(key, callback)
+### GM.addValueChangeListener / GM.removeValueChangeListener
 
 ```javascript
 // @grant GM.addValueChangeListener
-
-const listenerId = await GM.addValueChangeListener('counter', (key, oldValue, newValue, remote) => {
-    console.log(`${key} changed from ${oldValue} to ${newValue}`);
-    if (remote) console.log('Change came from another tab');
-});
-```
-
-Per-manager notes: Tampermonkey and Violentmonkey fire `remote === true` for changes from another tab; Greasemonkey 4+ signature differs and `remote` handling is UNVERIFIED per [managers.md](managers.md); Safari does not support listeners. See [api-storage.md](api-storage.md) for canonical listener patterns.
-
-### GM.removeValueChangeListener(listenerId)
-
-```javascript
 // @grant GM.removeValueChangeListener
 
+const listenerId = await GM.addValueChangeListener('counter', (key, oldValue, newValue, remote) => {
+    if (remote) console.log('Change from another tab:', key, newValue);
+});
 await GM.removeValueChangeListener(listenerId);
 ```
 
+Portability: Tampermonkey and Violentmonkey fire `remote === true` for changes from another tab; Greasemonkey 4+ signature differs and `remote` handling is UNVERIFIED per [managers.md](managers.md); Safari does not support listeners. See [api-storage.md](api-storage.md) for canonical listener patterns.
+
 ### Promise rejection and value-type portability (verified 2026-08-25 — wiki.greasespot.net/GM.getValue, wiki.greasespot.net/GM.setValue)
 
-- **Rejection:** Every `GM.*` promise rejects on error and resolves on success — Greasemonkey wiki `GM.getValue` (“A Promise, rejected in case of error”) and `GM.setValue` (“A Promise, resolved … on success, rejected … on failure”) per wiki.greasespot.net/GM.getValue and /GM.setValue (verified 2026-08-25 — wiki.greasespot.net/GM.getValue, wiki.greasespot.net/GM.setValue). Wrap `await` in `try/catch` or `.catch()`; storage and network failures surface as rejections, not callback errors.
-- **Value types — version-sensitive:** Greasemonkey 4+ allows only `string`, `boolean`, and `integer` — “Any other type may cause undefined behavior, including crashes” per wiki `GM.setValue` (as of Greasemonkey 4.0+, verified 2026-08-25 — wiki.greasespot.net/GM.setValue). Tampermonkey and Violentmonkey accept any JSON-serialisable value including `null`, `object`, `undefined`, and numbers per Tampermonkey `GM_values` docs (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_values). For portability serialize objects with `JSON.stringify` or guard via feature detection; canonical rules live in [api-storage.md](api-storage.md).
+- **Rejection:** Every `GM.*` promise rejects on error and resolves on success — wrap `await` in `try/catch`. See canonical rejection wording at wiki.greasespot.net/GM.getValue and /GM.setValue (verified 2026-08-25 — wiki.greasespot.net/GM.getValue, wiki.greasespot.net/GM.setValue).
+- **Value types:** Greasemonkey 4+ allows only `string`, `boolean`, and `integer` — other types may cause undefined behavior (verified 2026-08-25 — wiki.greasespot.net/GM.setValue). Tampermonkey and Violentmonkey accept JSON-serialisable values. For portability serialize objects with `JSON.stringify` — canonical rules live in [api-storage.md](api-storage.md).
 
 ---
 
 ## Resource Functions
 
-### GM.getResourceText(name)
-
 ```javascript
 // @resource myCSS https://example.com/style.css
-// @grant GM.getResourceText
-
-const cssText = await GM.getResourceText('myCSS');
-```
-
-### GM.getResourceUrl(name)
-
-**Note:** lowercase `rl` in `Url` — Greasemonkey 4 convention (see naming table).
-
-```javascript
 // @resource myIcon https://example.com/icon.png
+// @grant GM.getResourceText
 // @grant GM.getResourceUrl
 
-const iconUrl = await GM.getResourceUrl('myIcon');
+const cssText = await GM.getResourceText('myCSS');
+const iconUrl = await GM.getResourceUrl('myIcon'); // lowercase `rl` — Greasemonkey 4 convention
 img.src = iconUrl;
 ```
 
-Portability: Tampermonkey and Violentmonkey since 2.12.0 support the promise form; Greasemonkey 4+ supports `GM.getResourceUrl` (lowercase `rl`); Safari has no `@resource` implementation.
+Portability: Tampermonkey and Violentmonkey support the promise forms; Greasemonkey 4+ supports `GM.getResourceUrl` (lowercase `rl`); Safari has no `@resource` implementation.
 
-> **Return-type difference (verified 2026-08-25 — violentmonkey.github.io/types/, tampermonkey.net/documentation.php?q=GM_getResource, violentmonkey.github.io/api/gm/#gm_getresourcetext):** `GM.getResourceText` is synchronous `string` in Violentmonkey (`getResourceText: (name) => string` per Violentmonkey `VMScriptGMObject` types at violentmonkey.github.io/types/) while Tampermonkey provides both `GM_getResourceText(name): string` and `await GM.getResourceText(name): string` (docs show `const scriptText2 = await GM.getResourceText("myscript.js")` at tampermonkey.net/documentation.php?q=GM_getResource). `GM.getResourceUrl` is promise-based `Promise<string>` in all managers that implement it (Violentmonkey `getResourceUrl: (name, isBlobUrl?) => Promise<string>`, Tampermonkey `await GM.getResourceUrl`). Feature-detect before `await`ing `getResourceText` when targeting Violentmonkey.
+> **Return-type difference (verified 2026-08-25 — violentmonkey.github.io/types/, tampermonkey.net/documentation.php?q=GM_getResource, violentmonkey.github.io/api/gm/#gm_getresourcetext):** `GM.getResourceText` is synchronous `string` in Violentmonkey while Tampermonkey provides both sync and promise forms. `GM.getResourceUrl` is `Promise<string>` where implemented. Feature-detect before `await`ing `getResourceText` when targeting Violentmonkey.
 
 ---
 
@@ -247,15 +182,13 @@ try {
 }
 ```
 
-The promise also exposes `abort()`, but semantics differ per manager:
+The promise also exposes `abort()` where available — feature-detect before calling:
 
 ```javascript
 const request = GM.xmlHttpRequest({
     method: 'GET',
     url: 'https://api.example.com/large-file'
 });
-
-// Cancel after 5 seconds — check that abort exists; Greasemonkey/Safari promises differ
 if (typeof request.abort === "function") request.abort();
 
 try {
@@ -274,7 +207,7 @@ try {
 | Greasemonkey 4+ | `undefined` per wiki (`GM.xmlHttpRequest` “Returns undefined”) — no documented abort control; feature-detect `abort()` if present (verified 2026-08-25 — wiki.greasespot.net/GM.xmlHttpRequest) | Wiki documents `Returns undefined`; do not rely on abort |
 | Safari (Userscripts) | Custom promise with `abort` | Safari-specific promise shape; still `request.abort()` when present — feature-detect before calling |
 
-> **Fetch vs XHR mode (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_xmlhttpRequest):** Tampermonkey `GM_xmlhttpRequest` `details.fetch: true` switches to `fetch` (enforced automatically when `details.anonymous` or `details.redirect` is set as of build 6180+). In fetch mode `details.timeout` and `onprogress` do not work and `onreadystatechange` receives only `readyState DONE (4)` — per Tampermonkey `GM_xmlhttpRequest` docs at tampermonkey.net/documentation.php?q=GM_xmlhttpRequest (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_xmlhttpRequest). No first-party source documents `AbortController` integration for `GM.xmlHttpRequest` as of 2026-08-25; use the returned promise’s `abort()` handle instead.
+> **Fetch vs XHR mode (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_xmlhttpRequest):** Tampermonkey `details.fetch: true` switches to `fetch` (enforced automatically when `details.anonymous` or `details.redirect` is set as of build 6180+). In fetch mode `details.timeout` and `onprogress` do not work. For option details see [http-requests.md](http-requests.md).
 
 For the full option matrix (`anonymous`, `cookie`, `responseType: 'stream'`, `redirect`, `proxy`, `@connect` enforcement, `response` shape) see [http-requests.md](http-requests.md) — that file is canonical.
 
@@ -297,13 +230,6 @@ await GM.notification({
     onclick: () => console.log('clicked (portable)'),
     ondone: () => console.log('done')
 });
-
-// Tampermonkey-only boolean path (feature-detect if you use it)
-const handler = (typeof GM_info !== "undefined" ? GM_info : GM.info).scriptHandler;
-if (handler === "Tampermonkey") {
-    const wasClicked = await GM.notification({ text: 'Click me!', title: 'Notification', timeout: 10000 });
-    console.log(wasClicked ? 'clicked' : 'dismissed');
-}
 ```
 
 | Manager | `await GM.notification(...)` resolves to | Extras |
@@ -322,9 +248,9 @@ Per-manager signatures mirror [api-sync.md](api-sync.md). Prefer manager-qualifi
 | Manager | Promise signature | Notes |
 | --- | --- | --- |
 | Tampermonkey | `GM.setClipboard(data, { type, mimetype } \| "text" \| "html") → Promise<void>` | Accepts object or string; callback form is sync-only |
-| Violentmonkey | `GM.setClipboard(data, type?) → void` (synchronous — types show `(data, type?) => void`) | `type` optional string, defaults to `"text"` |
+| Violentmonkey | `GM.setClipboard(data, type?) → void` (synchronous) | `type` optional string, defaults to `"text"` |
 | Greasemonkey 4+ | `GM.setClipboard(data, type?) → undefined` | Returns `undefined` per wiki |
-| Safari | `GM.setClipboard(data, type?) → Promise<void>` | Deprecated upstream #655 but present in promise subset; only Tampermonkey’s promise form reliably returns `Promise<void>` |
+| Safari | `GM.setClipboard(data, type?) → Promise<void>` | Only Tampermonkey’s promise form reliably returns `Promise<void>` |
 
 ```javascript
 // @grant GM.setClipboard
@@ -334,9 +260,6 @@ await GM.setClipboard('Copied text', 'text');
 
 // Tampermonkey — HTML with mimetype object (also works as "html" string)
 await GM.setClipboard('<b>Bold</b>', 'html');
-// or await GM.setClipboard('data', { type: 'text', mimetype: 'text/plain' });
-
-console.log('Copied');
 ```
 
 ---
@@ -350,29 +273,14 @@ Sync vs promise duality — canonical handles and option sets live in [api-tabs.
 | Sync callback | `GM_getTab(cb)` / `GM_saveTab(tab, cb)` / `GM_getTabs(cb)` / `GM_openInTab(url, opts)` | Tampermonkey (Violentmonkey does not implement tab storage — use `GM_setValue` + `GM_addValueChangeListener`) |
 | Promise | `GM.getTab()` / `GM.saveTab(tab)` / `GM.getTabs()` / `GM.openInTab(url, opts)` | Tampermonkey; Safari Userscripts `GM.getTab`/`GM.saveTab` promise only (no `GM.getTabs`; deprecation planned v5→v6 per quoid/userscripts#667); Violentmonkey ❌ tab storage not implemented; Greasemonkey 4+ ❌ tab storage not implemented |
 
-### GM.getTab()
-
 ```javascript
 // @grant GM.getTab
-
-const tab = await GM.getTab();
-console.log('Tab data:', tab);
-```
-
-### GM.saveTab(tab)
-
-```javascript
 // @grant GM.saveTab
+// @grant GM.getTabs
 
 const tab = await GM.getTab();
-tab.customData = { lastAction: 'click', timestamp: Date.now() };
+tab.customData = { lastAction: 'click' };
 await GM.saveTab(tab);
-```
-
-### GM.getTabs()
-
-```javascript
-// @grant GM.getTabs
 
 const tabs = await GM.getTabs();
 for (const [tabId, tabData] of Object.entries(tabs)) {
@@ -380,7 +288,7 @@ for (const [tabId, tabData] of Object.entries(tabs)) {
 }
 ```
 
-Portability: `GM.getTab`/`saveTab`/`getTabs` promises are available in Tampermonkey; Safari Userscripts provides `GM.getTab`/`GM.saveTab` promise only (persistent while tab open; no `GM.getTabs`; deprecation planned v5→v6 per quoid/userscripts#667); Violentmonkey does not implement tab storage (absent from https://violentmonkey.github.io/api/gm/, declined in issue #1120) — use `GM_setValue` + `GM_addValueChangeListener`; Greasemonkey 4+ does not implement `GM_getTab`/`GM_saveTab`/`GM_getTabs` at all (wiki API list omits them). `GM_openInTab` option sets differ per manager — see [api-tabs.md](api-tabs.md) and the summary in [api-sync.md](api-sync.md).
+Portability: `GM.getTab`/`saveTab`/`getTabs` promises are available in Tampermonkey; Safari Userscripts provides `GM.getTab`/`GM.saveTab` promise only (persistent while tab open; no `GM.getTabs`; deprecation planned v5→v6 per quoid/userscripts#667); Violentmonkey does not implement tab storage — use `GM_setValue` + `GM_addValueChangeListener`; Greasemonkey 4+ does not implement tab storage. `GM_openInTab` option sets differ per manager — see [api-tabs.md](api-tabs.md).
 
 ---
 
@@ -400,106 +308,38 @@ await GM.cookie.delete({ name: 'myCookie' });
 
 | Manager | `GM.cookie` / `GM_cookie` |
 | --- | --- |
-| Tampermonkey | ✅ Stable; `partitionKey` since Tampermonkey 5.2+; `httpOnly` beta-gated (Config Mode Advanced → Security) |
+| Tampermonkey | ✅ Stable; `partitionKey` since Tampermonkey 5.2+; `httpOnly` beta-gated |
 | Violentmonkey | ✅ **since Violentmonkey 2.35.1**; httpOnly needs both global + per-script toggles |
 | Greasemonkey 4+ | ❌ |
 | Safari | ❌ |
 
-Filter differences: Tampermonkey supports `partitionKey` (5.2+), `firstPartyDomain`, and broader `url`/`domain`/`name`/`path` filters; Violentmonkey follows Tampermonkey's filter set since 2.35.1 but verify `partitionKey` edge cases against [managers.md](managers.md). For the full filter matrix, cookie object shape, and `httpOnly` gating see [api-cookies.md](api-cookies.md).
-
-### GM.cookie.list(details)
-
-```javascript
-// @grant GM.cookie
-
-const cookies = await GM.cookie.list({ domain: 'example.com' });
-console.log('Cookies:', cookies);
-```
-
-### GM.cookie.set(details)
-
-```javascript
-// @grant GM.cookie
-
-await GM.cookie.set({
-    name: 'myCookie',
-    value: 'myValue',
-    domain: 'example.com',
-    path: '/',
-    secure: true
-});
-```
-
-### GM.cookie.delete(details)
-
-```javascript
-// @grant GM.cookie
-
-await GM.cookie.delete({ name: 'myCookie' });
-```
+For the full filter matrix, cookie object shape, and `httpOnly` gating see [api-cookies.md](api-cookies.md).
 
 ---
 
 ## Audio Functions — ⚠️ Tampermonkey-Only Experimental
 
-> **Tampermonkey-only experimental** — available **since Tampermonkey beta 5.3.6230 / stable 5.4**. No other manager implements `GM_audio` / `GM.audio`. Scope is the **current tab only** (muting another tab is not supported). The API is experimental and may change; **feature-detect before use**.
-
-Full guide: [api-audio.md](api-audio.md).
+> **Tampermonkey-only experimental** — available **since Tampermonkey beta 5.3.6230 / stable 5.4**. No other manager implements `GM_audio` / `GM.audio`. Scope is the **current tab only**. The API is experimental and may change; **feature-detect before use**. Full guide: [api-audio.md](api-audio.md).
 
 ```javascript
 // Feature-detect — do not assume GM or GM.audio exists
 const canAudio = typeof GM !== "undefined" && typeof GM.audio !== "undefined";
-const canAudioSync = typeof GM_audio !== "undefined" || canAudio;
 if (!canAudio) {
     console.log('Tab audio control not available in this manager');
+} else {
+    await GM.audio.setMute({ isMuted: true });
+    const state = await GM.audio.getState();
+    console.log(`Muted: ${state.isMuted}, Audible: ${state.isAudible}`);
 }
 ```
 
-### GM.audio.setMute(details)
-
-```javascript
-// @grant GM.audio
-
-await GM.audio.setMute({ isMuted: true });
-console.log('Tab muted (current tab only)');
-```
-
-### GM.audio.getState()
-
-```javascript
-// @grant GM.audio
-
-const state = await GM.audio.getState();
-console.log(`Muted: ${state.isMuted}, Audible: ${state.isAudible}, Reason: ${state.muteReason}`);
-```
-
-### GM.audio.addStateChangeListener(listener)
-
-```javascript
-// @grant GM.audio
-
-await GM.audio.addStateChangeListener((event) => {
-    if ('muted' in event) console.log('Mute changed:', event.muted);
-    if ('audible' in event) console.log('Audible changed:', event.audible);
-});
-```
-
-See [api-audio.md](api-audio.md) for `removeStateChangeListener`, `muteReason` values (`user` \| `capture` \| `extension`), and error handling.
+See [api-audio.md](api-audio.md) for `setMute`/`getState`/`addStateChangeListener` details, `muteReason` values, and element-level fallback (`HTMLMediaElement.muted`).
 
 ---
 
 ## Combining Async Operations
 
-Use the storage and networking promise surface; patterns below complement [api-storage.md](api-storage.md) — that file is canonical for storage change-listener, cross-tab, and cache patterns.
-
-| Goal | Pattern | When to choose |
-| --- | --- | --- |
-| Sequential dependencies | `const a = await GM.getValue(...); const r = await GM.xmlHttpRequest(...); await GM.setValue(...)` | Each step needs the previous result (e.g. fetch-then-cache) |
-| Parallel independent reads/writes | `await Promise.all([GM.getValue('a'), GM.getValue('b'), GM.getValue('c')])` | Independent keys; also the polyfill for missing `GM.getValues` batch (verified 2026-08-25 — wiki.greasespot.net/GM.getValue, greasespot.net/2017/09/greasemonkey-4-for-script-authors.html `Promise` + `await` pattern) |
-| Parallel with error isolation | `await Promise.allSettled([...])` then inspect `.status` | One failure must not abort the others |
-| Fail-fast with retry | `try { await GM.xmlHttpRequest(...) } catch { await GM.notification(...) }` | Network with user-visible fallback |
-
-For worked storage patterns (settings manager, cache with expiry, cross-tab broadcast, migration, persistent counter) see [api-storage.md](api-storage.md). For HTTP retry with exponential backoff, streaming, and responseType handling see [http-requests.md](http-requests.md).
+Use `async`/`await` and `Promise.all` / `Promise.allSettled` per MDN. For portable storage batching use `Promise.all` over `GM.getValue`/`GM.setValue` when `GM.getValues` is unavailable — see polyfill above. For worked storage patterns (settings manager, cache with expiry, cross-tab broadcast) see [api-storage.md](api-storage.md); for HTTP retry, streaming, and `responseType` handling see [http-requests.md](http-requests.md).
 
 ---
 

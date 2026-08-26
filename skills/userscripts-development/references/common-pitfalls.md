@@ -1,33 +1,10 @@
 # Common Userscript Pitfalls
 
-Mistakes that break userscripts and how to avoid them. Scope: Violentmonkey-first, portable across TM / VM / GM4+ / Safari Userscripts. Manager facts per `managers.md`; anything not confirmed there is UNVERIFIED.
+Mistakes that break **portable** userscripts and how to avoid them. Scope: portable across TM / VM / GM4+ / Safari Userscripts (tier-2 secondary — see `manager-compat.md`). Manager facts per `managers.md`; anything not confirmed there is UNVERIFIED.
 
-Manager literals for `GM_info.scriptHandler`: `"Tampermonkey"` | `"Violentmonkey"` | `"Greasemonkey"` | `"Userscripts"` (Safari app). Prefer capability checks over handler branching. Labeling convention for manager-specific notes follows Pitfall 15 as the model (`> **Manager-specific note:** This pitfall is specific to …`).
+Manager literals for `GM_info.scriptHandler`: `"Tampermonkey"` | `"Violentmonkey"` | `"Greasemonkey"` | `"Userscripts"` (Safari app). Prefer capability checks over handler branching. Manager-specific notes use `> **Manager-specific note:** …` where needed.
 
----
-
-## Pitfall 1: @match Too Broad
-
-Running on every page slows the browser and causes unexpected behaviour.
-
-**Wrong:**
-```javascript
-// @match *://*/*
-// @match https://*/*
-```
-
-**Right:**
-```javascript
-// @match https://example.com/*
-// @match https://*.example.com/*
-```
-
-**Why it matters:** Overly broad patterns mean your script runs on thousands of sites, consuming memory and potentially breaking pages. (verified 2026-08-25 — https://violentmonkey.github.io/api/matching/ and https://www.tampermonkey.net/documentation.php?locale=en&q=include#meta:match)
-
-| Decision | Pattern | When to use |
-|----------|---------|-------------|
-| Broad | `*://*/*` | Almost never — debugging only |
-| Scoped | `https://example.com/*` or `https://*.example.com/*` | Always — limit blast radius |
+> **Pruned generics:** `@match` scope hygiene, observer lifecycle/debouncing, and selector robustness are generic DOM/MDN concerns — see `header-reference.md` (`@match`), `url-matching.md`, and [MDN MutationObserver](https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver). Workflow install/test steps are authoritative in `managers.md` §6 and `testing.md`. This file keeps only pitfalls that change what you write for a portable script or how it degrades where a feature is absent.
 
 ---
 
@@ -223,7 +200,7 @@ GM_addElement('script', {
 
 **Best practice:** Test CSP-sensitive injection in Violentmonkey first — TM may hide the CSP failure by stripping headers. If VM works, you have a truly portable solution. (verified 2026-08-25 — https://violentmonkey.github.io/api/gm/#gm_addelement — GM_addElement purpose is circumventing strict CSP)
 
-> **Style CSP also blocks styles (verified 2026-08-25 — MDN CSP https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/style-src and VM GM_addElement https://violentmonkey.github.io/api/gm/#gm_addelement — "circumventing a strict Content-Security-Policy that forbids adding inline code *or style*"):** `style-src` (and `default-src` fallback) blocks inline `<style>` elements just as `script-src` blocks `<script>`. The same bypass applies — use `GM_addElement('style', { textContent: '...' })` where supported (TM/VM) to circumvent `style-src` restrictions. VM docs describe `GM_addElement` as "circumventing a strict Content-Security-Policy that forbids adding inline code *or style*" (https://violentmonkey.github.io/api/gm/). Where `GM_addElement` is unavailable (GM4+, Safari), inject via `@require` + linked stylesheet or remove the inline-style requirement.
+> **Style CSP also blocks styles (verified 2026-08-25 — MDN CSP https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/style-src and VM GM_addElement https://violentmonkey.github.io/api/gm/#gm_addelement — "circumventing a strict Content-Security-Policy that forbids adding inline code *or style*"):** `style-src` (and `default-src` fallback) blocks inline `<style>` just as `script-src` blocks `<script>` — use `GM_addElement('style', { textContent: '...' })` where supported (TM/VM); elsewhere use `@require` + linked stylesheet or avoid inline style.
 
 ---
 
@@ -268,110 +245,6 @@ if (typeof unsafeWindow !== 'undefined') {
 ```
 
 Safari design note: any `@grant` forces content-world execution; there is no page-world access to design around — build features that work from the isolated DOM.
-
----
-
-## Pitfall 7: Memory Leaks in Observers
-
-MutationObservers that never disconnect consume memory. (verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver/disconnect — explicit disconnect required; lifecycle via https://developer.mozilla.org/en-US/docs/Web/API/Window/pagehide_event and https://developer.mozilla.org/en-US/docs/Web/API/Document/visibilitychange_event)
-
-**Wrong:**
-```javascript
-const observer = new MutationObserver(() => {
-    processNewContent();
-});
-observer.observe(document.body ?? document.documentElement, { childList: true, subtree: true });
-// Never disconnected - runs forever!
-```
-
-**Right:**
-```javascript
-const observer = new MutationObserver(() => {
-    if (shouldStop()) {
-        observer.disconnect();
-        return;
-    }
-    processNewContent();
-});
-observer.observe(document.body ?? document.documentElement, { childList: true, subtree: true });
-
-// Explicit teardown — beforeunload is unreliable (bfcache, SPA navigation may not fire it)
-function teardown() { observer.disconnect(); }
-// Prefer explicit teardown hooks over beforeunload:
-// - SPA: hook history navigation (see Pitfall 3 fallback)
-// - Page lifecycle: prefer `visibilitychange` (most reliable, incl. mobile), then `pagehide` (bfcache-compatible but not reliably fired on mobile per MDN), then explicit router hooks
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') teardown();
-});
-window.addEventListener('pagehide', teardown, { once: true });
-
-// Or disconnect on page unload as best-effort fallback (may not fire in bfcache/SPAs)
-window.addEventListener('beforeunload', () => observer.disconnect());
-```
-
-> **bfcache/SPA note (verified 2026-08-25 — https://developer.mozilla.org/en-US/docs/Web/API/Window/pagehide_event — "not reliably fired ... especially on mobile" and bfcache-compatible; https://developer.mozilla.org/en-US/docs/Web/API/Document/visibilitychange_event — visibilitychange as best signal; MDN MutationObserver https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver/disconnect — explicit disconnect required):** `beforeunload` is unreliable — bfcache restores pages without firing it, and SPAs navigate without unloading. `pagehide` fixes bfcache compatibility but is also "not reliably fired... especially on mobile" (MDN `pagehide` event). Prefer `visibilitychange` as the primary teardown signal, then `pagehide` as next-best, with explicit navigation hooks as the SPA fallback.
-
----
-
-## Pitfall 8: Overly Aggressive DOM Modifications
-
-Modifying the DOM too frequently causes performance issues.
-
-**Wrong:**
-```javascript
-// Runs on EVERY mutation
-const observer = new MutationObserver(() => {
-    document.querySelectorAll('.item').forEach(el => {
-        el.style.color = 'red';  // Runs thousands of times
-    });
-});
-```
-
-**Right:**
-```javascript
-// Debounce modifications
-let timeout;
-const observer = new MutationObserver(() => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => {
-        document.querySelectorAll('.item:not(.processed)').forEach(el => {
-            el.style.color = 'red';
-            el.classList.add('processed');
-        });
-    }, 100);
-});
-observer.observe(document.body ?? document.documentElement, { childList: true, subtree: true });
-```
-
-| Strategy | Cost | When to use |
-|----------|------|-------------|
-| Direct per-mutation | High — thousands of style recalculations | Never for bulk |
-| Debounced + `.processed` guard | Low — batches + idempotent | Always for observer-driven styling |
-
-**Event-listener duplication on re-observed/dynamic content (verified 2026-08-25 — MDN EventTarget.addEventListener https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener — `once` and `signal` options):** Each `addEventListener(type, listener)` call adds a *new* listener — calling it again on the same element without `removeEventListener` or `{ once: true }` stacks duplicates and fires the handler multiple times. A `MutationObserver` callback that does `el.addEventListener('click', handler)` on every mutation will double-bind each re-observed node.
-
-```javascript
-// Wrong — duplicates on every mutation
-observerCallback(() => {
-    document.querySelectorAll('.btn').forEach(el =>
-        el.addEventListener('click', onClick) // stacks each time!
-    );
-});
-
-// Right — guard, once, or AbortSignal
-const seen = new WeakSet();
-observerCallback(() => {
-    document.querySelectorAll('.btn').forEach(el => {
-        if (seen.has(el)) return;
-        el.addEventListener('click', onClick);
-        seen.add(el);
-    });
-});
-// Alternatives: el.addEventListener('click', onClick, { once: true })
-// or: el.addEventListener('click', onClick, { signal: controller.signal })
-```
-
-Source: MDN `EventTarget.addEventListener()` — `once` option "listener should be invoked at most once ... automatically removed when invoked" and `signal` option "listener will be removed when abort() is called" (https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener).
 
 ---
 
@@ -432,8 +305,6 @@ try {
 | Callback (`GM_xmlhttpRequest`) | `onerror` / `ontimeout` + `try/catch` inside `onload` | All three |
 | Promise (`GM.xmlHttpRequest`) | Rejection + `try/catch` | `try { await … } catch (e) { … }` |
 
-Violentmonkey worked example: trigger airplane mode after `GM.xmlHttpRequest` — promise path must be caught or the unhandled rejection shows in Violentmonkey's console.
-
 ---
 
 ## Pitfall 10: Global Variable Pollution
@@ -475,20 +346,7 @@ function process() { ... }  // Private to script
 
 **Recommendation:** Use `let`/`const` always. Reserve IIFE as the primary defense for `@grant none` (page context) and as defense-in-depth elsewhere.
 
-> **jQuery / `@require` global conflicts (verified 2026-08-25 — VM docs https://violentmonkey.github.io/api/metadata-block/#require — "Require another script to execute before the current one"; sandbox isolation via @grant — https://violentmonkey.github.io/api/metadata-block/#grant):** `@require https://cdn.example.com/jquery.js` executes *before* your script inside the manager sandbox, defining `$`/`jQuery` only in that sandbox. With a sandbox (`any @grant`), the page's own jQuery is isolated via `unsafeWindow`/`wrappedJSObject` and `$` does not collide. With `@grant none` (no sandbox) your `@require`'d jQuery *does* pollute `window` and collides with the page's version.
->
-> ```javascript
-> // @grant GM_getValue          // sandboxed — $ is isolated, no conflict
-> // @require https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js
-> console.log(typeof window.$);       // page's $ (via unsafeWindow if needed)
-> console.log(typeof $);              // sandbox's jQuery — isolated
->
-> // @grant none                 // page context — collision risk!
-> // @require https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js
-> const jq = jQuery.noConflict(true); // restore page's $/jQuery, keep sandbox ref
-> ```
->
-> **Rule:** In sandboxed scripts, prefer the sandbox `$` and access page `$` only via `unsafeWindow` guard. In `@grant none`, call `jQuery.noConflict(true)` immediately after load or avoid `@require` jQuery entirely and use `fetch` + isolated DOM helpers.
+> **jQuery / `@require` global conflicts (verified 2026-08-25 — VM docs https://violentmonkey.github.io/api/metadata-block/#require — "Require another script to execute before the current one"; sandbox isolation via @grant — https://violentmonkey.github.io/api/metadata-block/#grant):** `@require https://cdn.example.com/jquery.js` executes before your script in the manager sandbox. With a sandbox (`any @grant`) `$` is isolated and does not collide via `unsafeWindow`/`wrappedJSObject`; with `@grant none` it pollutes `window` → collisions. Rule: sandboxed → use sandbox `$`; `none` → `jQuery.noConflict(true)` immediately or avoid `@require` jQuery. See `managers.md` §3.
 
 ---
 
@@ -551,104 +409,29 @@ Conflating browser and manager responsibilities causes subtle bugs. Cross-manage
 
 ---
 
-## Pitfall 13: Hardcoded Selectors
-
-Page structure changes break scripts.
-
-**Fragile:**
-```javascript
-document.querySelector('div.sc-1234abcd > div:nth-child(3) > span');
-```
-
-**Robust:**
-```javascript
-// Use stable attributes
-document.querySelector('[data-testid="username"]');
-document.querySelector('[aria-label="Close"]');
-
-// Or multiple fallbacks
-const element = document.querySelector('#username') ||
-                document.querySelector('[data-user]') ||
-                document.querySelector('.profile-name');
-```
-
-| Selector style | Resilience | When to use |
-|----------------|------------|-------------|
-| Generated class / `:nth-child` chain | ❌ Fragile — breaks on redeploy | Never |
-| Stable attributes (`data-testid`, `aria-label`, `id`) | ✅ Robust | Always prefer |
-| Multiple fallbacks (try stable, then heuristic) | ✅ Resilient | Production scripts |
-
----
-
-## Pitfall 14: Not Testing in Target Manager
-
-Scripts that work in one manager may break in another. Browser-only testing hides manager differences (e.g., VM respects CSP while TM may not).
-
-**Manager-first testing matrix — Violentmonkey first (owner default):**
-
-| Step | Manager | What to verify |
-|------|---------|----------------|
-| 1 | **Violentmonkey** (Chrome + Firefox) | Install via dashboard/drag-and-drop, enable, storage types (objects ok), batch APIs (2.19.1+), CSP behavior (GM_addElement fallback), `unsafeWindow` exposed |
-| 2 | Tampermonkey (Chrome MV3 + Firefox MV2) | `GM_cookie` stable, `GM_audio` 5.4 only, `window.onurlchange` TM-only, `@sandbox`/`@run-in` parsing |
-| 3 | Greasemonkey 4+ (Firefox) | Promise-only APIs, primitives-only storage, `GM_addStyle`/`GM_log` removed (polyfill or `console.log`), `GM.notification` shape |
-| 4 | Safari Userscripts (macOS/iOS 15.1+) | Promise subset only, no `unsafeWindow`, any `@grant` ⇒ content world, `openInTab`/`closeTab` bool only, `setClipboard` deprecated |
-| 5 | Private/Incognito | Manager permissions for incognito tabs (`@run-in` where needed), CSP strictness |
-
-Before deploying, also verify:
-
-- [ ] Violentmonkey: build artifact loads in dashboard and survives external-edits reload
-- [ ] Manager-specific workarounds (e.g., GM4+ stringify) don't break TM/VM
-- [ ] Page CSP tested in VM (strict) not just TM (lenient)
-
----
-
-## Pitfall 15: Script Not Running After Tampermonkey v5.4.1 Update
-
-> **Manager-specific note:** This pitfall is specific to Tampermonkey. Greasemonkey and Violentmonkey have not (at time of writing) introduced the same per-site injection permission requirement.
-
-Tampermonkey v5.4.1+ requires explicit user permission to inject scripts into pages. UNVERIFIED (2026-08-25) — no primary Tampermonkey 5.4.1 changelog entry found at https://www.tampermonkey.net/changelog.php for per-site injection permission; MV3 host_permissions model is generic — version-specific claim awaits primary source
-
-**Symptom:** Script was working, stopped after Tampermonkey updated.
-
-**Fix:** Click the Tampermonkey icon → "Allow extension to access this site" (or configure globally in Dashboard → Settings → Script Injection).
-
-**Why this changed:** Browser vendors (Chrome MV3) now require extensions to request explicit permission before injecting content into pages.
-
----
-
 ## Quick Diagnostic Checklist
 
 When a script doesn't work — manager-first verification. Check each item against the relevant manager.
 
 | # | Check | Where to look | TM | VM | GM4+ | Safari | Notes |
 |---|-------|---------------|----|----|------|--------|-------|
-| 1 | Console shows errors? (F12 → Console) | Page console + manager console | ✅ | ✅ | ✅ | ✅ | Violentmonkey: page console + sandboxed console |
-| 2 | Script is enabled in your manager's dashboard? | Manager dashboard | ✅ | ✅ | ✅ | ✅ | VM: `chrome-extension://<id>/options/index.html#/installed` |
-| 3 | `@match`/`@include` pattern matches current URL? | `GM_info.script.matches` / URL bar | ✅ | ✅ | ✅ | ✅ | Safari requires ≥1 rule; prefers `@match` |
-| 4 | Required `@grant` statements present? | Metadata block | ✅ | ✅ | ✅ | ✅ | Missing grant ⇒ API undefined |
 | 5 | `@connect` includes target domains? **[TM-required]** | Metadata block | **Strict** | Advisory | Ignored | n/a | TM blocks without it; split from generic `@grant` check |
 | 6 | `@connect *` fallback understood as TM-model? | Metadata block | TM-concept | Advisory | Ignored | n/a | Enumerate domains for TM; `*` is TM fallback |
 | 7 | Default `@run-at` matches intent? | Metadata block / `managers.md` | Default `idle` | Default `end` | Default `end` | Default `end` | Wrong default ⇒ DOM not ready |
 | 8 | Correct GM variant used? (`GM_*` vs `GM.*`) | Code: `typeof GM !== 'undefined' && GM.xmlHttpRequest` | Both | Both | `GM.*` only | `GM.*` only | `GM_xmlhttpRequest` ❌ on GM4+/Safari |
 | 9 | `unsafeWindow` guarded? (`typeof unsafeWindow !== 'undefined'`) | Code | Grant-gated | Exposed | `wrappedJSObject` | ❌ absent | Unguarded ⇒ crash on Safari |
 | 10 | Storage value types within GM4 limits? | `GM_setValue` payloads | Objects ok | Objects ok | **Primitives only** — stringify | Objects ok | GM4+ `JSON.stringify` objects |
-| 11 | Element exists when script runs? | `waitForElement` / `readyState` | ✅ | ✅ | ✅ | ✅ | Use `?? document.documentElement` guard |
 | 12 | Using async correctly (callbacks/await + `try/catch`)? | `GM_xmlhttpRequest` vs `GM.xmlHttpRequest` | Both | Both | Promise only | Promise only | Callback needs `onerror`/`ontimeout`; promise needs `catch` |
 | 13 | `scriptHandler` branching avoided in favor of capability checks? | Code: `if (GM?.getValues)` not `if (handler === "Tampermonkey")` | ✅ | ✅ | ✅ | ✅ | Prefer `typeof` / `in` checks |
 | 14 | Manager-specific features gated? (`GM_cookie`, `GM_audio`, `window.onurlchange`) | Code guards | `GM_cookie` ✅ / `GM_audio` 5.4 | `GM_cookie` 2.35.1+ | ❌ | ❌ | Don't assume universal |
 | 15 | Browser-specific bridges gated? (`cloneInto`, `exportFunction`) | Firefox Xray check | TM/Firefox ✅ | VM/Firefox ✅ | ✅ | ❌ | Chromium has no Xray |
 
 ```
-[ ] Console shows errors? (F12 → Console) — per manager
-[ ] Script is enabled in your manager's dashboard? — VM dashboard first
-[ ] @match pattern matches current URL?
-[ ] Required @grant statements present?
 [ ] @connect includes target domains? — TM REQUIRED (others advisory)
 [ ] Default @run-at matches intent? (TM idle vs VM/GM/Safari end)
 [ ] Correct GM variant used? (callback vs promise per manager)
 [ ] unsafeWindow guarded? (Safari ❌)
 [ ] Storage value types within GM4 limits? (primitives only)
-[ ] Element exists when script runs? (readyState / waitForElement)
 [ ] Using async correctly (callback onerror/ontimeout vs promise try/catch)?
 [ ] scriptHandler branching avoided (capability checks)?
 [ ] Manager-specific features gated? (GM_cookie / GM_audio / onurlchange)
@@ -661,3 +444,4 @@ When a script doesn't work — manager-first verification. Check each item again
 
 Scope: Violentmonkey-first, portable across TM/VM/GM4+/Safari — verify against `managers.md` before claiming support. For manager-neutral typing, see `typescript.md`; for compatibility matrix, see `browser-compatibility.md`. Prefer capability checks (`typeof GM !== 'undefined' && GM.xmlHttpRequest`) over `GM_info.scriptHandler` branching.
 
+*Pruned 2026-08-26 — removed generic pits 1 (@match broad), 7 (observer leaks), 8 (DOM aggressive), 13 (hardcoded selectors), 14 (testing matrix), 15 (TM 5.4.1 permission) — no portability decision; see `header-reference.md` / `managers.md` §6 / MDN. Kept pits 2,3,4,5,6,9,10,11,12 and 9-row checklist (TM/VM/GM4+/Safari divergences only).*

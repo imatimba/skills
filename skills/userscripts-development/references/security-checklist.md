@@ -40,24 +40,7 @@ if (!API_KEY) {
 
 ### 3. User Input Sanitised (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML#security_considerations, /Web/API/Element/insertAdjacentHTML#security_considerations, /Web/API/Node/textContent, cheatsheetseries.owasp.org/Cross_Site_Scripting_Prevention_Cheat_Sheet#safe-sinks, DOM_based_XSS_Prevention_Cheat_Sheet#rule-6)
 
-**Check:** User-provided data is sanitised before DOM insertion. `innerHTML`/`insertAdjacentHTML`/`outerHTML`/`document.write`/`DOMParser.parseFromString` are XSS sinks; `textContent`/`insertAdjacentText` do not parse HTML and are safe sinks.
-
-```javascript
-// DANGEROUS - XSS vulnerability
-const userInput = prompt('Enter name:');
-element.innerHTML = `Hello, ${userInput}!`;  // Can inject HTML/JS
-
-// SAFE - use textContent
-element.textContent = `Hello, ${userInput}!`;
-
-// SAFE - escape HTML
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-element.innerHTML = `Hello, ${escapeHtml(userInput)}!`;
-```
+**Check:** Sanitise user-provided data before DOM insertion — `innerHTML`/`insertAdjacentHTML`/`outerHTML`/`document.write`/`DOMParser.parseFromString` are XSS sinks; `textContent`/`insertAdjacentText` are safe. Generic XSS hygiene — see MDN Element/innerHTML security considerations and OWASP XSS Prevention Cheat Sheet; portable detail in [api-dom-ui.md](api-dom-ui.md).
 
 ### 4. HTTPS for External Requests (verified 2026-08-25 — cheatsheetseries.owasp.org/Cross_Site_Scripting_Prevention_Cheat_Sheet#xss-prevention-rules-summary allow-list https-only for untrusted URLs; MDN CSP/connect-src & mixed-content — http subresources blocked on https pages)
 
@@ -77,17 +60,7 @@ The `// @connect` annotation above is **TM-enforced; advisory elsewhere** — se
 
 ### 5. No eval() or new Function()
 
-**Check:** Script doesn't execute arbitrary code.
-
-```javascript
-// DANGEROUS - code injection risk
-eval(userInput);
-new Function(userInput)();
-setTimeout(userInput, 1000);  // If userInput is a string
-
-// SAFE - use proper callbacks
-setTimeout(() => doSomething(), 1000);
-```
+**Check:** Avoid `eval`/`new Function`/string `setTimeout`/`setInterval` — code-injection risk; use callbacks. Generic JS hygiene — see MDN Trusted Types injection sinks and OWASP; portability note: page-context CSP may block `eval` while content world does not (see CSP & Trusted Types).
 
 ---
 
@@ -95,17 +68,7 @@ setTimeout(() => doSomething(), 1000);
 
 ### Required Headers
 
-```javascript
-// ==UserScript==
-// @name         ✓ Descriptive and unique
-// @namespace    ✓ Your unique identifier
-// @version      ✓ Semantic version (1.0.0)
-// @description  ✓ Clear description
-// @author       ✓ Your name
-// @match        ✓ Specific URL patterns
-// @grant        ✓ Only needed permissions
-// ==/UserScript==
-```
+Declare minimal descriptive headers (`@name`, `@namespace`, `@version`, `@description`, `@author`, `@match`, `@grant`); starter templates in [header-reference.md](header-reference.md).
 
 ### Permission Minimisation (verified 2026-08-25 — tampermonkey.net/documentation.php?q=grant (@grant whitelists GM_*/GM.* and unsafeWindow; @grant none disables sandbox), violentmonkey.github.io/api/metadata-block/#grant and /api/gm/#unsafewindow (sandbox disabled only with @grant none since 2.32))
 
@@ -196,103 +159,19 @@ Rationale: with a grant sandbox most leaks are contained, but `// @grant none` r
 
 ### 2. Error Handling
 
-**Check:** Async operations have error handlers.
-
-```javascript
-// BAD - no error handling
-GM_xmlhttpRequest({
-    url: 'https://api.example.com/data',
-    onload: (r) => process(JSON.parse(r.responseText))
-});
-
-// GOOD - comprehensive error handling
-GM_xmlhttpRequest({
-    url: 'https://api.example.com/data',
-    onload: (r) => {
-        try {
-            const data = JSON.parse(r.responseText);
-            process(data);
-        } catch (e) {
-            console.error('Parse error:', e);
-        }
-    },
-    onerror: (e) => console.error('Request failed:', e),
-    ontimeout: () => console.error('Request timed out')
-});
-```
+**Check:** Handle async errors (`onload`/`onerror`/`ontimeout`, `try/catch` around `JSON.parse`). Generic hygiene — see MDN `Promise`/`XMLHttpRequest`.
 
 > Core `GM_xmlhttpRequest` is cross-manager; `cookie` / `anonymous` / `fetch` / `stream` options are **Tampermonkey-only** (Violentmonkey supports `anonymous` since 2.10.1 but not the rest — see [http-requests.md](http-requests.md) and [managers.md](managers.md)).
 
 ### 3. Null Checks
 
-**Check:** DOM queries check for null before use.
-
-```javascript
-// BAD - crashes if element missing
-document.querySelector('#target').click();
-
-// GOOD - safe access
-const el = document.querySelector('#target');
-if (el) {
-    el.click();
-}
-
-// BETTER - optional chaining
-document.querySelector('#target')?.click();
-```
+**Check:** Guard `querySelector` results (`if (el)` / `?.`). Generic DOM hygiene — see MDN `Element`/`Node`; no manager variance.
 
 ---
 
 ## Performance Checks
 
-### 1. No Infinite Loops
-
-**Check:** Loops have proper exit conditions.
-
-```javascript
-// DANGEROUS - potential infinite loop
-while (true) {
-    if (condition) break;
-}
-
-// SAFE - bounded iterations
-for (let i = 0; i < 1000; i++) {
-    if (condition) break;
-}
-```
-
-### 2. Observer Cleanup
-
-**Check:** MutationObservers are disconnected when done.
-
-```javascript
-// BAD - runs forever
-const observer = new MutationObserver(callback);
-observer.observe(document.body, { childList: true, subtree: true });
-
-// GOOD - disconnects when appropriate
-const observer = new MutationObserver((mutations, obs) => {
-    if (foundTarget) {
-        obs.disconnect();
-    }
-});
-```
-
-### 3. Debounced Operations
-
-**Check:** Frequent operations are throttled.
-
-```javascript
-// BAD - runs on every mutation
-observer.observe(document.body, { childList: true, subtree: true });
-
-// GOOD - debounced
-let timeout;
-const observer = new MutationObserver(() => {
-    clearTimeout(timeout);
-    timeout = setTimeout(processChanges, 100);
-});
-```
+Generic performance hygiene (bounded loops, observer cleanup, debouncing/throttling) — no manager variance. See MDN `MutationObserver`/`setTimeout` and [patterns.md](patterns.md); compressed for portability focus.
 
 ---
 
@@ -391,19 +270,13 @@ GM_xmlhttpRequest({
 
 ### Safe DOM Insertion
 
-```javascript
-// Create elements programmatically
-const div = document.createElement('div');
-div.textContent = userInput;  // Safe - no HTML parsing
-div.className = 'my-class';
-document.body.appendChild(div);
-```
+For plain text use `textContent`/`createElement` (safe); for rich HTML sanitize before `innerHTML`/`insertAdjacentHTML` — see [api-dom-ui.md](api-dom-ui.md).
 
-> **Executable sink warning (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/HTMLScriptElement/textContent#security_considerations, /Web/API/HTMLScriptElement/text, /Web/API/Trusted_Types_API#injection_sink_interfaces (TrustedScript sinks: HTMLScriptElement.text/textContent/innerText, eval, Function, setTimeout string)):** `element.textContent` is safe on normal elements, but `HTMLScriptElement.textContent` / `text` / `innerText` IS a JavaScript sink — assigning untrusted code to `scriptElement.textContent` and inserting it will execute (`scriptElement.textContent = untrustedCode // shows the alert`). Never inject untrusted strings via script elements; use `TrustedScript` via a `Trusted Types` policy or avoid creating the element.
+> **Executable sink warning (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/HTMLScriptElement/textContent#security_considerations, /Web/API/HTMLScriptElement/text, /Web/API/Trusted_Types_API#injection_sink_interfaces (TrustedScript sinks: HTMLScriptElement.text/textContent/innerText, eval, Function, setTimeout string)):** `HTMLScriptElement.textContent`/`text`/`innerText` is a script sink — assigning untrusted code and inserting executes. Never inject untrusted strings via script elements; use `TrustedScript` or avoid creation.
 
-> **Other HTML sinks (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML#security_considerations, /Element/outerHTML, /Element/insertAdjacentHTML#security_considerations, /Document/write, /DOMParser/parseFromString; cheatsheetseries.owasp.org — DOM_based_XSS_Prevention_Cheat_Sheet#example-dangerous-html-methods (innerHTML/outerHTML/document.write/writeln)):** `outerHTML`, `insertAdjacentHTML`, `document.write`/`writeln`, and `DOMParser.parseFromString` are equally dangerous HTML sinks alongside `innerHTML` (TrustedHTML sinks per MDN Trusted_Types_API#injection_sink_interfaces). Apply the same escaping/sanitizing discipline to all.
+> **Other HTML sinks (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Element/innerHTML#security_considerations, /Element/outerHTML, /Element/insertAdjacentHTML#security_considerations, /Document/write, /DOMParser/parseFromString; cheatsheetseries.owasp.org — DOM_based_XSS_Prevention_Cheat_Sheet#example-dangerous-html-methods (innerHTML/outerHTML/document.write/writeln)):** `outerHTML`/`insertAdjacentHTML`/`document.write`/`DOMParser.parseFromString` are HTML sinks (TrustedHTML) — same sanitizing discipline as `innerHTML`.
 
-> **Rich HTML — use a sanitizer (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API#concepts_and_usage, /Web/API/Element/innerHTML#examples (policy.createHTML => DOMPurify.sanitize); cheatsheetseries.owasp.org/Cross_Site_Scripting_Prevention_Cheat_Sheet#html-sanitization (OWASP recommends DOMPurify)):** When you must insert HTML (not just text), sanitize via a vetted library. MDN Trusted Types examples use `DOMPurify.sanitize(input)` to create `TrustedHTML` before `innerHTML`/`insertAdjacentHTML`. Pattern: `elem.innerHTML = DOMPurify.sanitize(untrustedHtml)` or via a `Trusted Types` policy `policy.createHTML(input) => DOMPurify.sanitize(input)`. `escapeHtml` (div.textContent → div.innerHTML) is correct for plain text but insufficient for rich HTML.
+> **Rich HTML — use a sanitizer (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API#concepts_and_usage, /Web/API/Element/innerHTML#examples (policy.createHTML => DOMPurify.sanitize); cheatsheetseries.owasp.org/Cross_Site_Scripting_Prevention_Cheat_Sheet#html-sanitization (OWASP recommends DOMPurify)):** For rich HTML sanitize via `DOMPurify`/`Trusted Types`: `elem.innerHTML = DOMPurify.sanitize(untrustedHtml)` or `policy.createHTML` → `DOMPurify.sanitize`.
 
 ### CSP & Trusted Types Interaction (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API, /Web/HTTP/Reference/Headers/Content-Security-Policy/require-trusted-types-for, violentmonkey.github.io/posts/inject-into-context (content isolated world not subject to page CSP; page context blocked), tampermonkey.net/documentation.php?q=GM_addElement (bypasses CSP when page restricts script/style))
 
@@ -426,24 +299,18 @@ Every `@require` / `@resource` is code you ship but do not host — treat it as 
 
 ### Pin with SRI
 
-- Pin **every** `@require` / `@resource` with an SRI hash suffix: `#sha256=...` (minimum; SHA-256/SHA-384/SHA-512 per W3C SRI). `#md5=...` is cryptographically broken — legacy/migration-only, supported by Tampermonkey for backward compat only. Example: `// @require https://cdn.example.com/lib.js#sha256=abc123...`
-- Tampermonkey verifies **SHA-256** and **MD5** natively; **SHA-1 / SHA-384 / SHA-512** require `window.crypto` at install time.
-- Multiple hashes: comma- or semicolon-separated, last supported wins (`#md5=...,sha256=...` → `sha256` used). Hex **or** base64 encoding accepted. Source: tampermonkey.net documentation.php?q=sri.
+- SRI hash format (`#sha256=…` / `#md5=…`, hex/base64, multiple hashes comma/semicolon-separated) — details in [header-reference.md](header-reference.md) and tampermonkey.net documentation.php?q=sri.
 - **Scope — Tampermonkey only (verified 2026-08-25 — tampermonkey.net/documentation.php?q=sri (SHA-256/MD5 natively; SHA-384/512 require window.crypto; hash mismatch handling); violentmonkey.github.io/api/metadata-block — no SRI enforcement documented):** SRI hash suffixes are **enforced only by Tampermonkey**. Violentmonkey, Greasemonkey 4+, and Safari "Userscripts" silently **ignore** `#sha256=…`/`#md5=…` and always re-fetch on update. Pinning therefore protects only Tampermonkey users; others need vendor-or-audit mitigations. TM setting: Security → Subresource Integrity: *Validate if possible* / *Enforce*.
 - **Version-pin URLs (verified 2026-08-25 — tampermonkey.net/documentation.php?q=sri; Greasy Fork external-scripts rules; greasyfork/JasonBarnabe-greasyfork#1070 mismatch monitoring):** Use fully versioned CDN URLs (`https://cdn.example.com/lib-3.6.0.min.js#sha256=…`) — never `latest`/`jquery-latest.min.js`. A floating URL can drift to new (potentially compromised) code between bumps; Greasy Fork warns against unpinned externals.
-- Prefer fewer externals. Review every external URL **before every version bump** — managers silently re-fetch `@require` / `@resource` on update. Greasy Fork now monitors SRI mismatches for hosted scripts; Tampermonkey logs "Hash mismatch for @require" on failure — check install logs after bumping. Vendor small dependencies or prefer Greasy Fork-hosted libraries syncable from GitHub for an audit trail (verified 2026-08-25 — tampermonkey.net/documentation.php?q=sri; greasyfork/JasonBarnabe-greasyfork#1070).
+- Minimize externals; re-audit every `@require`/`@resource` URL on each bump (managers re-fetch on update). Vendor small deps or use Greasy Fork-hosted libs syncable from GitHub — see [publishing.md](publishing.md) (verified 2026-08-25 — tampermonkey.net/documentation.php?q=sri; greasyfork/JasonBarnabe-greasyfork#1070).
 
 ### Catalog context
 
-- **Greasy Fork:** arbitrary `@require` URLs are allowed **with** a valid SRI hash and are monitored for mismatches; CDN allowlist and GF-hosted libraries (syncable from GitHub) are the other allowlisted paths. See Greasy Fork external-scripts rules. Verify: greasyfork.org — github.com/JasonBarnabe/greasyfork issue 1070 for mismatch monitoring.
-- **OpenUserJS:** requires an OSI-approved `@license` and safe-harbors reviewed code (reviewed scripts marked as such on the catalog).
+Catalog rules are workflow trivia — see [publishing.md](publishing.md): Greasy Fork allows arbitrary `@require` with SRI or allowlisted CDN/GF-hosted libs (monitored, see JasonBarnabe/greasyfork#1070); OpenUserJS requires OSI-approved `@license`.
 
 ### Incident-derived rules
 
-- **Feb 2025 — compromised author account:** popular WME scripts injected card-skimming after account takeover → treat account security (2FA) as part of supply chain; enable 2FA on Greasy Fork / OpenUserJS / GitHub and use strong, unique passwords.
-- **2019 — Greasy Fork shared library compromised:** password reuse let an attacker harvest wallet keys from a popular library → never trust a library because it is popular; pin with SRI, audit the source, and prefer well-maintained, narrow-scoped dependencies.
-
-Verify: greasyfork.org · openuserjs.org · tampermonkey.net
+Supply-chain incidents (Feb 2025 WME account takeover → card-skimming; 2019 GF library compromise via password reuse) illustrate why to pin with SRI, audit sources, and enable 2FA — see greasyfork.org/openuserjs.org; generic OWASP supply-chain guidance applies.
 
 ---
 

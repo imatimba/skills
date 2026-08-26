@@ -1,12 +1,12 @@
 # Web Request Interception API Reference
 
-Documentation for `GM_webRequest` — intercept and modify browser requests before they are made. This API is **Tampermonkey-experimental only** (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest); portability is limited — see the manager × browser matrix below. Source of truth for support: [managers.md](managers.md).
+Documentation for `GM_webRequest` — intercept and modify browser requests before they are made. This API is **Tampermonkey-experimental only, not portable** (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest) — **do not rely on it in portable scripts; use the page-level patch fallback as the primary pattern**. Source of truth for support: [managers.md](managers.md).
 
 ---
 
-## Overview
+## Overview — TM-only, not portable
 
-`GM_webRequest` allows userscripts to intercept, block, or redirect web requests before they are sent. Portable scripts must treat it as an optional enhancement — the primary portable pattern is page-level patching (see Cross-manager alternatives).
+`GM_webRequest` allows userscripts to intercept, block, or redirect web requests before they are sent. **Portable scripts must treat it as an optional enhancement — the primary portable pattern is page-level patching (see Cross-manager alternatives). For portable scripts, use page-level `fetch`/`XHR` patching, not `GM_webRequest`.**
 
 **Manager × browser matrix:**
 
@@ -31,212 +31,28 @@ Request types the Tampermonkey implementation can intercept (when available): `s
 
 ---
 
-## Basic Usage — Tampermonkey syntax
+## Tampermonkey-only Syntax — Not Portable (compressed reference)
 
-All snippets in this section use **Tampermonkey syntax** — they have no effect in Violentmonkey, Greasemonkey, or Safari (the symbol is never defined there).
+All `GM_webRequest` syntax below is **Tampermonkey on Firefox MV2 only** — no effect in Violentmonkey, Greasemonkey, or Safari. For portable scripts this section is informational only; do not rely on it. Full DSL is documented at [tampermonkey.net/documentation.php?q=GM_webRequest](https://www.tampermonkey.net/documentation.php?q=GM_webRequest) and [tampermonkey.net/documentation.php?q=webRequest](https://www.tampermonkey.net/documentation.php?q=webRequest).
 
-```javascript
-// Tampermonkey on Firefox MV2 only
-GM_webRequest([
-    // Cancel requests to ads
-    {
-        selector: '*://ads.example.com/*',
-        action: 'cancel'
-    },
+Selectors (`selector` / `selector.include` / `selector.match` / `selector.exclude`) and actions (`action: 'cancel'` / `action.cancel` / `action.redirect` with `redirect` string or `{from, to}` pattern) are a Tampermonkey DSL — note that redirect targets must be covered by `@match`/`@include` (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest). The `@webRequest` header (`// @webRequest {"selector": "...", "action": "cancel"}`) defines pre-load rules before script load (verified 2026-08-25 — tampermonkey.net/documentation.php?q=webRequest: takes JSON matching `GM_webRequest` `rule` param; same experimental + MV3 5.2+ note). Listener shape `info` (`cancel`/`redirect`), `message` (`ok`/`error`), `details.{rule,url,redirect_url,description}` and that the listener cannot impact rule action are likewise TM-only (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest; listener cannot impact rule action per docs).
 
-    // Redirect tracking URLs
-    {
-        selector: '*://tracker.example.com/*',
-        action: {
-            redirect: 'https://example.com/blocked'
-        }
-    },
-
-    // Pattern-based redirect
-    {
-        selector: { match: '*://old.example.com/*' },
-        action: {
-            redirect: {
-                from: '([^:]+)://old.example.com/(.*)',
-                to: '$1://new.example.com/$2'
-            }
-        }
-    },
-
-    // Exclude certain paths
-    {
-        selector: {
-            include: '*://example.com/*',
-            exclude: '*://example.com/api/*'
-        },
-        action: 'cancel'
-    }
-], function(info, message, details) {
-    console.log('Action:', info);        // 'cancel' or 'redirect'
-    console.log('Message:', message);    // 'ok' or 'error'
-    console.log('URL:', details.url);
-    console.log('Redirect URL:', details.redirect_url);
-});
-```
-
----
-
-## Rule Properties — Tampermonkey syntax
-
-### Selector — Tampermonkey syntax
-
-Defines which URLs the rule matches (Tampermonkey DSL) (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest).
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `selector` | string | Simple URL pattern (`{ include: [selector] }` shorthand per docs) |
-| `selector.include` | string/array | URLs, patterns, and regexps for rule triggering |
-| `selector.match` | string/array | Match patterns |
-| `selector.exclude` | string/array | URLs, patterns, and regexps for not triggering the rule |
+Minimal TM-only example (Firefox MV2 only — for portable fallback see Cross-manager alternatives):
 
 ```javascript
-// Tampermonkey syntax — string selector (simplest)
-{ selector: '*://ads.example.com/*' }
-
-// Tampermonkey syntax — object selector with include/exclude
-{
-    selector: {
-        include: '*://example.com/*',
-        exclude: '*://example.com/api/*'
-    }
-}
-
-// Tampermonkey syntax — array of patterns
-{
-    selector: {
-        include: ['*://ads1.com/*', '*://ads2.com/*'],
-        match: '*://tracker.com/*'
-    }
-}
-```
-
-### Action — Tampermonkey syntax
-
-Defines what to do when a URL matches (Tampermonkey DSL) (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest).
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `action` | string | `'cancel'` to block (`"cancel"` shorthand for `{ cancel: true }` per docs) |
-| `action.cancel` | boolean | Block the request |
-| `action.redirect` | string/object | Redirect destination — target URL must be covered by `@match`/`@include` (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest) |
-
-```javascript
-// Tampermonkey syntax — cancel (block) the request
-{ action: 'cancel' }
-{ action: { cancel: true } }
-
-// Tampermonkey syntax — redirect to static URL
-{ action: { redirect: 'https://example.com/blocked' } }
-
-// Tampermonkey syntax — redirect with pattern replacement
-{
-    action: {
-        redirect: {
-            from: '([^:]+)://old.com/(.*)',
-            to: '$1://new.com/$2'
-        }
-    }
-}
-```
-
----
-
-## @webRequest Header — Tampermonkey syntax
-
-Define rules at script level (applies before script loads). Tampermonkey-only (verified 2026-08-25 — tampermonkey.net/documentation.php?q=webRequest: takes JSON matching `GM_webRequest` `rule` param; same experimental + MV3 5.2+ note).
-
-```javascript
-// @webRequest {"selector": "*://ads.example.com/*", "action": "cancel"}
-// @webRequest {"selector": {"include": "*tracking*"}, "action": {"redirect": "about:blank"}}
-```
-
-This is useful for blocking resources that load before your script runs — only where supported (Tampermonkey on Firefox MV2) (verified 2026-08-25 — tampermonkey.net/documentation.php?q=webRequest + tampermonkey.net/documentation.php?q=GM_webRequest).
-
----
-
-## Listener Callback — Tampermonkey syntax
-
-```javascript
-// Tampermonkey-only — listener is invoked per intercepted request
-GM_webRequest(rules, function(info, message, details) {
-    // info: 'cancel' or 'redirect'
-    // message: 'ok' or 'error'
-    // details: {
-    //     rule: <the triggered rule>,
-    //     url: <request URL>,
-    //     redirect_url: <where redirected>,
-    //     description: <error description if any>
-    // }
-});
-```
-Listener shape `info` (`cancel`/`redirect`), `message` (`ok`/`error`), `details.{rule,url,redirect_url,description}` (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest; listener cannot impact rule action per docs).
-
----
-
-## Common Use Cases — Tampermonkey syntax
-
-All examples below require Tampermonkey on Firefox MV2. For portable equivalents, see Cross-manager alternatives.
-
-### Block Ads
-
-```javascript
-// Tampermonkey-only
-GM_webRequest([
+// Tampermonkey on Firefox MV2 only — feature-detect before use
+if (typeof GM_webRequest !== 'undefined') {
+  GM_webRequest([
     { selector: '*://ads.example.com/*', action: 'cancel' },
-    { selector: '*://tracking.example.com/*', action: 'cancel' },
-    { selector: '*://analytics.example.com/*', action: 'cancel' }
-]);
+    { selector: { include: '*://example.com/*', exclude: '*://example.com/api/*' }, action: 'cancel' },
+    { selector: '*://old.example.com/*', action: { redirect: 'https://new.example.com/' } }
+  ], function(info, message, details) {
+    console.log(info, message, details.url);
+  });
+}
 ```
 
-### Redirect Old URLs
-
-```javascript
-// Tampermonkey-only
-GM_webRequest([
-    {
-        selector: { match: '*://old-domain.com/*' },
-        action: {
-            redirect: {
-                from: '([^:]+)://old-domain.com/(.*)',
-                to: '$1://new-domain.com/$2'
-            }
-        }
-    }
-]);
-```
-
-### Block Specific Resource Types
-
-```javascript
-// Tampermonkey-only — block scripts from untrusted domains
-GM_webRequest([
-    {
-        selector: {
-            include: '*://*.untrusted.com/*.js'
-        },
-        action: 'cancel'
-    }
-]);
-```
-
-### Redirect to Local Resources
-
-```javascript
-// Tampermonkey-only
-GM_webRequest([
-    {
-        selector: 'https://cdn.example.com/library.js',
-        action: {
-            redirect: 'https://my-cdn.com/modified-library.js'
-        }
-    }
-]);
-```
+> Examples such as block-ads, pattern redirect, or resource-type blocking are all TM-only — see TM docs for full rule syntax. Portable equivalents are in Cross-manager alternatives below.
 
 ---
 
@@ -244,16 +60,7 @@ GM_webRequest([
 
 The browser-limitations content below is framed for the **Tampermonkey implementation on Firefox MV2** — other managers have no implementation at all (see matrix above).
 
-### Browser Support (Tampermonkey implementation)
-
-| Browser (Tampermonkey build) | `GM_webRequest` Support |
-|---------|----------------------|
-| Firefox (MV2) | ✅ Supported (experimental) (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest: MV3 Chrome+derivates unavailable; Firefox MV2 remains the supported build) |
-| Chrome (MV3, Tampermonkey 5.2+) | ❌ Not available — broken (issue #2209) (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest + github.com/Tampermonkey/tampermonkey/issues/2209: console "error currently not supported in MV3") |
-| Edge (MV3, Tampermonkey 5.2+) | ❌ Not available — broken (issue #2209) (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest + github.com/Tampermonkey/tampermonkey/issues/2209) |
-| Safari (Tampermonkey paid app) | ❌ Not available |
-
-Violentmonkey, Greasemonkey, and Safari Userscripts are absent everywhere — do not feature-detect them as "MV3-limited"; they never defined the API (verified 2026-08-25 — Violentmonkey wontfix github.com/violentmonkey/violentmonkey/issues/583; Greasemonkey/Safari absence — no `GM_webRequest` in their API indexes — UNVERIFIED (2026-08-25) for Greasemonkey/Safari primary docs beyond absence).
+**Browser support:** Authoritative matrix is in [managers.md](managers.md) §2 — `GM_webRequest` is experimental Firefox MV2 only; broken on Chrome/Edge MV3 (TM 5.2+, issue #2209) (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest + github.com/Tampermonkey/tampermonkey/issues/2209); Violentmonkey wontfix (verified 2026-08-25 — github.com/violentmonkey/violentmonkey/issues/583); Greasemonkey/Safari absent.
 
 ### Request Types
 
@@ -354,11 +161,8 @@ GM_addStyle(`
 
 ## Best Practices
 
-1. **Be specific with selectors** - Avoid overly broad patterns
-2. **Test thoroughly** - Request interception can break sites
-3. **Provide fallbacks** - Check if `GM_webRequest` is available (it never exists in Violentmonkey)
-4. **Log actions** - Use the listener callback for debugging
-5. **Consider portable alternatives first** - Your script may need to work outside Tampermonkey on Firefox MV2
+1. **Provide fallbacks** - Check if `GM_webRequest` is available (it never exists in Violentmonkey)
+2. **Consider portable alternatives first** - Your script may need to work outside Tampermonkey on Firefox MV2
 
 ```javascript
 // Check if GM_webRequest is available — Violentmonkey never defines it (wontfix #583) (verified 2026-08-25 — github.com/violentmonkey/violentmonkey/issues/583)
@@ -376,11 +180,9 @@ if (typeof GM_webRequest !== 'undefined') {
 
 ---
 
-## MV3 declarativeNetRequest Boundary — Why GM_webRequest Is Unavailable (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest + github.com/Tampermonkey/tampermonkey/issues/2209 + MDN declarativeNetRequest)
+## MV3 declarativeNetRequest Boundary — Why GM_webRequest Is Unavailable
 
-Tampermonkey docs note for `GM_webRequest`: "It is also not available anymore at Manifest v3 versions of Tampermonkey 5.2+ (Chrome and derivates)" (tampermonkey.net/documentation.php?q=GM_webRequest). Issue #2209 reports console error "currently not supported in MV3" — verified via github.com/Tampermonkey/tampermonkey/issues/2209 (verified 2026-08-25).
-
-MV3 removes blocking `webRequest` (MDN `webRequest` notes blocking requires `"webRequestBlocking"` and `handlerBehaviorChanged()` for cached-page edge cases). Its replacement is `declarativeNetRequest` — a **declarative, static-ruleset API** (`action.type: block/redirect/modifyHeaders`) with session/dynamic/static limits and no per-request JS callback. It cannot replicate `GM_webRequest`'s dynamic `(selector, action, listener)` patching parity — see MDN `declarativeNetRequest` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/declarativeNetRequest). Userscripts needing pre-load blocking on Chromium MV3 must use portable fallbacks.
+`GM_webRequest` is unavailable on Tampermonkey MV3 (Chrome/derivates) since TM 5.2+ — see issue #2209 reporting "currently not supported in MV3" (verified 2026-08-25 — tampermonkey.net/documentation.php?q=GM_webRequest + github.com/Tampermonkey/tampermonkey/issues/2209). MV3 replaces blocking `webRequest` with `declarativeNetRequest` (declarative static rules, no per-request JS callback) — cannot replicate `GM_webRequest` dynamic patching. For portable scripts on Chromium MV3, use the portable fallbacks above. Details: MDN [`webRequest`](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/webRequest) and [`declarativeNetRequest`](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/declarativeNetRequest).
 
 ---
 
@@ -393,8 +195,3 @@ Monkey-patching `unsafeWindow.fetch` / `unsafeWindow.XMLHttpRequest` (requires `
 3. **Still subject to constraints** — page `fetch` remains gated by CSP `connect-src`; `ReadableStream` bodies are one-shot and require `request.clone()` before second use ("Body has already been consumed" — MDN Using Fetch, verified 2026-08-25).
 
 **Cache caveat:** Even `webRequest` blocking can be skipped for cached responses. MDN `webRequest.handlerBehaviorChanged()` documents: "events will not be triggered for the request" when a page is reloaded from the in-memory cache, requiring `handlerBehaviorChanged()` to flush the cache. Tampermonkey issue #397 discussion notes the same `fromCache` limitation for `onResponseStarted` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/webRequest/handlerBehaviorChanged). Treat "blocking before load" as best-effort when caching is involved.
-
----
-
-
-

@@ -294,18 +294,6 @@ function addElementFallback(parentOrTag, tagOrAttrs, maybeAttrs) {
 }
 ```
 
-### Add Images
-
-```javascript
-GM_addElement('img', {
-    src: 'https://example.com/image.png',
-    alt: 'Description',
-    width: 100,
-    height: 100,
-    style: 'border-radius: 50%;'
-});
-```
-
 ### CSP-aware usage
 
 ```javascript
@@ -487,19 +475,9 @@ if (unsafeWindow.ng) {
 
 ## MutationObserver
 
-Observe DOM mutations without polling. Replaces deprecated Mutation Events. Verified 2026-08-25 against MDN MutationObserver / MutationObserver.observe() (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/MutationObserver).
+Standard DOM API for observing mutations without polling (replaces deprecated Mutation Events). Verified 2026-08-25 against MDN MutationObserver / MutationObserver.observe() (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/MutationObserver).
 
-| Concept | Detail |
-| --- | --- |
-| Constructor | `new MutationObserver(callback)` — callback receives `(mutationList, observer)` |
-| `observe(target, options)` | At least one of `childList`, `attributes`, `characterData` must be `true`, otherwise throws `TypeError` |
-| `subtree` | `true` extends monitoring to entire subtree rooted at `target` (default `false`) |
-| `attributeFilter` | Array of attribute names to watch; implies `attributes: true` |
-| `attributeOldValue` / `characterDataOldValue` | Record previous value; require `attributes` / `characterData` to be `true` or throws |
-| `disconnect()` | Stops notifications until `observe()` called again |
-| `takeRecords()` | Drains pending queue and returns `MutationRecord[]` |
-| Timing | Callback queued as microtask — fires after DOM mutations, not synchronously |
-| Detached subtrees | With `subtree: true`, mutations in a removed subtree are observed until the removal notification is delivered; afterwards the detached subtree is no longer observed |
+Use `new MutationObserver(callback)` → `observer.observe(target, { childList, attributes, characterData, subtree, attributeFilter, attributeOldValue, characterDataOldValue })` → `disconnect()` / `takeRecords()`. At least one of `childList`/`attributes`/`characterData` must be `true` or `observe()` throws `TypeError`; callback is a microtask; pending records are discarded on `disconnect()` unless drained via `takeRecords()` first.
 
 ```javascript
 const observer = new MutationObserver((mutations) => {
@@ -509,43 +487,33 @@ const observer = new MutationObserver((mutations) => {
     }
 });
 observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeOldValue: true });
-// later
 observer.disconnect();
-const pending = observer.takeRecords();
 ```
 
-Source: MDN `MutationObserver` and `MutationObserver.observe()` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/MutationObserver).
+For debounced/lifetime patterns and cleanup on SPA route change, see `patterns.md` (DOM Mutation Observation). Source: MDN `MutationObserver` and `MutationObserver.observe()` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/MutationObserver).
 
 ---
 
-## Shadow DOM: attachShadow Modes, Encapsulation, and Focus Delegation
+## Shadow DOM: attachShadow and Encapsulation
 
-Encapsulate injected UI via Shadow DOM. Verified 2026-08-25 against MDN `Element.attachShadow()` and `ShadowRoot` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Element/attachShadow, ShadowRoot).
+Encapsulate injected UI via Shadow DOM to isolate styles. Verified 2026-08-25 against MDN `Element.attachShadow()` and `ShadowRoot` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Element/attachShadow, ShadowRoot). See [MDN Element.attachShadow()](https://developer.mozilla.org/en-US/docs/Web/API/Element/attachShadow) and [ShadowRoot](https://developer.mozilla.org/en-US/docs/Web/API/ShadowRoot).
 
-| Option / Property | Detail |
+| Option | Detail |
 | --- | --- |
-| `mode: "open"` | `element.shadowRoot` returns the `ShadowRoot`; internal nodes accessible from JS |
-| `mode: "closed"` | `element.shadowRoot` is `null`; retain the `ShadowRoot` returned by `attachShadow()` to access it |
-| `delegatesFocus` | When `true`, clicking a non-focusable part of the shadow tree focuses the first focusable element and gives the host `:focus` styling (default `false`) |
-| `clonable` | When `true`, `Node.cloneNode()` / `Document.importNode()` copy includes the shadow root |
-| `slotAssignment: "named" \| "manual"` | `named` (default) auto-assigns children with `slot` attribute; `manual` requires `HTMLSlotElement.assign()` |
-| `serializable` / `customElementRegistry` / `referenceTarget` | Optional; see MDN for declarative shadow roots and scoped registries |
-| Attachable hosts | Autonomous custom elements and a fixed allowlist: `article`, `aside`, `blockquote`, `body`, `div`, `footer`, `h1`–`h6`, `header`, `main`, `nav`, `p`, `section`, `span` (security restrictions exclude e.g. `<a>`) |
-| `ShadowRoot.mode` | Read-only `"open"` or `"closed"` |
-| `ShadowRoot.delegatesFocus` / `clonable` / `slotAssignment` / `host` | Read-only reflections of creation options |
+| `mode: "open"` | `element.shadowRoot` returns the `ShadowRoot`; internal nodes remain accessible |
+| `mode: "closed"` | `element.shadowRoot` is `null`; retain the `ShadowRoot` returned by `attachShadow()` |
+| `delegatesFocus` | When `true`, clicking host focuses first focusable element inside (default `false`) |
+
+`GM_addElement` can target a `ShadowRoot` directly (TM 5.5.0+, VM 2.13.1+). Host allowlist includes `article`, `aside`, `blockquote`, `body`, `div`, `footer`, `h1`–`h6`, `header`, `main`, `nav`, `p`, `section`, `span` (others like `<a>` excluded). For `clonable`, `slotAssignment`, `serializable` and full host list, see MDN.
 
 ```javascript
 const host = document.createElement('div');
 document.body.appendChild(host);
 const shadow = host.attachShadow({ mode: 'open', delegatesFocus: true });
 shadow.innerHTML = '<style>:host { display:block }</style><slot></slot><button>OK</button>';
-// GM_addElement can target a ShadowRoot directly (Violentmonkey 2.13.1+, Tampermonkey 5.5.0+)
 if (typeof GM_addElement !== 'undefined') {
     GM_addElement(shadow, 'style', { textContent: 'button { color: blue }' });
 }
-// closed mode — must keep reference
-const closed = host.attachShadow ? null : null; // example: const closed = el.attachShadow({ mode: 'closed' });
-// el.shadowRoot === null in closed mode; use `closed` variable instead
 ```
 
 Source: MDN `Element.attachShadow()` and `ShadowRoot` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Element/attachShadow).
@@ -554,17 +522,7 @@ Source: MDN `Element.attachShadow()` and `ShadowRoot` (verified 2026-08-25 — d
 
 ## Trusted Types and Injection Sinks
 
-Sites enforcing Trusted Types via CSP will throw `TypeError` on string assignment to injection sinks unless passed through a policy. Verified 2026-08-25 against MDN `Trusted_Types_API` and CSP `trusted-types` / `require-trusted-types-for` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API).
-
-| Sink type | Examples | Trusted type |
-| --- | --- | --- |
-| HTML sinks | `Element.innerHTML`, `ShadowRoot.innerHTML`, `document.write()` | `TrustedHTML` via `policy.createHTML()` |
-| Script sinks | `eval()`, `HTMLScriptElement.text` | `TrustedScript` |
-| Script-URL sinks | `HTMLScriptElement.src` | `TrustedScriptURL` |
-
-- Create a policy: `trustedTypes.createPolicy(name, { createHTML: (s) => DOMPurify.sanitize(s) })`. Policy name must be allowlisted by the CSP `trusted-types` directive, otherwise `createPolicy()` throws.
-- Enforcement: CSP `require-trusted-types-for 'script'` makes string assignment to any sink throw `TypeError`. With a policy named `"default"`, strings are automatically passed through `createHTML` instead of throwing, which helps locate unmigrated sinks.
-- Userscript impact: the panel `innerHTML` (and `ShadowRoot.innerHTML`/`document.write()`) patterns in this file are HTML sinks. On Trusted Types-enforcing sites, `panel.innerHTML = ...` throws unless passed through a policy (`TrustedHTML` via `policy.createHTML()`); `el.textContent`, `GM_addStyle`, and `GM_addElement({ textContent })` use `textContent` and are **not** HTML sinks (verified 2026-08-25 — MDN Element.innerHTML/Trusted_Types_API (injection sinks, XSS, require-trusted-types-for) and Node.textContent (use for plain text; not parsed as HTML)). Prefer `textContent` over `innerHTML` where possible and use `policy.createHTML()` for HTML sinks when `trustedTypes` is present.
+Sites enforcing Trusted Types via CSP throw `TypeError` on string assignment to injection sinks unless passed through a policy. Verified 2026-08-25 against MDN `Trusted_Types_API` and CSP `trusted-types` / `require-trusted-types-for` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API). Use `textContent` and `GM_addStyle`/`GM_addElement({ textContent })` where possible — they are **not** HTML sinks. For `innerHTML`/`ShadowRoot.innerHTML`/`document.write()` you need a policy.
 
 ```javascript
 // Defensive Trusted Types wrapper (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API)
@@ -580,29 +538,25 @@ function setHTMLSafe(el, html) {
 }
 ```
 
+On Trusted Types-enforcing sites, `panel.innerHTML = ...` (HTML sink) throws unless via `TrustedHTML`/`policy.createHTML()`; `el.textContent`, `GM_addStyle`, and `GM_addElement({ textContent })` are safe. Policy name must be allowlisted by CSP `trusted-types` directive; a policy named `"default"` auto-wraps strings. See [MDN Trusted Types API](https://developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API).
+
 Source: MDN `Trusted_Types_API` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API).
 
 ---
 
 ## Event Simulation and isTrusted
 
-Synthetic events are never trusted. Verified 2026-08-25 against MDN `Event.isTrusted` and `HTMLElement.click()` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Event/isTrusted).
-
-| Fact | Detail |
-| --- | --- |
-| `Event.isTrusted` | Read-only `true` when generated by the user agent (user action or `HTMLElement.focus()`), `false` when dispatched via `EventTarget.dispatchEvent()`. The `click` event fired through `HTMLElement.click()` sets `isTrusted` to `false`. |
-| `dispatchEvent(new MouseEvent(...))` | Always `isTrusted === false` |
-| `element.click()` | Also `isTrusted === false` — cannot forge trust |
-| Implication | Sites checking `if (!e.isTrusted) return` will ignore synthetic clicks. No API can create a trusted event from a content script or userscript. |
+Synthetic events are never trusted. Verified 2026-08-25 against MDN `Event.isTrusted` and `HTMLElement.click()` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Event/isTrusted). `Event.isTrusted === false` for both `dispatchEvent(new MouseEvent(...))` and `element.click()` — no API can create a trusted event from a userscript. Sites checking `if (!e.isTrusted) return` will ignore synthetic clicks.
 
 ```javascript
 document.addEventListener('click', e => {
     if (!e.isTrusted) console.log('synthetic click ignored by page');
 });
-// both of these are untrusted:
-button.click();
-button.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+button.click(); // isTrusted false
+button.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })); // also false
 ```
+
+See [MDN Event.isTrusted](https://developer.mozilla.org/en-US/docs/Web/API/Event/isTrusted) and `HTMLElement.click()`.
 
 Source: MDN `Event.isTrusted` and `HTMLElement.click()` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Event/isTrusted, HTMLElement.click()).
 
@@ -610,14 +564,9 @@ Source: MDN `Event.isTrusted` and `HTMLElement.click()` (verified 2026-08-25 —
 
 ## Stacking Contexts and z-index
 
-`z-index` has no effect without a positioning context. Verified 2026-08-25 against MDN `z-index` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/CSS/z-index).
+`z-index` has no effect without a positioning context. Verified 2026-08-25 against MDN `z-index` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/CSS/z-index). Larger `z-index` covers smaller only within the same stacking context; new contexts are created by `position`+`z-index`, `opacity < 1`, `transform`, `filter`, etc. Always pair `z-index` with `position: fixed` (or `absolute`/`relative`) — the minimal panel/toast in this file use `position: fixed` + `z-index: 999999`.
 
-| Rule | Detail |
-| --- | --- |
-| Applies to | Positioned elements (`position` other than `static`) and flex/grid items; per MDN formal definition "Applies to: positioned elements" |
-| Comparison scope | Larger `z-index` covers smaller only within the same stacking context |
-| New stacking context | Created by positioned element with `z-index` other than `auto`, and also by `opacity < 1`, `transform`, `filter`, `isolation`, etc. |
-| Userscript fix | Always pair `z-index` with `position: fixed` (or `absolute`/`relative`). The minimal panel/toast in this file use `position: fixed` + `z-index: 999999` for this reason. |
+See [MDN z-index](https://developer.mozilla.org/en-US/docs/Web/CSS/z-index).
 
 Source: MDN `z-index` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/CSS/z-index).
 
@@ -629,10 +578,9 @@ Source: MDN `z-index` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/
 
 | Concern | Detail |
 | --- | --- |
-| `style-src` | Even when `GM_addElement` bypasses `script-src`, an injected `<style>` may be blocked by `style-src` on strict CSP pages (Firefox respects page CSP; Violentmonkey falls back to content-world injection per `@inject-into`). The synchronous fallback `document.createElement('style')` is equally blocked if CSP disallows inline styles. |
-| Trusted Types | `style.textContent = css` is not an HTML sink but `style.innerHTML` is. With `require-trusted-types-for 'script'`, HTML-sink assignments throw; prefer `textContent` and a Trusted Types policy as shown above. |
-| `@run-at` timing | For flash-of-unstyled-content (FOUC) avoidance, inject styles at `document-start` when the document element exists but `document.body` may not; fall back to `document.head || document.documentElement`. `document-start` requires `@run-at document-start` in the metadata block. |
-| Recommended order | 1) `GM_addStyle(css)` if available, 2) `GM_addElement('style', { textContent: css })` for CSP help, 3) manual `document.createElement('style')` with `textContent` appended to `document.head || document.documentElement` |
+| `style-src` | Injected `<style>` may be blocked by `style-src` on strict CSP pages. The manual `document.createElement('style')` fallback is equally blocked if inline styles are disallowed. |
+| `@run-at` timing | Inject at `document-start` to avoid FOUC when `documentElement` exists but `document.body` may not; use `document.head \|\| document.documentElement` as parent. Requires `// @run-at document-start`. |
+| Recommended order | 1) `GM_addStyle(css)` if available, 2) `GM_addElement('style', { textContent: css })` for CSP help, 3) manual `document.createElement('style')` with `textContent` appended to `document.head \|\| document.documentElement` |
 
 Source: MDN `Content-Security-Policy: style-src` and `Trusted_Types_API` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/style-src); Violentmonkey `@inject-into` fallback behavior per `violentmonkey.github.io/api/metadata-block/#inject-into` (verified 2026-08-25 — violentmonkey.github.io/api/metadata-block: auto tries page then content when CSP blocks).
 
@@ -640,14 +588,7 @@ Source: MDN `Content-Security-Policy: style-src` and `Trusted_Types_API` (verifi
 
 ## Composed Events and Shadow DOM Retargeting
 
-Events crossing a shadow boundary are retargeted unless composed. Verified 2026-08-25 against MDN `Event.composed` and `Event.composedPath()` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Event/composed).
-
-| Property / Method | Detail |
-| --- | --- |
-| `Event.composed` | `true` if the event propagates across the shadow boundary into the standard DOM. All UA-dispatched UI events (`click`, `touch`, `mouseover`, `copy`, `paste`, etc.) are composed; most synthetic events are not unless created with `{ composed: true }`. |
-| `bubbles` | Propagation across the boundary also requires `bubbles: true`; capturing composed events are handled at host as if in `AT_TARGET`. |
-| `Event.composedPath()` | Returns the full propagation path including shadow nodes. For a `closed` shadow root the path is retargeted — hosts see the host element but not internal shadow nodes. |
-| Synthetic events | `new MouseEvent('click', { bubbles: true, composed: true })` will cross; omit `composed: true` and the shadow root is the last node offered the event. |
+Events crossing a shadow boundary are retargeted unless composed. Verified 2026-08-25 against MDN `Event.composed` and `Event.composedPath()` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Event/composed). Most UA-dispatched UI events (`click`, `touch`, etc.) are composed; synthetic events need `{ bubbles: true, composed: true }` to cross. `Event.composedPath()` returns the full path (retargeted for `closed` roots).
 
 ```javascript
 const host = document.createElement('div');
@@ -655,10 +596,11 @@ const shadow = host.attachShadow({ mode: 'open' });
 shadow.innerHTML = '<button>inside</button>';
 document.body.appendChild(host);
 shadow.querySelector('button').addEventListener('click', e => {
-    console.log(e.composed, e.composedPath()); // true, [button, ShadowRoot, host, body, html, document, window]
+    console.log(e.composed, e.composedPath());
 });
-// page listening outside shadow sees retargeted event
 ```
+
+See [MDN Event.composed](https://developer.mozilla.org/en-US/docs/Web/API/Event/composed).
 
 Source: MDN `Event.composed` and `Event.composedPath()` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Event/composed).
 
@@ -666,29 +608,18 @@ Source: MDN `Event.composed` and `Event.composedPath()` (verified 2026-08-25 —
 
 ## AdoptedStyleSheets / Constructable Stylesheets
 
-Modern alternative to `GM_addStyle` for shadow DOM isolation. Verified 2026-08-25 against MDN `Document.adoptedStyleSheets`, `ShadowRoot.adoptedStyleSheets`, and `CSSStyleSheet` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Document/adoptedStyleSheets).
-
-| API | Detail |
-| --- | --- |
-| `new CSSStyleSheet()` | Creates a constructed stylesheet |
-| `sheet.replaceSync(css)` / `sheet.replace(css)` | Synchronously / asynchronously replace sheet content |
-| `sheet.insertRule(rule)` / `sheet.deleteRule(index)` | Mutate rules; changes apply wherever the sheet is adopted |
-| `document.adoptedStyleSheets` | Array of constructed sheets applied to the document (ordered after `document.styleSheets` in cascade) |
-| `shadowRoot.adoptedStyleSheets` | Same for a shadow subtree; shares sheets with document and other shadows — mutating the sheet updates all adopters |
-| Constraint | Only sheets created via `new CSSStyleSheet()` in the same `Document` may be adopted; otherwise throws `NotAllowedError` |
-| Baseline | Widely available since March 2023 (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Document/adoptedStyleSheets) |
+Modern alternative to `GM_addStyle` for shadow-DOM isolation. Verified 2026-08-25 against MDN `Document.adoptedStyleSheets`, `ShadowRoot.adoptedStyleSheets`, and `CSSStyleSheet` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Document/adoptedStyleSheets). Use `new CSSStyleSheet()` → `sheet.replaceSync(css)` / `sheet.replace(css)` → `document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet]` or `shadowRoot.adoptedStyleSheets = [sheet]`. Mutating the sheet updates all adopters; only sheets created in the same `Document` may be adopted (`NotAllowedError` otherwise). Baseline widely available since March 2023 (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Document/adoptedStyleSheets).
 
 ```javascript
 const sheet = new CSSStyleSheet();
 sheet.replaceSync('#userscript-panel { background: #fff; border-radius: 8px }');
-// Apply to document
 document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
 // Or isolate to shadow DOM
 const shadow2 = document.createElement('div').attachShadow({ mode: 'open' });
 shadow2.adoptedStyleSheets = [sheet];
-// Later mutation propagates everywhere
-sheet.insertRule('.userscript-toast { opacity: 0 }');
 ```
+
+See [MDN Document.adoptedStyleSheets](https://developer.mozilla.org/en-US/docs/Web/API/Document/adoptedStyleSheets).
 
 Source: MDN `Document.adoptedStyleSheets`, `ShadowRoot.adoptedStyleSheets`, `CSSStyleSheet` (verified 2026-08-25 — developer.mozilla.org/en-US/docs/Web/API/Document/adoptedStyleSheets, CSSStyleSheet).
 
