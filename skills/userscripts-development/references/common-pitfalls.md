@@ -541,48 +541,13 @@ onReady(() => {
 
 ## Pitfall 12: Cross-Browser / Cross-Manager Differences
 
-Conflating browser and manager responsibilities causes subtle bugs.
+Conflating browser and manager responsibilities causes subtle bugs. Cross-manager divergences (Xray bridges, `GM_webRequest` availability, containers, storage types/races, logging) live in one place: [manager-compat.md](manager-compat.md).
 
-**Firefox-only bridges (Xray — not manager features):**
-```javascript
-// cloneInto and exportFunction only exist in Firefox Xray (GM4+ and TM-on-Firefox)
-if (typeof cloneInto !== 'undefined') {
-    unsafeWindow.myData = cloneInto(data, unsafeWindow, { cloneFunctions: true });
-} else if (typeof unsafeWindow !== 'undefined') {
-    unsafeWindow.myData = data;  // Chromium page-world
-} else {
-    // Safari — no page-world access at all; stay in content world
-    console.warn('No page-world bridge available');
-}
-```
+**Symptom:** Script works in one manager/browser but fails in another — e.g., `GM_webRequest` is `undefined`, `cloneInto` is missing, container isolation differs, stored objects become `[object Object]`, or parallel-tab counters diverge.
 
-> **Function serialization specifics (verified 2026-08-24):** Assigning a function via `unsafeWindow.fn = myFn` through the structured clone algorithm throws `DataCloneError` on Firefox (MDN: "Function objects cannot be duplicated ... attempting to throws a DataCloneError" — https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm). Xray `cloneInto` strips functions by default because it uses structured clone; pass `{ cloneFunctions: true }` to preserve them. To expose a callable to the page, use `exportFunction` instead — `exportFunction(fn, unsafeWindow, { defineAs: 'fn' })` (MDN Sharing objects with page scripts — https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Sharing_objects_with_page_scripts). On Chromium there is no Xray; direct `unsafeWindow.fn = fn` assignment works but prototype chains are not walked (MDN: "The prototype chain is not walked or duplicated"). Guard accordingly.
+**Diagnostic:** Identify the manager + browser + manifest combo you tested vs the target. Check: `typeof GM_webRequest`, `typeof cloneInto`/`exportFunction`, `GM_info.scriptHandler` only as last resort — prefer capability checks (`typeof GM !== 'undefined' && GM.getValues`).
 
-**Manifest V3 limitations (framed by manager, not browser):**
-```javascript
-// @webRequest / GM_webRequest is NOT "Chrome MV3" generically — it's:
-// TM experimental, Firefox MV2 only; broken on TM Chrome MV3 5.2+ (issue #2209);
-// VM wontfix (issue #583); GM/Safari ❌.
-// Don't present as browser capability row — it's manager + manifest.
-if (typeof GM_webRequest !== 'undefined') {
-    // TM Firefox MV2 only
-    GM_webRequest([...], listener);
-} else if (typeof unsafeWindow !== 'undefined') {
-    // MV3 portable alternative: page-level fetch/XHR patch (guard Safari absent)
-    // see browser-compatibility.md workaround snippet
-}
-```
-
-| Topic | Manager-aware fact | Browser tie |
-|-------|-------------------|-------------|
-| `cloneInto` / `exportFunction` | Firefox Xray vision — GM4+ and TM-on-Firefox; not a GM API — `cloneInto` without `cloneFunctions:true` strips functions via `DataCloneError` (MDN structured clone) | Firefox only; Chromium has no Xray |
-| `GM_webRequest` / `@webRequest` | TM experimental Firefox MV2 only; broken TM Chrome MV3 5.2+; VM wontfix; GM/Safari ❌ | Manifest (MV2 vs MV3) + manager |
-| Firefox containers | TM's `@run-in container-id-N` (TM 5.3+) is TM-only; Firefox's native contextual identities are separate | Firefox only |
-| Storage types | GM4+ stores **primitives only** — `JSON.stringify` objects yourself; TM/VM/Safari store objects | Manager, not browser |
-| Storage race / atomicity | `GM.*` storage is async with no cross-tab transactions — concurrent `GM.getValue` → `GM.setValue` races (file under-covers) | Manager (all) — especially parallel tabs |
-
-> **Storage race & atomicity (verified 2026-08-24 via Greasespot wiki):** `GM.getValue`/`GM.setValue` return promises with no transaction. Concurrent read-modify-write from two tabs races — final value may reflect only one increment (e.g., 64 instead of 100). Wiki stresses "Note awaiting the set -- required so the next get sees this set" (https://wiki.greasespot.net/GM_getValue) and warns "Doing many gets/many sets can be slow. Instead get/set one value ... or use Promise.all()". Mitigations: (1) batch state in a single JSON object behind one key, (2) serialize with `await` ordering, (3) use `GM_addValueChangeListener` to react to external writes, or (4) implement a compare-and-swap loop. See also `GM_setValue` primitives-only note — https://wiki.greasespot.net/GM_setValue.
-| Logging | `GM_log` removed in GM4+ — use `console.log` | Manager (GM4+) |
+**Fix pointer:** See [manager-compat.md](manager-compat.md) — section “Tier-1 Portable Baseline — Cross-Manager Divergences” for the per-manager matrix and guarded code patterns; apply the fix there, not by branching on `scriptHandler`.
 
 ---
 

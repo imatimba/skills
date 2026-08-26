@@ -1,6 +1,59 @@
 # Tier-2 Manager Compatibility
 
-A tier-2 manager is one whose divergence from the portable baseline (TM/VM/GM4+/Safari — see [managers.md](managers.md)) justifies dedicated notes; coverage depth follows divergence, not popularity.
+A tier-2 manager is one whose divergence from the portable baseline (TM/VM/GM4+/Safari — see [managers.md](managers.md)) justifies dedicated notes; coverage depth follows divergence, not popularity. The portable baseline's own cross-manager divergences are owned here to keep [common-pitfalls.md](common-pitfalls.md) slim — see the Tier-1 section immediately below.
+
+---
+
+## Tier-1 Portable Baseline — Cross-Manager Divergences
+
+Divergences among the portable baseline managers (Tampermonkey / Violentmonkey / Greasemonkey 4+ / Safari Userscripts). [common-pitfalls.md Pitfall 12](common-pitfalls.md#pitfall-12-cross-browser--cross-manager-differences) keeps only symptom → diagnostic → pointer; this section is the single home for the matrix (verified 2026-08-24 where noted).
+
+### Firefox-only Xray bridges (not GM APIs)
+
+`cloneInto` and `exportFunction` exist only in Firefox Xray (GM4+ and TM-on-Firefox); they are not GM APIs.
+
+```javascript
+// cloneInto and exportFunction only exist in Firefox Xray (GM4+ and TM-on-Firefox)
+if (typeof cloneInto !== 'undefined') {
+    unsafeWindow.myData = cloneInto(data, unsafeWindow, { cloneFunctions: true });
+} else if (typeof unsafeWindow !== 'undefined') {
+    unsafeWindow.myData = data;  // Chromium page-world
+} else {
+    // Safari — no page-world access at all; stay in content world
+    console.warn('No page-world bridge available');
+}
+```
+
+> **Function serialization specifics (verified 2026-08-24):** Assigning a function via `unsafeWindow.fn = myFn` through the structured clone algorithm throws `DataCloneError` on Firefox (MDN: "Function objects cannot be duplicated ... attempting to throws a DataCloneError" — https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm). Xray `cloneInto` strips functions by default because it uses structured clone; pass `{ cloneFunctions: true }` to preserve them. To expose a callable to the page, use `exportFunction` instead — `exportFunction(fn, unsafeWindow, { defineAs: 'fn' })` (MDN Sharing objects with page scripts — https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Sharing_objects_with_page_scripts). On Chromium there is no Xray; direct `unsafeWindow.fn = fn` assignment works but prototype chains are not walked (MDN: "The prototype chain is not walked or duplicated"). Guard accordingly.
+
+### Manifest V3 limitations (framed by manager, not browser)
+
+```javascript
+// @webRequest / GM_webRequest is NOT "Chrome MV3" generically — it's:
+// TM experimental, Firefox MV2 only; broken on TM Chrome MV3 5.2+ (issue #2209);
+// VM wontfix (issue #583); GM/Safari ❌.
+// Don't present as browser capability row — it's manager + manifest.
+if (typeof GM_webRequest !== 'undefined') {
+    // TM Firefox MV2 only
+    GM_webRequest([...], listener);
+} else if (typeof unsafeWindow !== 'undefined') {
+    // MV3 portable alternative: page-level fetch/XHR patch (guard Safari absent)
+    // see browser-compatibility.md workaround snippet
+}
+```
+
+### Summary matrix — manager-aware facts
+
+| Topic | Manager-aware fact | Browser tie |
+|-------|-------------------|-------------|
+| `cloneInto` / `exportFunction` | Firefox Xray vision — GM4+ and TM-on-Firefox; not a GM API — `cloneInto` without `cloneFunctions:true` strips functions via `DataCloneError` (MDN structured clone) | Firefox only; Chromium has no Xray |
+| `GM_webRequest` / `@webRequest` | TM experimental Firefox MV2 only; broken TM Chrome MV3 5.2+; VM wontfix; GM/Safari ❌ | Manifest (MV2 vs MV3) + manager |
+| Firefox containers | TM's `@run-in container-id-N` (TM 5.3+) is TM-only; Firefox's native contextual identities are separate | Firefox only |
+| Storage types | GM4+ stores **primitives only** — `JSON.stringify` objects yourself; TM/VM/Safari store objects | Manager, not browser |
+| Storage race / atomicity | `GM.*` storage is async with no cross-tab transactions — concurrent `GM.getValue` → `GM.setValue` races | Manager (all) — especially parallel tabs |
+| Logging | `GM_log` removed in GM4+ — use `console.log` | Manager (GM4+) |
+
+> **Storage race & atomicity (verified 2026-08-24 via Greasespot wiki):** `GM.getValue`/`GM.setValue` return promises with no transaction. Concurrent read-modify-write from two tabs races — final value may reflect only one increment (e.g., 64 instead of 100). Wiki stresses "Note awaiting the set -- required so the next get sees this set" (https://wiki.greasespot.net/GM_getValue) and warns "Doing many gets/many sets can be slow. Instead get/set one value ... or use Promise.all()". Mitigations: (1) batch state in a single JSON object behind one key, (2) serialize with `await` ordering, (3) use `GM_addValueChangeListener` to react to external writes, or (4) implement a compare-and-swap loop. See also `GM_setValue` primitives-only note — https://wiki.greasespot.net/GM_setValue.
 
 ---
 

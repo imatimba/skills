@@ -6,9 +6,29 @@ Documentation for `GM_xmlhttpRequest` / `GM.xmlHttpRequest` — cross-origin HTT
 
 ## Overview
 
-`GM_xmlhttpRequest` allows userscripts to make HTTP requests to any domain, bypassing the browser's same-origin policy. Behaviour is **manager-neutral for core options**; extended options are manager-specific — see the support matrix below.
+`GM_xmlhttpRequest` (callback) and `GM.xmlHttpRequest` (Promise form, Greasemonkey 4.0+) perform background fetches that bypass the page's same-origin/CORS and CSP `connect-src` restrictions. They are dispatched from the manager's background context — Tampermonkey docs: "GM_xmlhttpRequest is dispatched by Tampermonkey's background context" + "If you want to use this method then please also check the documentation about @connect"; wiki.greasespot.net: "allows these requests to cross the same origin policy boundaries"; Violentmonkey API index lists `GM_xmlhttpRequest` (verified 2026-08-24). Behaviour is **manager-neutral for core options**; extended options are manager-specific — see the support matrix below.
 
 Manager-neutral voice: every manager-specific option or version below is qualified with its owner (for example, "Tampermonkey build 6180+").
+
+---
+
+## Background vs Page `fetch` — CORS, CSP & Credentials (verified 2026-08-24 — MDN + WHATWG Fetch Living Standard 2026-08-20)
+
+`GM_webRequest` blocks/redirects at the extension layer; `GM_xmlhttpRequest` background fetches skip page-level security checks (see contrast). Use this section when choosing between `GM_xmlhttpRequest` and page `fetch`/`XHR` via `unsafeWindow`.
+
+| Capability | Page `fetch` / `XHR` | `GM_xmlhttpRequest` background |
+|---|---|---|
+| CORS preflight | Required for non-simple requests | Skipped via background (no OPTIONS preflight) |
+| CSP `connect-src` | Enforced — `fetch()` "is controlled by the connect-src directive" (MDN fetch) | Bypassed — uses browser networking stack from background |
+| Forbidden headers (`Cookie`, `User-Agent`, `Referer`) | Blocked by browser | Allowed — Tampermonkey docs list `headers e.g. user-agent, referer, ...` and wiki example sets `User-Agent` |
+| `@connect` whitelist | N/A | **Required** — `@connect <domain>` / `@connect *` / `@connect self`; both initial and final URL are checked (TM docs `?q=connect`, verified 2026-08-24) |
+
+Streaming & payload controls (as of TM 5.4+): `responseType` supports `arraybuffer`, `blob`, `json`, `stream`; `onprogress` / `onloadstart` provide chunk access and `stream` object. Native `fetch` equivalent is `Response.body` → `ReadableStream` (`response.body.getReader()`) — MDN `Response: body` and TM docs (verified 2026-08-24). See Basic Examples for `GM_xmlhttpRequest` usage with `User-Agent` and promise form.
+
+**Page `fetch` fundamentals (when not using background):**
+- **Defaults:** `mode: "cors"` and `credentials: "same-origin"` (MDN `Request: credentials`; WHATWG Fetch §5.4) — verified 2026-08-24.
+- **Simple vs. preflighted:** *Simple* only if method `GET`/`HEAD`/`POST`, headers limited to CORS-safelisted (`Accept`, `Accept-Language`, `Content-Language`, `Content-Type`, `Range`) with `Content-Type` in `application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain`, and no `ReadableStream` body nor `xhr.upload` listeners. Otherwise `OPTIONS` preflight with `Access-Control-Request-Method`/`Headers` (MDN Guides/CORS, verified 2026-08-24). Background skips preflight.
+- **Credentials + CORS (CSRF):** `credentials: "include"` cross-origin needs *both* `Access-Control-Allow-Credentials: true` and explicit `Access-Control-Allow-Origin` (not `*`); default `same-origin` sends cookies only same-origin; `omit` never sends — MDN `RequestInit` credentials (verified 2026-08-24).
 
 ---
 
@@ -368,6 +388,15 @@ if (supportsStream) {
 ```
 
 Greasemonkey 4+ offers `responseType: 'ms-stream'` as its own streaming variant — verify per Greasemonkey docs; not portable.
+
+Native `fetch` streaming equivalent is `Response.body` → `ReadableStream` (`response.body.getReader()` or `getReader({mode:"byob"})` for zero-copy) — MDN `Response: body` (verified 2026-08-24).
+
+### keepalive & sendBeacon for Unload (verified 2026-08-24)
+
+When sending analytics or pings during page unload, `GM_xmlhttpRequest` is not tied to the page lifecycle. Page `fetch` equivalents are:
+
+- **keepalive:** `fetch(url, { keepalive: true })` persists past page unload (e.g., analytics on `visibilitychange`) but payload is limited to **64 KiB** (MDN `RequestInit: keepalive`: "The body size for keepalive requests is limited to 64 kibibytes", defaults `false`; verified 2026-08-24).
+- **sendBeacon alternative:** `navigator.sendBeacon(url, data)` also caps at ~64 KiB, sends asynchronously without blocking unload, and is listed alongside `fetch` under CSP `connect-src` (MDN `Navigator: sendBeacon`). Prefer `fetch` + `keepalive` when you need custom methods/headers or access to the response Promise; fall back to `sendBeacon` for fire-and-forget before unload.
 
 ---
 
