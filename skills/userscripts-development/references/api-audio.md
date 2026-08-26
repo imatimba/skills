@@ -1,6 +1,6 @@
 # Audio API Reference
 
-Tab audio control — **Tampermonkey-only experimental API** *(verified 2026-08-25 — tampermonkey.net/changelog.php v5.4.0 Experimental, tampermonkey.net/documentation.php?q=GM_audio)*. Violentmonkey, Greasemonkey, and the Safari Userscripts app do not implement any `GM_audio`/`GM.audio` surface *(verified 2026-08-25 — violentmonkey.github.io/api/gm/ absence; wiki.greasespot.net/Greasemonkey_Manual:API absence)*. For portable scripts, use the fallback in [Portable Alternatives](#portable-alternatives).
+Tab audio control — **Tampermonkey-only experimental API** *(verified 2026-08-25 — tampermonkey.net/changelog.php v5.4.0 Experimental, tampermonkey.net/documentation.php?q=GM_audio)*. Violentmonkey, Greasemonkey, and the Safari Userscripts app do not implement any `GM_audio`/`GM.audio` surface *(verified 2026-08-25 — violentmonkey.github.io/api/gm/ absence; wiki.greasespot.net/Greasemonkey_Manual:API absence)*. For portable scripts, use the fallback in [Portable Alternatives](#portable-alternatives-all-managers).
 
 > **Portability note:** `GM_audio` is TM-only — not part of the portable subset. The portable fallback below (element-level muting via `HTMLMediaElement.muted` / `volume`) works in every manager. If tab-level mute is central to your script (not optional enhancement), a native MV3 browser extension is the better tool. Userscripts are for portable page augmentation.
 

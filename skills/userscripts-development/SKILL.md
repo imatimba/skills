@@ -72,7 +72,7 @@ Before writing code in an area, READ its reference first — no exceptions:
 | Make cross-origin requests | [http-requests.md](references/http-requests.md) + common-pitfalls.md Pitfall 2 |
 | Insert data into the DOM | [api-dom-ui.md](references/api-dom-ui.md) + security-checklist.md §3 |
 | Watch mutations/elements (Observer) | [patterns.md](references/patterns.md) (Mutation Observation) |
-| Handle SPA navigation | patterns.md (SPA Navigation) + api-tabs.md (`onurlchange`) |
+| Handle SPA navigation | [patterns.md](references/patterns.md) (SPA Navigation) + [api-tabs.md](references/api-tabs.md) (`onurlchange`) |
 | Call ANY `GM.*`/`GM_*` API | its api-*.md / http-requests.md page — never write the call from memory |
 | Debug a failing script | debugging.md + full common-pitfalls.md scan |
 

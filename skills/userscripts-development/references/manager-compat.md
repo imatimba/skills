@@ -6,7 +6,7 @@ A tier-2 manager is one whose divergence from the portable baseline (TM/VM/GM4+/
 
 ## Tier-1 Portable Baseline — Cross-Manager Divergences
 
-Authoritative matrix for TM / VM / GM4+ / Safari lives in [managers.md](managers.md) (§2 API Support Matrix, §3 Header Differences, §4 Sandbox/Injection). [common-pitfalls.md Pitfall 12](common-pitfalls.md#pitfall-12-cross-browser--cross-manager-differences) keeps only symptom → diagnostic → pointer.
+Authoritative matrix for TM / VM / GM4+ / Safari lives in [managers.md](managers.md) (§2 API Support Matrix, §3 Header Differences, §4 Sandbox/Injection). [common-pitfalls.md Pitfall 12](common-pitfalls.md#pitfall-12-cross-browser-cross-manager-differences) keeps only symptom → diagnostic → pointer.
 
 This section previously duplicated that matrix (including `cloneInto`/`exportFunction` Xray bridges, `GM_webRequest`/`@webRequest` manifest framing, containers, storage primitives/race, and `GM_log`). For portability decisions, consult [managers.md](managers.md) directly — no manager-specific code change is needed beyond what that matrix already prescribes (guard `unsafeWindow`, feature-detect `GM.*` vs `GM_*`, `JSON.stringify` for GM4+ storage, `console.log` over `GM_log`, and avoid `GM_webRequest` portably).
 
