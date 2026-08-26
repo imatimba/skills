@@ -4,6 +4,33 @@ No manager vendor publishes an official testing guide. The pattern below is comm
 
 Managers run scripts inside isolated worlds with GM APIs — unit tests should bypass the manager and exercise your logic as plain JS. Keep side-effects behind small seams you can mock.
 
+## Headless End-to-End: Manager Extension in Browser Automation
+
+Requires a real browser with the manager extension installed — not happy-dom (verified 2026-08-25 — playwright.dev/docs/chrome-extensions, pptr.dev/guides/chrome-extensions).
+
+- Playwright (`playwright.dev/docs/chrome-extensions`) (verified 2026-08-25 — playwright.dev/docs/chrome-extensions): extensions only in Chromium with a persistent context — `chromium.launchPersistentContext(userDataDir, { channel: 'chromium', args: ['--disable-extensions-except=<path>', '--load-extension=<path>'] })`. `channel: 'chromium'` allows headless; otherwise use `headless: false` safe default. Get MV3 service worker via `context.serviceWorkers()` or `context.waitForEvent('serviceworker')`.
+- Puppeteer (`pptr.dev/guides/chrome-extensions`) (verified 2026-08-25 — pptr.dev/guides/chrome-extensions): `puppeteer.launch({ enableExtensions: [path] })` or runtime `browser.installExtension(path)` with `enableExtensions: true`.
+- Headless/CI (as of Chrome 112+, verified 2026-08-25 — developer.chrome.com/docs/extensions/how-to/test/end-to-end-testing): use `--headless=new` (`developer.chrome.com/docs/extensions/how-to/test/end-to-end-testing`) — old headless does not support extensions. On Linux CI use `xvfb-run` when headed is required.
+- MV3 service-worker suspension (verified 2026-08-25 — playwright.dev/docs/chrome-extensions, developer.chrome.com/docs/extensions/how-to/test/end-to-end-testing): Chrome suspends MV3 workers after ~30s idle; Playwright keeps the same `Worker` object alive — `await sw.evaluate(...)` resumes automatically, in-flight evaluates throw "Service worker restarted".
+
+## Non-headless / Real-Profile Testing — Manual Testing in Your Actual Browser Profile
+
+What it is: a **visible browser** using your actual persistent profile — `user-data-dir` (Chrome/Edge) or Firefox profile — retaining cookies, storage, permissions, and installed extensions/manager state. Unlike headless/synthetic profiles that start clean, real-profile surfaces stateful flakes.
+
+Why it matters for **portable userscripts**: CSP headers, storage (`GM_getValue`/`GM_setValue` vs `GM.*` promises), `@connect` prompts, and manager UI behave differently with real state; headless may hide flakes. Verify degradation on TM/VM/GM4+/Safari with real profile.
+
+How to:
+
+Agent bridge (AI-driven): to let an AI agent drive that visible real-profile browser (instead of manual clicks), you need a harness/MCP bridge — an extension or MCP server that exposes your browser's tabs to the agent via CDP/MCP (Chrome DevTools Protocol / Model Context Protocol). Launch Chrome with `--remote-debugging-port=9222` or install a harness extension; any bridge that keeps your `user-data-dir`/profile intact satisfies the real-profile requirement. Examples (as of 2026, not exhaustive — verify against each harness's docs):
+- <https://github.com/ChromeDevTools/chrome-devtools-mcp> — official Chrome team
+- <https://github.com/hangwin/mcp-chrome> — community Chrome MCP
+- <https://github.com/fitchmultz/pi-agent-browser-native> — Pi-ecosystem native bridge
+- <https://github.com/narumiruna/pi-extensions/tree/main/packages/pi-chrome-devtools> — Pi Chrome DevTools variant
+- <https://github.com/ryenwang/pire-browser> — Pi browser harness for Firefox, one of the few that works with Firefox
+Any harness that launches Chrome with your `user-data-dir` and exposes the debugging/MCP channel works — the mechanism, not the name, is the portability requirement.
+
+When to prefer which: **headless** for CI/automation (fast, reproducible); **real profile** for manual verification of CSP/storage/permission and logged in websites. If real profile diverges, see [debugging.md](debugging.md) for troubleshooting.
+
 ## Unit Setup
 
 Use Vitest with the `happy-dom` environment — both officially support the integration (vitest.dev/guide/environment and happy-dom wiki "Setup as Test Environment") (verified 2026-08-25 — vitest.dev/guide/environment, github.com/capricorn86/happy-dom/wiki/Setup-as-Test-Environment).
@@ -50,38 +77,6 @@ Do not unit-test manager-owned behaviour — it requires a real manager:
 - Sandbox isolation (`@grant none` disables sandbox; otherwise `unsafeWindow` is a wrapper; Firefox `wrappedJSObject`/`cloneInto`/`exportFunction`) — manager-owned, smoke-test only — see [managers.md](managers.md) §4 for authoritative matrix (verified 2026-08-25 — violentmonkey.github.io/api/gm, violentmonkey.github.io/posts/inject-into-context/)
 
 For those, do a manual smoke run in the target manager (Violentmonkey as worked example: load the built `.user.js` via dashboard or `http://localhost:8080/script.user.js` with Track external edits) (verified 2026-08-25 — violentmonkey.github.io, community practice; no vendor testing guide found).
-
-## End-to-End: Manager Extension in Browser Automation
-
-Requires a real browser with the manager extension installed — not happy-dom (verified 2026-08-25 — playwright.dev/docs/chrome-extensions, pptr.dev/guides/chrome-extensions).
-
-- Playwright (`playwright.dev/docs/chrome-extensions`) (verified 2026-08-25 — playwright.dev/docs/chrome-extensions): extensions only in Chromium with a persistent context — `chromium.launchPersistentContext(userDataDir, { channel: 'chromium', args: ['--disable-extensions-except=<path>', '--load-extension=<path>'] })`. `channel: 'chromium'` allows headless; otherwise use `headless: false` safe default. Get MV3 service worker via `context.serviceWorkers()` or `context.waitForEvent('serviceworker')`.
-- Puppeteer (`pptr.dev/guides/chrome-extensions`) (verified 2026-08-25 — pptr.dev/guides/chrome-extensions): `puppeteer.launch({ enableExtensions: [path] })` or runtime `browser.installExtension(path)` with `enableExtensions: true`.
-- Headless/CI (as of Chrome 112+, verified 2026-08-25 — developer.chrome.com/docs/extensions/how-to/test/end-to-end-testing): use `--headless=new` (`developer.chrome.com/docs/extensions/how-to/test/end-to-end-testing`) — old headless does not support extensions. On Linux CI use `xvfb-run` when headed is required.
-- MV3 service-worker suspension (verified 2026-08-25 — playwright.dev/docs/chrome-extensions, developer.chrome.com/docs/extensions/how-to/test/end-to-end-testing): Chrome suspends MV3 workers after ~30s idle; Playwright keeps the same `Worker` object alive — `await sw.evaluate(...)` resumes automatically, in-flight evaluates throw "Service worker restarted".
-
-## Non-headless / Real-Profile Testing — Manual Testing in Your Actual Browser Profile
-
-What it is: a **visible browser** using your actual persistent profile — `user-data-dir` (Chrome/Edge) or Firefox profile — retaining cookies, storage, permissions, and installed extensions/manager state. Unlike headless/synthetic profiles that start clean, real-profile surfaces stateful flakes.
-
-Why it matters for **portable userscripts**: CSP headers, storage (`GM_getValue`/`GM_setValue` vs `GM.*` promises), `@connect` prompts, and manager UI behave differently with real state; headless may hide flakes. Verify degradation on TM/VM/GM4+/Safari with real profile.
-
-How to launch (keep visible, not `--headless`):
-- **Chrome/Edge:** `chrome --user-data-dir=/path/to/profile` (or reuse `Default`) — extension must be enabled in that profile.
-- **Firefox:** `firefox -P profileName` or `firefox -profile /path` — same requirement (TM/VM need extension enabled or scripts won't run).
-- Keep manager enabled; load extensions normally.
-
-Agent bridge (AI-driven): to let an AI agent drive that visible real-profile browser (instead of manual clicks), you need a harness/MCP bridge — an extension or MCP server that exposes your browser's tabs to the agent via CDP/MCP (Chrome DevTools Protocol / Model Context Protocol). Launch Chrome with `--remote-debugging-port=9222` or install a harness extension; any bridge that keeps your `user-data-dir`/profile intact satisfies the real-profile requirement. Examples (as of 2026, not exhaustive — verify against each harness's docs):
-- <https://github.com/ChromeDevTools/chrome-devtools-mcp> — official Chrome team
-- <https://github.com/hangwin/mcp-chrome> — community Chrome MCP
-- <https://github.com/fitchmultz/pi-agent-browser-native> — Pi-ecosystem native bridge
-- <https://github.com/narumiruna/pi-extensions/tree/main/packages/pi-chrome-devtools> — Pi Chrome DevTools variant
-- <https://github.com/ryenwang/pire-browser> — Pi browser harness for Firefox, one of the few that works with Firefox
-Any harness that launches Chrome with your `user-data-dir` and exposes the debugging/MCP channel works — the mechanism, not the name, is the portability requirement.
-
-Isolation: use a **dedicated test profile copy** if you don't want to pollute daily data. `--headless=new` (Chrome 112+) supports extensions; old `--headless` does not — prefer `new` for CI, visible profile for manual. On Linux CI when headed is required, use `xvfb-run`.
-
-When to prefer which: **headless** for CI/automation (fast, reproducible); **real profile** for manual verification of CSP/storage/permission flows. If real profile diverges, see [debugging.md](debugging.md) for troubleshooting.
 
 ## See Also
 
