@@ -4,7 +4,7 @@ description: "Trigger: find/search/install a pi package, pi extension, or pi plu
 license: MIT
 metadata:
   author: imatimba
-  version: "0.12.0"
+  version: "0.12.1"
 ---
 
 ## Activation Contract
@@ -56,5 +56,8 @@ Then follow with the system-access security note offering a pre-install repo sca
 
 ## References
 
-- `references/npm-search.mjs` — parallel npm fan-out (terms × both keywords at size=100 + safety sweeps + automatic pi.dev catalog cross-check), relevance tiers (`[EXACT]` name-equality modulo `pi-` prefix / substring / `[KW]` / `[DESC]`), star enrichment (cache → gh → curl), Coverage line, single-package mode for args containing `/`. Requires node + curl; gh optional.
-- `references/design-notes.md` — measured facts, incident registry, and decision rationale behind every rule above.
+- `references/npm-search.mjs` — parallel npm fan-out (strict terms × `pi-package`/`pi-extension` + loose `keywords:pi` terms/sweep at size=100 + automatic pi.dev catalog cross-check), relevance tiers (`[EXACT]` name-equality modulo `pi-` prefix / substring / `[KW]` / `[DESC]`), star enrichment (cache → gh → curl), Coverage line, single-package mode for args containing `/`. Requires node + curl; gh optional.
+- `references/npm-search-lib.mjs` — pure decision helpers (post-filter, normalization, catalog extraction, tiers, ghSlug), unit-tested and importable.
+- `tests/npm-search.test.mjs` — deterministic unit suite (no network): `node --test tests/npm-search.test.mjs`.
+- `tests/integration.canary.mjs` — live API canary (self-skips unless `RUN_LIVE=1`): `RUN_LIVE=1 node --test tests/integration.canary.mjs`.
+- `references/design-notes.md` — measured facts, incident registry, decision rationale, and test mapping behind every rule above.

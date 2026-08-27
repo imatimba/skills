@@ -6,6 +6,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { readFileSync, writeFileSync } from "node:fs";
+import { normRepo, isLoosePiCandidate, normName, normCatalogTerm, extractCatalogCandidates, exactNameMatch, keywordMatch, descMatch, ghSlug } from "./npm-search-lib.mjs";
 const run = promisify(execFile);
 
 const STRICT_KWS = ["pi-package", "pi-extension"];
@@ -22,34 +23,6 @@ if (args.some(a => a.startsWith("-"))) {
 }
 const pkgs = [...new Set(args.filter(a => a.includes("/")))];
 const terms = [...new Set(args.filter(a => !a.includes("/")).map(t => t.toLowerCase()))];
-
-// Canonicalize any repo-ish string to an https URL (git+remotes, ssh forms, .git suffixes)
-const normRepo = url => {
-  if (!url) return "";
-  const u = String(url).replace(/^git\+/, "").replace(/^git@github\.com:/i, "https://github.com/").replace(/\.git$/i, "");
-  return /^https?:\/\//i.test(u) ? u.replace(/^http:\/\//i, "https://") : u;
-};
-
-// Loose-hit post-filter: keep only if plausibly a pi package (drops @stdlib math-pi noise).
-// Hitting a strict query already admits unconditionally — this filter applies only to loose hits
-// that have no strict provenance (first-writer-wins dedupe keeps that invariant via pool.has check).
-const isLoosePiCandidate = pkg => {
-  const name = (pkg.name ?? "").toLowerCase();
-  if (name.startsWith("pi-")) return true;
-  if (/^@[^\/]+\/pi-/i.test(name)) return true;
-  const kws = (pkg.keywords ?? []).map(k => String(k).toLowerCase());
-  const desc = (pkg.description ?? "").toLowerCase();
-  const descMatch = /pi[- ]coding[- ]agent|pi[- ]extension|for pi\b/.test(desc);
-  if (kws.includes("pi-package") || kws.includes("pi-extension")) return true;
-  if (descMatch) return true;
-  // Bare "pi" keyword: keep for pi ecosystem, but drop @stdlib math-pi noise
-  // (verified 2026-08-27: @stdlib/* math-pi packages carry keyword "pi" but are not pi coding-agent extensions).
-  if (kws.includes("pi")) {
-    if (name.startsWith("@stdlib/")) return false;
-    return true;
-  }
-  return false;
-};
 
 const queries = [];
 // Strict scoped queries (term × 2)
@@ -137,39 +110,16 @@ await runLimited(queries, async q => {
 const nameHit = r => terms.some(t => r.name.toLowerCase().includes(t));
 // Relevance can live outside the name: authors put domain terms in keywords/description
 // (e.g. pire-browser is THE firefox extension but its name says nothing about firefox).
-const kwHit = r => (r.kw ?? []).some(k => terms.includes(k));
-const descHit = r => terms.some(t => (r.dfull ?? "").includes(t));
+const kwHit = r => keywordMatch(r.kw, terms);
+const descHit = r => descMatch(r.dfull, terms);
 // exact intent match: identity, or modulo the conventional "pi-" prefix
-const norm = s => s.replace(/^pi-/, "");
-const exactHit = r => terms.some(t => r.name.toLowerCase() === t || norm(r.name.toLowerCase()) === norm(t));
+const exactHit = r => exactNameMatch(r.name, terms);
 
 // Catalog cross-check: different matching engine than npm scoring; runs even when
 // the npm pool looks healthy — score pathologies and index lag hide from npm only.
 // Extraction now captures both npm: and github installs; second query tries norm(term)
 // (strip pi- prefix and -provider suffix) when first returns nothing new.
 const catNew = [];
-const normCatalogTerm = s => s.replace(/^pi-/, "").replace(/-provider$/, "");
-const extractCatalogCandidates = html => {
-  const out = [];
-  const re = /pi install (?:npm:([A-Za-z0-9@/._-]+)|((?:git:)?https?:\/\/github\.com\/[^\s"<>]+))/g;
-  for (const m of html.matchAll(re)) {
-    if (m[1]) out.push(m[1]);
-    else if (m[2]) {
-      let url = m[2];
-      if (url.startsWith("git:")) url = url.slice(4);
-      if (!/^https?:\/\//i.test(url)) url = "https://" + url.replace(/^\/\//, "");
-      // keep git URL as git-only candidate (never probed against registry)
-      out.push(url);
-      // also derive repo base as npm guess when plausible (e.g. pi-foo)
-      const slug = /github\.com\/[^\/]+\/([A-Za-z0-9_.-]+)/i.exec(url);
-      if (slug) {
-        let base = slug[1].replace(/\.git$/i, "");
-        if (/^pi-/i.test(base) && !out.includes(base)) out.push(base);
-      }
-    }
-  }
-  return [...new Set(out)];
-};
 const fetchCatalogHtml = async term => {
   // pi.dev always returns 200 HTML; use -sf for simplicity but classify failures as gap
   const { stdout } = await run("curl", ["-sf", "--max-time", "20", `https://pi.dev/packages?name=${encodeURIComponent(term)}`], { maxBuffer: 8 * 1024 * 1024 });
@@ -307,10 +257,6 @@ try {
   starCache = JSON.parse(readFileSync(STAR_CACHE, "utf8"));
   for (const k of Object.keys(starCache)) if (Date.now() - starCache[k].t > DAY) delete starCache[k];
 } catch { /* first run or corrupt cache */ }
-const ghSlug = url => {
-  const m = /github\.com[/:]([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?$/i.exec(url || "");
-  return m ? `${m[1]}/${m[2]}` : null;
-};
 let ghRateLimited = false; // curl 403 on the unauth fallback ⇒ advise gh install/auth
 async function fetchStars(slug) {
   const c = starCache[slug];

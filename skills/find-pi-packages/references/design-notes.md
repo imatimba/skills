@@ -50,3 +50,22 @@ Division of labor: the script (`references/npm-search.mjs`) owns **mechanics** (
 
 Rejected on purpose — do not resurrect without new evidence:
 disk caching of search pools (stale-data risk outweighs latency), multi-page catalog crawling (complexity not worth it; npm-side tiers mitigate), scripting the GitHub gate (gh auth/topology varies more than npm; candidates from there need manual vetting anyway).
+
+## Tests (v0.12.1)
+
+The decision logic lives in `references/npm-search-lib.mjs` (pure, no I/O) so it is unit-testable; `references/npm-search.mjs` imports it and stays the only network-touching surface.
+
+```bash
+# Unit suite — deterministic, no network (24 tests): post-filter, name/catalog norm,
+# exact/[KW]/[DESC] tiers, catalog extraction, ghSlug, repo norm.
+node --test tests/npm-search.test.mjs
+# same via auto-discovery (unit files only; canary not matched by default patterns)
+node --test
+
+# Live integration canary — hits real npm/pi.dev/GitHub APIs; may flake under rate limits.
+# Asserts: pi-crof-provider surfaces with real downloads (incident #11), no phantom
+# FAILED coverage gaps, no @stdlib noise, [EXACT] exact-name mode, output bound, E8 pire-browser.
+RUN_LIVE=1 node --test tests/integration.canary.mjs
+```
+
+Test-to-incident mapping: post-filter → #11, exact tiers → #3, [KW]/[DESC] → #8, probe/canary coverage → #9, output bound → #7, name-vs-keyword relevance → #8/#11. The canary doubles as the §8 CI smoke test against live registry APIs.
