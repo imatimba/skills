@@ -4,7 +4,7 @@ description: "Trigger: userscript, Violentmonkey, Tampermonkey, Greasemonkey, us
 license: MIT
 metadata:
   author: imatimba
-  version: 2.4.0
+  version: 2.4.1
 ---
 
 # Userscript Development
@@ -76,7 +76,7 @@ Before writing code in an area, READ its reference first — no exceptions:
 | Handle SPA navigation | [patterns.md](references/patterns.md) (SPA Navigation) + [api-tabs.md](references/api-tabs.md) (`onurlchange`) |
 | Call ANY `GM.*`/`GM_*` API | its api-*.md / http-requests.md page — never write the call from memory |
 | Debug a failing script | debugging.md + testing.md + full common-pitfalls.md scan |
-| Live-test in a real profile (agent-driven) | [testing.md](references/testing.md) (Live-Profile Interference) |
+| Live-test in a real profile (agent-driven) | [testing.md](references/testing.md) (Live-Profile Interference + Non-headless / Real-Profile Testing) |
 
 ## Execution Steps
 
@@ -94,11 +94,10 @@ Digest-first: start from Core Digest + Touch → Reference Routing. A full refer
 Every delivered userscript includes:
 
 1. 1–2 sentence explanation.
-2. Complete script with ALL headers in one code block.
-3. Install steps naming the TARGET manager; if the user never specified one, ask which manager they use instead of assuming.
-4. Safe customisation points (selectors, timeouts, domains).
-5. Every `@grant` with one-line justification.
-6. Explicit per-manager notes for anything not portable.
+2. Install steps naming the TARGET manager; if the user never specified one, ask which manager they use instead of assuming.
+3. Safe customisation points (selectors, timeouts, domains).
+4. Every `@grant` with one-line justification.
+5. Explicit per-manager notes for anything not portable.
 
 ## Pre-Delivery Gates
 

@@ -443,5 +443,3 @@ When a script doesn't work — manager-first verification. Check each item again
 ## Scope Closing
 
 Scope: Violentmonkey-first, portable across TM/VM/GM4+/Safari — verify against `managers.md` before claiming support. For manager-neutral typing, see `typescript.md`; for compatibility matrix, see `browser-compatibility.md`. Prefer capability checks (`typeof GM !== 'undefined' && GM.xmlHttpRequest`) over `GM_info.scriptHandler` branching.
-
-*Pruned 2026-08-26 — removed generic pits 1 (@match broad), 7 (observer leaks), 8 (DOM aggressive), 13 (hardcoded selectors), 14 (testing matrix), 15 (TM 5.4.1 permission) — no portability decision; see `header-reference.md` / `managers.md` §6 / MDN. Kept pits 2,3,4,5,6,9,10,11,12 and 9-row checklist (TM/VM/GM4+/Safari divergences only).*
