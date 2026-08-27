@@ -11,6 +11,7 @@ Division of labor: the script (`references/npm-search.mjs`) owns **mechanics** (
 | Fact | Value | Rule it forces |
 | --- | --- | --- |
 | Dual-keyword gap | ~34% of npm packages carry only ONE of `pi-package`/`pi-extension`; ~44% of GitHub repos carry one topic | Search both keywords, separate queries |
+| Bare-`pi` population | ~35% of `keywords:pi` hits carry NEITHER `pi-package` nor `pi-extension` (live 2026-08-27: 100-row `keywords:pi` sample → 65 dual-tagged, ~35 bare-`pi`-only incl. `@earendil-works/pi-protocol`, `@ai-sdk/harness-pi`; registry has no keyword OR; bare `pi` is the natural author choice per npm docs) | Loose `keywords:pi` + client-side post-filter; strict hits bypass filter |
 | Registry keyword AND | `keywords:a,b` returns only dual-tagged packages (verified 50/50); no OR syntax exists | Never fold keywords into one query |
 | `searchScore` semantics | Text relevance, NOT popularity: 690/mo package outscored the 43K/mo original and vanished past pagination | Downloads-ranked union; never re-sort by score |
 | Response sizes | size=100 search: 200–400KB; bare packument: 200KB+ (measured 200,225 B) | Script-bounded table (MAX_LINES=70 ≈ 14KB worst case); single-package mode |
@@ -31,6 +32,7 @@ Division of labor: the script (`references/npm-search.mjs`) owns **mechanics** (
 | 8 | THE Firefox control extension missed — name says neither "firefox" nor any derived term | All tiers were name-based; relevance lived in keywords/description | `[KW]`/`[DESC]` tiers from stored keywords/full description + tags |
 | 9 | Transient failures returned `pool: 0`, looking like an empty ecosystem | Network flakiness indistinguishable from true emptiness | Coverage header with ok/x + FAILED list; hard rule forces gap reporting |
 | 10 | Hand-written merges drifted between turns | Model memory is lossy for 300+ row unions | Merges moved into the script; model reads final table only |
+| 11 | `pi-crof-provider` (4,819/mo, ★3) missed for `crof|crofai` fan-out — top CrofAI provider invisible | Keyword gate assumed authors use `pi-package`/`pi-extension`; package uses bare `pi` (`keywords:["pi","extension",…]`). Rescue layers name-bound (no `pi-${term}` synthesis, catalog regex missed `pi install https://github.com/...`) and probe 404-classification bug (`String(e).includes("exit code 22")` never matches Node `execFile` errors — `e.code` holds the exit code; every 404 probe reported phantom `FAIL`) masked probe health | Loose `keywords:pi` per term + sweep with client-side post-filter (`pi-` prefix / `@scope/pi-…` / `pi` keywords / `pi coding agent|pi extension|for pi\b`); probe status-classification via `curl -sS -w "%{http_code}"` (404 silent, 5xx/timeout one retry → FAILED), real downloads via `api.npmjs.org`; probe synthesis `pi-${term}`, `pi-${term}-provider`, `pi-${term}ai`; catalog regex `pi install (?:npm:…|https://github.com/…)` + `?name=norm(term)` retry (`pi-`/`-provider` strip) |
 
 ## Decisions & rejected ideas
 

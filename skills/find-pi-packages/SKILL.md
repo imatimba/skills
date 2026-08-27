@@ -4,7 +4,7 @@ description: "Trigger: find/search/install a pi package, pi extension, or pi plu
 license: MIT
 metadata:
   author: imatimba
-  version: "0.11.0"
+  version: "0.12.0"
 ---
 
 ## Activation Contract
@@ -15,7 +15,7 @@ Path convention: `<skill-dir>` below is the directory containing this SKILL.md, 
 
 ## Hard Rules
 
-- Search BOTH keywords on every lookup as separate queries merged afterward: npm `pi-package` + `pi-extension`, GitHub `topic:pi-package` + `topic:pi-extension`. Never fold them into one query (`keywords:a,b` ANDs them and silently returns only dual-tagged packages).
+- Search BOTH keywords on every lookup as separate queries merged afterward: npm `pi-package` + `pi-extension` (plus a loose `keywords:pi` query per term and per sweep — authors use bare `pi`; post-filtered client-side to drop non-pi noise) + GitHub `topic:pi-package` + `topic:pi-extension`. Never fold keywords into one query (`keywords:a,b` ANDs them and silently returns only dual-tagged packages).
 - Derive terms from the user's stated need first; expand to 2-4 synonym forms (plural/singular/hyphenated tokenize differently: `subagent`/`subagents`/`sub-agent`) plus a hyphenated compound of the core phrase (`keep cache warm` → `cache-warm`). Keyword-only sweeps bury niche matches.
 - Relevance may live in keywords/description rather than the name: never conclude absence from an unpicked top-30; present the script's `[KW]`/`[DESC]` rows (THE Firefox control package may contain neither word in its name).
 - Never order results by npm `searchScore` — it measures text relevance, not popularity (690/mo can outscore 43K/mo). Vet the script table in its given downloads-ranked order; never re-sort.
