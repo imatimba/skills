@@ -362,10 +362,14 @@ else if (slugs.length && missing > 0)
 const failBit = failed.length ? `, FAILED: ${failed.join(", ")} (each is a coverage gap — report it, never treat the partial pool as complete)` : "";
 console.log(`Coverage: ${queries.length - failed.length}/${queries.length} npm queries ok${failBit} | catalog cross-check: ${catNew.length} new name(s) merged | probes found: ${probeFound} | ${starsBit}.`);
 console.log(`Pool: ${pool.size} unique pkgs; showing top ${TOP} by downloads${terms.length ? " + exact/substring name-matches" : ""}; max ${MAX_LINES} rows. Install npm-first: every listed row exists on npm (git-only packages cannot enter this pool).`);
-console.log("downloads/mo | name | version | stars | query-hits | repo | description");
+console.log("↓ downloads/mo | name | version | ★ stars | src | query-hits | repo | description");
 for (const r of picks) {
   const slug = ghSlug(r.repo);
   const tag = exactHit(r) ? " [EXACT]" : kwHit(r) ? " [KW]" : descHit(r) ? " [DESC]" : "";
-  console.log(`${r.dl < 0 ? "?" : r.dl} | ${r.name}${tag} | ${r.version} | ${slug && starMap.has(slug) ? starMap.get(slug) : "-"} | ${r.hits.length}:${[...new Set(r.hits)].join(",")} | ${r.repo || "-"} | ${r.desc}`);
+      const dl = r.dl < 0 ? "?" : r.dl.toLocaleString("en-US");
+      const stars = slug && starMap.has(slug) ? String(starMap.get(slug)) : "-";
+      const src = slug ? "gh" : "-";
+      console.log(`${dl} | ${r.name}${tag} | ${r.version} | ${stars} | ${src} | ${r.hits.length}:${[...new Set(r.hits)].join(",")} | ${r.repo || "-"} | ${r.desc}`);
 }
+console.log("Legend: ↓ = sorted by monthly downloads desc (never searchScore) · ★ = GitHub stars · src gh = GitHub-hosted, - = npm-only/unknown · [EXACT]/[KW]/[DESC] = exact-name/keyword/description match");
 
