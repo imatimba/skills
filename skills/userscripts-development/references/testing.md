@@ -31,6 +31,20 @@ Any harness that launches Chrome with your `user-data-dir` and exposes the debug
 
 When to prefer which: **headless** for CI/automation (fast, reproducible); **real profile** for manual verification of CSP/storage/permission and logged in websites. If real profile diverges, see [debugging.md](debugging.md) for troubleshooting.
 
+## Live-Profile Interference (agent-driven testing in the real profile)
+
+When an agent drives the real-profile browser (snapshot/eval/click harness), the tested page may already host an **active userscript instance** — a stale installed version or an unrelated script. With `@grant none` the script runs in the page world: the same world the automation harness evals into. Every observer callback, auto-click, or AJAX-triggered DOM mutation races the harness's measurements, silently polluting any snapshot/eval taken before detection (e.g. element counts drifting between reads, nodes vanishing mid-scan).
+
+**Version-collision rule:** never live-test a new version while an older installed version still matches the same `@match`. Let the user install the new version and **reload the tab** first — a running page keeps the old instance (its observers, its queued callbacks) until re-injection at page load; saving the file or updating the manager entry is not enough.
+
+**Dev-update loop (Violentmonkey worked example):** install from a `file://` URL with **Track external edits** enabled — VM re-reads the file when the editor saves (verified 2026-08-25 — violentmonkey.github.io; community practice). The page still needs a reload to re-inject the updated source.
+
+**Pre-flight pollution probe** — run BEFORE the first snapshot/eval batch on any page that may have matching scripts installed:
+
+1. Version probe: eval `typeof GM_info !== "undefined" && GM_info.script` in the page world. `GM_info` stays available under `@grant none` in TM and VM ≥2.32 (see [managers.md](managers.md) §2) — it yields the active script's name and version. Assert exactly one active instance whose version equals the `@version` in the file being tested; any mismatch means a stale install — fix it (install + reload) before measuring.
+2. Marker probe: check script-identifying DOM side-effects — `data-*` attributes the script sets, injected `<style>`/`<link>` tags, `window.__SCRIPT_*` globals. Use these when the script is third-party or predates your edit.
+3. If a foreign or stale instance is detected, all prior and pending measurements for that page are polluted — discard them; they are not evidence.
+
 ## Unit Setup
 
 Use Vitest with the `happy-dom` environment — both officially support the integration (vitest.dev/guide/environment and happy-dom wiki "Setup as Test Environment") (verified 2026-08-25 — vitest.dev/guide/environment, github.com/capricorn86/happy-dom/wiki/Setup-as-Test-Environment).
