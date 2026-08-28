@@ -17,7 +17,7 @@ export const normRepo = url => {
 export const isLoosePiCandidate = pkg => {
   const name = (pkg.name ?? "").toLowerCase();
   if (name.startsWith("pi-")) return true;
-  if (/^@[^\/]+\/pi-/i.test(name)) return true;
+  if (/^@[^/]+\/pi-/i.test(name)) return true;
   const kws = (pkg.keywords ?? []).map(k => String(k).toLowerCase());
   const desc = (pkg.description ?? "").toLowerCase();
   const descMatch = /pi[- ]coding[- ]agent|pi[- ]extension|for pi\b/.test(desc);
@@ -72,7 +72,7 @@ export const extractCatalogCandidates = html => {
       // keep git URL as git-only candidate (never probed against registry)
       out.push(url);
       // also derive repo base as npm guess when plausible (e.g. pi-foo)
-      const slug = /github\.com\/[^\/]+\/([A-Za-z0-9_.-]+)/i.exec(url);
+      const slug = /github\.com\/[^/]+\/([A-Za-z0-9_.-]+)/i.exec(url);
       if (slug) {
         let base = slug[1].replace(/\.git$/i, "");
         if (/^pi-/i.test(base) && !out.includes(base)) out.push(base);

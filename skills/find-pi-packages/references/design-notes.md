@@ -64,6 +64,9 @@ node --test tests/npm-search.test.mjs
 # same via auto-discovery (unit files only; canary not matched by default patterns)
 node --test
 
+# Lint gate (CI): zero-config oxlint, warnings fail the build.
+npx oxlint --deny-warnings
+
 # Live integration canary. Hits real npm/pi.dev/GitHub APIs; may flake under rate limits.
 # Asserts: pi-crof-provider surfaces with real downloads (incident #11), GH-enriched
 # repo link + gh src (incident #12), no phantom FAILED coverage gaps, no @stdlib noise,

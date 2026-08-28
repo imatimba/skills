@@ -6,12 +6,11 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { readFileSync, writeFileSync } from "node:fs";
-import { normRepo, isLoosePiCandidate, normName, normCatalogTerm, extractCatalogCandidates, exactNameMatch, keywordMatch, descMatch, ghSlug, ghNameVariants } from "./npm-search-lib.mjs";
+import { normRepo, isLoosePiCandidate, normCatalogTerm, extractCatalogCandidates, exactNameMatch, keywordMatch, descMatch, ghSlug, ghNameVariants } from "./npm-search-lib.mjs";
 const run = promisify(execFile);
 
 const STRICT_KWS = ["pi-package", "pi-extension"];
 const LOOSE_KW = "pi";
-const KWS = STRICT_KWS; // legacy alias — keep for external refs
 const SIZE = 100;
 const TOP = 30;        // always show the TOP heaviest packages
 const MAX_LINES = 70;  // hard output bound
@@ -44,7 +43,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // Bounded concurrency for npm search (registry rate-limits bursts of 15+ parallel searches).
 async function runLimited(items, fn, limit = 3) {
   let idx = 0;
-  const out = new Array(items.length);
+  const out = Array.from({ length: items.length });
   async function worker() {
     while (true) {
       const i = idx++;
@@ -130,7 +129,7 @@ if (terms.length) await Promise.all([...new Set(terms)].map(async t => {
     const html = await fetchCatalogHtml(t);
     const cands = extractCatalogCandidates(html);
     let added = 0;
-    for (const m of [...new Set(cands)]) {
+    for (const m of new Set(cands)) {
       // for git URLs, keep them as catNew but they will be excluded from probes later
       if (!pool.has(m) && !catNew.includes(m)) { catNew.push(m); added++; }
     }
@@ -141,7 +140,7 @@ if (terms.length) await Promise.all([...new Set(terms)].map(async t => {
         try {
           const html2 = await fetchCatalogHtml(nt);
           const cands2 = extractCatalogCandidates(html2);
-          for (const m of [...new Set(cands2)]) {
+          for (const m of new Set(cands2)) {
             if (!pool.has(m) && !catNew.includes(m)) catNew.push(m);
           }
         } catch (e2) {
