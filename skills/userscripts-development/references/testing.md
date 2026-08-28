@@ -21,7 +21,7 @@ Why it matters for **portable userscripts**: CSP headers, storage (`GM_getValue`
 
 How to:
 
-Agent bridge (AI-driven): to let an AI agent drive that visible real-profile browser (instead of manual clicks), you need a harness/MCP bridge — an extension or MCP server that exposes your browser's tabs to the agent via CDP/MCP (Chrome DevTools Protocol / Model Context Protocol). Launch Chrome with `--remote-debugging-port=9222` or install a harness extension; any bridge that keeps your `user-data-dir`/profile intact satisfies the real-profile requirement. Examples (as of 2026, not exhaustive — verify against each harness's docs):
+Agent bridge (AI-driven): to let an AI agent drive that visible real-profile browser (instead of manual clicks), you need a harness/MCP bridge — an extension or MCP server that exposes your browser's tabs to the agent via CDP/MCP (Chrome DevTools Protocol / Model Context Protocol). The user should launch Chrome with `--remote-debugging-port=9222` or install a harness extension; any bridge that keeps your `user-data-dir`/profile intact satisfies the real-profile requirement. Examples (as of 2026, not exhaustive — verify against each harness's docs):
 - <https://github.com/ChromeDevTools/chrome-devtools-mcp> — official Chrome team
 - <https://github.com/hangwin/mcp-chrome> — community Chrome MCP
 - <https://github.com/fitchmultz/pi-agent-browser-native> — Pi-ecosystem native bridge
