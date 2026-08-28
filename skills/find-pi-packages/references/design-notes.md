@@ -33,6 +33,7 @@ Division of labor: the script (`references/npm-search.mjs`) owns **mechanics** (
 | 9 | Transient failures returned `pool: 0`, looking like an empty ecosystem | Network flakiness indistinguishable from true emptiness | Coverage header with ok/x + FAILED list; hard rule forces gap reporting |
 | 10 | Hand-written merges drifted between turns | Model memory is lossy for 300+ row unions | Merges moved into the script; model reads final table only |
 | 11 | `pi-crof-provider` (4,819/mo, ★3) missed for `crof|crofai` fan-out — top CrofAI provider invisible | Keyword gate assumed authors use `pi-package`/`pi-extension`; package uses bare `pi` (`keywords:["pi","extension",…]`). Rescue layers name-bound (no `pi-${term}` synthesis, catalog regex missed `pi install https://github.com/...`) and probe 404-classification bug (`String(e).includes("exit code 22")` never matches Node `execFile` errors — `e.code` holds the exit code; every 404 probe reported phantom `FAIL`) masked probe health | Loose `keywords:pi` per term + sweep with client-side post-filter (`pi-` prefix / `@scope/pi-…` / `pi` keywords / `pi coding agent|pi extension|for pi\b`); probe status-classification via `curl -sS -w "%{http_code}"` (404 silent, 5xx/timeout one retry → FAILED), real downloads via `api.npmjs.org`; probe synthesis `pi-${term}`, `pi-${term}-provider`, `pi-${term}ai`; catalog regex `pi install (?:npm:…|https://github.com/…)` + `?name=norm(term)` retry (`pi-`/`-provider` strip) |
+| 12 | `pi-crof-provider` (4,812/mo, ★4) GitHub-enrichment miss — repo-less npm package, name-mismatched GH repo (`pi-crof-provider` vs `pi-crofai-provider`), silent `src -`/`repo -` gap | Enrichment single-channel (`p.links.repository`/`homepage` only); name-mismatch hides `gh api search` fallback; catalog `pi.dev/packages?name=pi-crof-provider` has no per-package github link; coverage stays green (enrichment gap, not query gap) | GH search backfill for repo-less picks: synthesize variants (`npm name`, `normCatalogTerm`, `pi-${norm}`, `crof`↔`crofai` alias) ≤3 GH `search/repositories?q=<variant>+in:name` calls + ≤3 `raw.githubusercontent.com/<slug>/main/package.json` verifies (name equality, 1-star credibility filter, per-run cache), then star enrichment picks up new repo; guardrail annotation `(no repository field — verify source via README, experimental)` for rows that remain repo-less after backfill (legend updated) |
 
 ## Decisions & rejected ideas
 
@@ -51,21 +52,22 @@ Division of labor: the script (`references/npm-search.mjs`) owns **mechanics** (
 Rejected on purpose — do not resurrect without new evidence:
 disk caching of search pools (stale-data risk outweighs latency), multi-page catalog crawling (complexity not worth it; npm-side tiers mitigate), scripting the GitHub gate (gh auth/topology varies more than npm; candidates from there need manual vetting anyway).
 
-## Tests (v0.12.1)
+## Tests (v0.12.3)
 
 The decision logic lives in `references/npm-search-lib.mjs` (pure, no I/O) so it is unit-testable; `references/npm-search.mjs` imports it and stays the only network-touching surface.
 
 ```bash
-# Unit suite — deterministic, no network (24 tests): post-filter, name/catalog norm,
-# exact/[KW]/[DESC] tiers, catalog extraction, ghSlug, repo norm.
+# Unit suite — deterministic, no network (29 tests): post-filter, name/catalog norm,
+# exact/[KW]/[DESC] tiers, catalog extraction, ghSlug, repo norm, ghNameVariants.
 node --test tests/npm-search.test.mjs
 # same via auto-discovery (unit files only; canary not matched by default patterns)
 node --test
 
 # Live integration canary — hits real npm/pi.dev/GitHub APIs; may flake under rate limits.
-# Asserts: pi-crof-provider surfaces with real downloads (incident #11), no phantom
-# FAILED coverage gaps, no @stdlib noise, [EXACT] exact-name mode, output bound, E8 pire-browser.
+# Asserts: pi-crof-provider surfaces with real downloads (incident #11), GH-enriched
+# repo link + gh src (incident #12), no phantom FAILED coverage gaps, no @stdlib noise,
+# [EXACT] exact-name mode, output bound, E8 pire-browser.
 RUN_LIVE=1 node --test tests/integration.canary.mjs
 ```
 
-Test-to-incident mapping: post-filter → #11, exact tiers → #3, [KW]/[DESC] → #8, probe/canary coverage → #9, output bound → #7, name-vs-keyword relevance → #8/#11. The canary doubles as the §8 CI smoke test against live registry APIs.
+Test-to-incident mapping: post-filter → #11, exact tiers → #3, [KW]/[DESC] → #8, probe/canary coverage → #9, output bound → #7, name-vs-keyword relevance → #8/#11, GH backfill + guardrail → #12. The canary doubles as the §8 CI smoke test against live registry APIs.

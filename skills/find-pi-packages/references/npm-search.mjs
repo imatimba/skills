@@ -6,7 +6,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { readFileSync, writeFileSync } from "node:fs";
-import { normRepo, isLoosePiCandidate, normName, normCatalogTerm, extractCatalogCandidates, exactNameMatch, keywordMatch, descMatch, ghSlug } from "./npm-search-lib.mjs";
+import { normRepo, isLoosePiCandidate, normName, normCatalogTerm, extractCatalogCandidates, exactNameMatch, keywordMatch, descMatch, ghSlug, ghNameVariants } from "./npm-search-lib.mjs";
 const run = promisify(execFile);
 
 const STRICT_KWS = ["pi-package", "pi-extension"];
@@ -246,6 +246,80 @@ for (const r of ranked) if (!picks.includes(r) && kwHit(r) && picks.length < MAX
 for (const r of ranked) if (!picks.includes(r) && !kwHit(r) && descHit(r) && picks.length < MAX_LINES) picks.push(r);
 picks.sort((a, b) => b.dl - a.dl);
 
+// GitHub-search backfill for repo-less picks (incident #12)
+// Bounded: ≤3 GH search calls + ≤3 raw package.json verifies per repo-less pick.
+// Verify via raw package.json name equality before backfilling; cache verified slugs per-run.
+// Respects ghRateLimited flag to avoid hammering when rate-limited.
+let ghRateLimited = false;
+const verifiedCache = new Map(); // slug -> rawName (string|null) cache per run
+for (const pick of picks) {
+  if (pick.repo) continue;
+  if (ghRateLimited) break;
+  const variants = ghNameVariants(pick.name).slice(0, 3);
+  if (!variants.length) continue;
+  let enriched = false;
+  let verifies = 0;
+  variantLoop: for (const variant of variants) {
+    if (ghRateLimited || verifies >= 3 || enriched) break;
+    let slugsFromSearch = [];
+    try {
+      const { stdout } = await run("gh", ["api", `search/repositories?q=${variant}+in:name&per_page=5`, "--jq", ".items[] | [.full_name,.stargazers_count,.html_url] | @tsv"], { maxBuffer: 1024 * 1024 });
+      const lines = stdout.trim().split("\n").filter(Boolean);
+      for (const line of lines) {
+        const parts = line.split("\t");
+        const full = (parts[0] || "").trim();
+        const starsRaw = (parts[1] || "").trim();
+        const starsNum = parseInt(starsRaw, 10);
+        if (full) slugsFromSearch.push({ slug: full, stars: Number.isNaN(starsNum) ? 0 : starsNum });
+      }
+    } catch (e) {
+      const msg = (e.message ?? String(e)).toLowerCase();
+      if (msg.includes("403") || msg.includes("429") || msg.includes("rate limit") || msg.includes("api rate limit")) ghRateLimited = true;
+      continue;
+    }
+    for (const { slug, stars } of slugsFromSearch) {
+      if (verifies >= 3 || enriched) break;
+      // 0-star forks are noise — require at least 1 star to consider credible (guards pi-crofai control case)
+      if (stars === 0) {
+        if (!verifiedCache.has(slug)) verifiedCache.set(slug, null);
+        continue;
+      }
+      // check cache first (cache stores rawName)
+      if (verifiedCache.has(slug)) {
+        const cachedName = verifiedCache.get(slug);
+        if (cachedName === pick.name) {
+          pick.repo = normRepo(`https://github.com/${slug}`);
+          enriched = true;
+          break;
+        }
+        continue;
+      }
+      verifies++;
+      try {
+        const { stdout } = await run("curl", ["-sS", "--max-time", "15", "-w", "\n%{http_code}", `https://raw.githubusercontent.com/${slug}/main/package.json`], { maxBuffer: 1024 * 1024 });
+        const nl = stdout.lastIndexOf("\n");
+        if (nl === -1) { verifiedCache.set(slug, null); continue; }
+        const status = parseInt(stdout.slice(nl + 1).trim(), 10);
+        const body = stdout.slice(0, nl);
+        if (status !== 200) { verifiedCache.set(slug, null); continue; }
+        let j;
+        try { j = JSON.parse(body); } catch { verifiedCache.set(slug, null); continue; }
+        const rawName = j.name;
+        verifiedCache.set(slug, rawName);
+        // Critical guard: package.json name must match npm name; stars already >0
+        if (rawName === pick.name) {
+          pick.repo = normRepo(`https://github.com/${slug}`);
+          enriched = true;
+          break;
+        }
+      } catch {
+        continue;
+      }
+    }
+    if (enriched) break variantLoop;
+  }
+}
+
 // Star enrichment for the final table only (bounded): secondary credibility signal
 // for niche packages where npm downloads understate traction. Deduped — many pi
 // packages share one monorepo. gh preferred (5K/hr authed), unauthenticated REST as
@@ -257,7 +331,7 @@ try {
   starCache = JSON.parse(readFileSync(STAR_CACHE, "utf8"));
   for (const k of Object.keys(starCache)) if (Date.now() - starCache[k].t > DAY) delete starCache[k];
 } catch { /* first run or corrupt cache */ }
-let ghRateLimited = false; // curl 403 on the unauth fallback ⇒ advise gh install/auth
+// ghRateLimited already declared above for backfill; reused for star enrichment (curl 403 ⇒ advise gh install/auth)
 async function fetchStars(slug) {
   const c = starCache[slug];
   if (c && Date.now() - c.t < DAY) return c.s;
@@ -315,7 +389,8 @@ for (const r of picks) {
       const dl = r.dl < 0 ? "?" : r.dl.toLocaleString("en-US");
       const stars = slug && starMap.has(slug) ? String(starMap.get(slug)) : "-";
       const src = slug ? "gh" : "-";
-      console.log(`${dl} | ${r.name}${tag} | ${r.version} | ${stars} | ${src} | ${r.hits.length}:${[...new Set(r.hits)].join(",")} | ${r.repo || "-"} | ${r.desc}`);
+      const displayDesc = slug ? r.desc : `${r.desc} (no repository field — verify source via README, experimental)`;
+      console.log(`${dl} | ${r.name}${tag} | ${r.version} | ${stars} | ${src} | ${r.hits.length}:${[...new Set(r.hits)].join(",")} | ${r.repo || "-"} | ${displayDesc}`);
 }
-console.log("Legend: ↓ = sorted by monthly downloads desc (never searchScore) · ★ = GitHub stars · src gh = GitHub-hosted, - = npm-only/unknown · [EXACT]/[KW]/[DESC] = exact-name/keyword/description match");
+console.log("Legend: ↓ = sorted by monthly downloads desc (never searchScore) · ★ = GitHub stars · src gh = GitHub-hosted, - = npm-only/unknown · [EXACT]/[KW]/[DESC] = exact-name/keyword/description match · (no repository field — verify source via README, experimental) = publisher omitted repository field, verify via README before install");
 

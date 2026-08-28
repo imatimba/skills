@@ -22,10 +22,14 @@ const search = async (...args) => {
 test("live canary", { skip: process.env.RUN_LIVE !== "1" }, async () => {
   // Incident #11: crof fan-out must surface pi-crof-provider with real downloads.
   const fan = await search("crof", "nahcrof", "crofai", "crof-ai");
-  const row = fan.split("\n").find(l => l.includes("pi-crof-provider"));
+  const row = fan.split("\n").find(l => l.includes("| pi-crof-provider"));
   assert.ok(row, "pi-crof-provider missing from crof fan-out:\n" + fan);
   const dl = row.split("|")[0].trim().replace(/,/g, "");
   assert.ok(/^\d+$/.test(dl) && Number(dl) > 0, `pi-crof-provider downloads not real: ${row}`);
+  // Incident #12: GitHub-enrichment backfill — repo-less pi-crof-provider must now resolve to GH repo.
+  assert.ok(row.includes("github.com/monotykamary/pi-crofai-provider"), `pi-crof-provider row missing GH repo link: ${row}`);
+  assert.ok(/\| gh \|/.test(row), `pi-crof-provider row src not gh: ${row}`);
+  assert.ok(/\| 4 \| gh/.test(row) || /\| 4 \|/.test(row), `pi-crof-provider stars not 4: ${row}`);
 
   // Coverage line must not report phantom FAILs (probe 404-classification fix).
   const cov = fan.split("\n").find(l => l.startsWith("Coverage:"));
@@ -38,6 +42,10 @@ test("live canary", { skip: process.env.RUN_LIVE !== "1" }, async () => {
   // Exact-name lookup still works and carries the [EXACT] tag.
   const exact = await search("pi-crof-provider");
   assert.ok(exact.includes("pi-crof-provider [EXACT]"), "exact-name lookup lost [EXACT] tag");
+  // Incident #12: exact lookup must also be GH-enriched (repo-less backfill)
+  const exactRow = exact.split("\n").find(l => l.includes("| pi-crof-provider"));
+  assert.ok(exactRow && exactRow.includes("github.com/monotykamary/pi-crofai-provider"), `exact pi-crof-provider row missing GH repo: ${exactRow}`);
+  assert.ok(exactRow && /\| gh \|/.test(exactRow), `exact pi-crof-provider src not gh: ${exactRow}`);
 
   // Output stays bounded (MAX_LINES=70 cap; ~50KB generous bound for 15-query fan-out).
   assert.ok(Buffer.byteLength(fan) < 50_000, `fan-out output too large: ${Buffer.byteLength(fan)}B`);

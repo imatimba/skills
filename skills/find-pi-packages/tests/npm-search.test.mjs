@@ -13,6 +13,7 @@ import {
   descMatch,
   extractCatalogCandidates,
   ghSlug,
+  ghNameVariants,
 } from "../references/npm-search-lib.mjs";
 
 // ---- normRepo --------------------------------------------------------------
@@ -72,6 +73,7 @@ test("normCatalogTerm: strips pi- and -provider", () => {
   assert.equal(normCatalogTerm("pi-crof-provider"), "crof");
   assert.equal(normCatalogTerm("pi-crof"), "crof");
   assert.equal(normCatalogTerm("crof"), "crof");
+  assert.equal(normCatalogTerm("pi-crofai-provider"), "crofai");
 });
 
 // ---- exactNameMatch (E3 cache-warm [EXACT] tier) -----------------------------
@@ -157,4 +159,52 @@ test("ghSlug: non-GitHub returns null", () => {
   assert.equal(ghSlug("https://gitlab.com/a/b"), null);
   assert.equal(ghSlug(""), null);
   assert.equal(ghSlug(undefined), null);
+});
+
+// ---- ghNameVariants (incident #12 — GitHub-enrichment backfill) ------------------
+
+test("ghNameVariants: pi-crof-provider includes stripped and alias forms", () => {
+  const v = ghNameVariants("pi-crof-provider");
+  assert.ok(v.includes("pi-crof-provider"));
+  assert.ok(v.includes("crof"));
+  assert.ok(v.includes("pi-crof"));
+  assert.ok(v.includes("pi-crofai-provider"));
+  assert.ok(v.includes("crofai"));
+  assert.ok(v.includes("pi-crofai"));
+  // deduped
+  assert.equal(v.length, new Set(v.map(s => s.toLowerCase())).size);
+});
+
+test("ghNameVariants: pi-crofai-provider alias inverse", () => {
+  const v = ghNameVariants("pi-crofai-provider");
+  assert.ok(v.includes("pi-crofai-provider"));
+  assert.ok(v.includes("crofai"));
+  assert.ok(v.includes("pi-crofai"));
+  assert.ok(v.includes("pi-crof-provider"));
+  assert.ok(v.includes("crof"));
+});
+
+test("ghNameVariants: non-crof name does not get alias", () => {
+  const v = ghNameVariants("pi-mcp-adapter");
+  assert.ok(v.includes("pi-mcp-adapter"));
+  assert.ok(v.includes("mcp-adapter"));
+  assert.ok(!v.some(s => /crof/i.test(s)));
+  assert.equal(v.length, new Set(v.map(s => s.toLowerCase())).size);
+});
+
+test("ghNameVariants: crof-provider stripped and alias", () => {
+  const v = ghNameVariants("crof-provider");
+  assert.ok(v.includes("crof-provider"));
+  assert.ok(v.includes("crof"));
+  assert.ok(v.includes("pi-crof"));
+  assert.ok(v.includes("crofai-provider"));
+});
+
+test("ghNameVariants: dedupes case-insensitively", () => {
+  const v = ghNameVariants("pi-crof");
+  // pi-crof + crof + aliases
+  assert.ok(v.includes("pi-crof"));
+  assert.ok(v.includes("crof"));
+  assert.ok(v.includes("pi-crofai"));
+  assert.ok(v.includes("crofai"));
 });

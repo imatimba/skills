@@ -91,3 +91,45 @@ export const ghSlug = url => {
   const m = /github\.com[/:]([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?$/i.exec(url || "");
   return m ? `${m[1]}/${m[2]}` : null;
 };
+
+/**
+ * Synthesize GitHub search name variants for a repo-less npm package.
+ * Deduped, order: npm name, normCatalogTerm, pi+norm, plus crof/crofai aliases.
+ * The crof/crofai alias (insert/remove "ai" after "crof") is ONLY generated
+ * when the original npm name contains "crof" (case-insensitive).
+ * Caller should bound to ≤3 variants per pick before GH search.
+ * @param {string} npmName
+ * @returns {string[]} deduped variants
+ */
+export const ghNameVariants = npmName => {
+  const seen = new Set();
+  const out = [];
+  const add = v => {
+    if (!v || seen.has(v.toLowerCase())) return;
+    seen.add(v.toLowerCase());
+    out.push(v);
+  };
+  const base = String(npmName || "").trim();
+  if (!base) return out;
+  add(base);
+  const norm = normCatalogTerm(base);
+  if (norm && norm.toLowerCase() !== base.toLowerCase()) add(norm);
+  if (norm) {
+    const piNorm = `pi-${norm}`;
+    if (piNorm.toLowerCase() !== base.toLowerCase()) add(piNorm);
+  }
+  // crof/crofai alias — only when base contains crof (case-insensitive)
+  if (/crof/i.test(base)) {
+    const snapshot = [...out];
+    for (const v of snapshot) {
+      let alias = null;
+      if (/crofai/i.test(v)) {
+        alias = v.replace(/crofai/gi, m => (m[0] === m[0].toUpperCase() && m[0] !== m[0].toLowerCase() ? "Crof" : "crof"));
+      } else if (/crof/i.test(v)) {
+        alias = v.replace(/crof/gi, m => (m[0] === m[0].toUpperCase() && m[0] !== m[0].toLowerCase() ? "Crofai" : "crofai"));
+      }
+      if (alias && alias.toLowerCase() !== v.toLowerCase()) add(alias);
+    }
+  }
+  return out;
+};

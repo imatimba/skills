@@ -4,7 +4,7 @@ description: "Trigger: find/search/install a pi package, pi extension, or pi plu
 license: MIT
 metadata:
   author: imatimba
-  version: "0.12.2"
+  version: "0.12.3"
 ---
 
 ## Activation Contract
@@ -27,6 +27,7 @@ Path convention: `<skill-dir>` below is the directory containing this SKILL.md, 
 - Never run `pi install` without explicit user approval; state that packages run with full system access, and offer a pre-install scan via an available code-security skill (e.g. `ghost-scan-code`).
 - Do not call `https://pi.dev/api/*`; reserved, returns errors.
 - Web search only after npm, GitHub, and catalog all return nothing relevant, and only if the session has such a tool; skip silently otherwise.
+- After GH backfill, rows that remain `src -`/`repo -` carry `(no repository field — verify source via README, experimental)` — publisher omitted `repository` field, verify via README before install.
 
 ## Decision Gates
 
@@ -41,7 +42,7 @@ Path convention: `<skill-dir>` below is the directory containing this SKILL.md, 
 
 1. Restate the need as 2-4 synonym terms; fire the whole npm fan-out in one call (Decision Gates).
 2. In the same parallel batch, run both GitHub topic queries (`--jq`-compacted). If the stars line reports RATE-LIMITED (gh absent + quota exhausted), tell the user and suggest installing GitHub CLI + running `gh auth login`.
-3. Vet from the merged tables only, in table order: prefer ≥1K monthly downloads but never hide a lower-download `[EXACT]`/`[KW]`/`[DESC]` intent match — flag it `(experimental, published <6mo)` instead; weigh stars as secondary traction (292/mo on a 95★ shared repo is credible; on a 2★ personal repo it is not); flag publishes older than 6 months; open the repo URL to confirm it addresses the stated need. For dates or "fork of @x/y" lookups append the name (`npm-search.mjs @x/y`) — compact info line, never a raw packument.
+3. Vet from the merged tables only, in table order: prefer ≥1K monthly downloads but never hide a lower-download `[EXACT]`/`[KW]`/`[DESC]` intent match — flag it `(experimental, published <6mo)` instead; weigh stars as secondary traction (292/mo on a 95★ shared repo is credible; on a 2★ personal repo it is not); flag publishes older than 6 months; open the repo URL to confirm it addresses the stated need. For dates or "fork of @x/y" lookups append the name (`npm-search.mjs @x/y`) — compact info line, never a raw packument. Rows annotated `(no repository field — verify source via README, experimental)` are repo-less after GH backfill — verify source via README before install.
 4. If plausible matches are still missing after the automatic catalog cross-check, try adjacent synonyms before web search.
 5. Present findings per Output Contract.
 6. On approval, install. **npm form is always preferred** — every script-table row is npm-published by construction: `pi install npm:<pkg>` (`@ver` pins version, `-l` writes project-local, `pi -e` tries once without persisting). Offer `pi install git:github.com/u/r@<ref>` only for candidates proven absent from npm; raw clone+build steps only when package docs demand them (state why).
@@ -56,8 +57,8 @@ Then follow with the system-access security note offering a pre-install repo sca
 
 ## References
 
-- `references/npm-search.mjs` — parallel npm fan-out (strict terms × `pi-package`/`pi-extension` + loose `keywords:pi` terms/sweep at size=100 + automatic pi.dev catalog cross-check), relevance tiers (`[EXACT]` name-equality modulo `pi-` prefix / substring / `[KW]` / `[DESC]`), star enrichment (cache → gh → curl), Coverage line, single-package mode for args containing `/`. Requires node + curl; gh optional.
-- `references/npm-search-lib.mjs` — pure decision helpers (post-filter, normalization, catalog extraction, tiers, ghSlug), unit-tested and importable.
+- `references/npm-search.mjs` — parallel npm fan-out (strict terms × `pi-package`/`pi-extension` + loose `keywords:pi` terms/sweep at size=100 + automatic pi.dev catalog cross-check), relevance tiers (`[EXACT]` name-equality modulo `pi-` prefix / substring / `[KW]` / `[DESC]`), GH search backfill for repo-less picks (`ghNameVariants` + `package.json` name verification, 1-star filter, ≤3 GH + ≤3 verifies per pick), guardrail annotation for remaining repo-less rows, star enrichment (cache → gh → curl), Coverage line, single-package mode for args containing `/`. Requires node + curl; gh optional.
+- `references/npm-search-lib.mjs` — pure decision helpers (post-filter, normalization, catalog extraction, tiers, ghSlug, ghNameVariants), unit-tested and importable.
 - `tests/npm-search.test.mjs` — deterministic unit suite (no network): `node --test tests/npm-search.test.mjs`.
 - `tests/integration.canary.mjs` — live API canary (self-skips unless `RUN_LIVE=1`): `RUN_LIVE=1 node --test tests/integration.canary.mjs`.
 - `references/design-notes.md` — measured facts, incident registry, decision rationale, and test mapping behind every rule above.
