@@ -24,7 +24,7 @@ npx skills add imatimba/skills --skill userscripts-development
 
 No manager publishes an official testing guide. The pattern below is community practice.
 
-Split tests in two layers:
+Tests can be split in two layers:
 
 - **End-to-end (recommended)** in a real manager. Load the manager extension into headless Chromium and drive it with Playwright or Puppeteer. Old headless mode does not support extensions, use `--headless=new` or `xvfb-run`.
 
