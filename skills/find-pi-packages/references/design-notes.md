@@ -47,6 +47,7 @@ Division of labor: the script (`references/npm-search.mjs`) owns **mechanics** (
 | Catalog cross-check automatic | Conditional-on-thin-results failed when pools looked healthy; the catalog's engine differs and catches score pathologies + index lag |
 | `<skill-dir>` path convention | Skills install to multiple roots; hardcoded paths break relocation and the whole fan-out |
 | Security posture | Packages execute with full system access (official warning): explicit user approval mandatory, security note mandatory, pre-install SAST scan offered |
+| Manual downloads in /tmp | Any manual clone/download/build during vetting or install runs in a `mktemp -d` scratch dir, never cwd or home: agents drift toward saving files where they sit, and stray repos in user directories are worse than the package being scanned |
 | Web search last resort only | Noisiest surface; cannot feed downloads/date vetting; gated on tool existence for agent portability |
 
 Rejected on purpose. Do not resurrect without new evidence:

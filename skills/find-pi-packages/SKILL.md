@@ -4,7 +4,7 @@ description: "Trigger: find/search/install a pi package, pi extension, or pi plu
 license: MIT
 metadata:
   author: imatimba
-  version: "0.12.3"
+  version: "0.12.5"
 ---
 
 ## Activation Contract
@@ -24,6 +24,7 @@ Path convention: `<skill-dir>` below is the directory containing this SKILL.md, 
 - Treat the Coverage header as ground truth: report failed queries as gaps. Always merge both no-term keyword sweeps regardless of scoped-hit count — scoped hits are not evidence of coverage.
 - Never recommend from raw search output; pass every candidate through vetting first. Precision comes from vetting, not from narrowing queries.
 - Stars alone don't prove a GitHub repo is a pi package; require a README pi mention, a `package.json` `pi` key, or a `pi-` name prefix.
+    - Any manual download, clone, or build happens in a `/tmp` scratch directory (e.g. `mktemp -d`), never the working directory or user home. Never leave downloaded files behind in the repo or home.
 - Never run `pi install` without explicit user approval; state that packages run with full system access, and offer a pre-install scan via an available code-security skill (e.g. `ghost-scan-code`).
 - Do not call `https://pi.dev/api/*`; reserved, returns errors.
 - Web search only after npm, GitHub, and catalog all return nothing relevant, and only if the session has such a tool; skip silently otherwise.

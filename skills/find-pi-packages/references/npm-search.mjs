@@ -324,7 +324,7 @@ for (const pick of picks) {
 // for niche packages where npm downloads understate traction. Deduped — many pi
 // packages share one monorepo. gh preferred (5K/hr authed), unauthenticated REST as
 // fallback (60/hr/IP), results cached 24h in /tmp so repeat fan-outs cost nothing.
-const STAR_CACHE = "/tmp/pi-pkg-star-cache.json";
+const STAR_CACHE = `${process.env.TMPDIR ?? "/tmp"}/pi-pkg-star-cache-${process.getuid?.() ?? "u"}.json`;
 const DAY = 86_400_000;
 let starCache = {};
 try {
