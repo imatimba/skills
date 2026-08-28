@@ -89,9 +89,6 @@ Do not unit-test manager-owned behaviour — it requires a real manager:
 - Cross-origin `GM.xmlHttpRequest` enforcement (`@connect` prompts in Tampermonkey)
 
 - Sandbox isolation (`@grant none` disables sandbox; otherwise `unsafeWindow` is a wrapper; Firefox `wrappedJSObject`/`cloneInto`/`exportFunction`) — manager-owned, smoke-test only — see [managers.md](managers.md) §4 for authoritative matrix (verified 2026-08-25 — violentmonkey.github.io/api/gm, violentmonkey.github.io/posts/inject-into-context/)
-
-For those, do a manual smoke run in the target manager (Violentmonkey as worked example: load the built `.user.js` via dashboard or `http://localhost:8080/script.user.js` with Track external edits) (verified 2026-08-25 — violentmonkey.github.io, community practice; no vendor testing guide found).
-
 ## See Also
 
 - url-matching.md — testable `@match` logic

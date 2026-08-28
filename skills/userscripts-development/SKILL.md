@@ -25,7 +25,7 @@ Do NOT use for Selenium/Puppeteer/Playwright automation, browser extensions (Web
 4. **Scope tightly:** specific `@match` (never `*://*/*`), declared `@connect` per cross-origin host (enforced by TM only), HTTPS-only URLs, no embedded secrets, sanitise data before DOM insertion.
 5. **Violentmonkey is the UI-workflow example** (FOSS, stable dashboard) for install/dashboard steps only — this implies nothing about API precedence. Other managers appear as labeled table rows; tier-2 divergences live in [manager-compat.md](references/manager-compat.md).
 6. Preserve existing behaviour when editing a user's script; relabel rather than erase manager-specific knowledge.
-7. **Live-profile testing hygiene:** never live-test a new version while an older installed version still matches the same `@match` — install the new version, **reload the tab**, then run the pre-flight pollution probe ([testing.md](references/testing.md) — Live-Profile Interference). A `@grant none` script shares the page world with automation evals, so a stale or foreign active script silently pollutes every snapshot/eval measurement taken before detection.
+7. **Live-profile testing hygiene:** never live-test a new version while an older installed version still matches the same `@match` — let the user install/update the new version, **reload the tab**, then run the pre-flight pollution probe ([testing.md](references/testing.md) — Live-Profile Interference). A `@grant none` script shares the page world with automation evals, so a stale or foreign active script silently pollutes every snapshot/eval measurement taken before detection.
 
 ## Core Digest
 
