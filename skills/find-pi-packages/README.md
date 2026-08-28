@@ -42,4 +42,7 @@ Packages run with full system access. Before installing, you can have an agent s
 ```bash
 node --test tests/npm-search.test.mjs
 RUN_LIVE=1 node --test tests/integration.canary.mjs
+npx oxlint --deny-warnings
 ```
+
+CI runs the unit suite and lint on every push and pull request.
