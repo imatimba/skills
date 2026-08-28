@@ -133,3 +133,19 @@ export const ghNameVariants = npmName => {
   }
   return out;
 };
+
+/**
+ * How long to wait for the gh search quota to reset, when it is nearly exhausted.
+ * gh search is 30 req/min shared across every `gh api search` call; a fan-out can
+ * exhaust it mid-run. Returns ms to sleep, or 0 when the reset is too far away to
+ * wait for (caller should skip backfill instead).
+ * @param {number} remaining search calls left
+ * @param {number} resetEpoch reset timestamp (epoch seconds)
+ * @param {number} nowEpoch current time (epoch seconds)
+ * @returns {number} ms to wait, or 0 when waiting is not worthwhile
+ */
+export const searchResetWaitMs = (remaining, resetEpoch, nowEpoch) => {
+  if (remaining > 2) return 0;
+  const waitMs = (resetEpoch - nowEpoch) * 1000;
+  return waitMs > 0 && waitMs <= 60_000 ? waitMs + 1000 : 0;
+};

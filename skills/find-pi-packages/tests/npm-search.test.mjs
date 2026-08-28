@@ -14,6 +14,7 @@ import {
   extractCatalogCandidates,
   ghSlug,
   ghNameVariants,
+  searchResetWaitMs,
 } from "../references/npm-search-lib.mjs";
 
 // ---- normRepo --------------------------------------------------------------
@@ -207,4 +208,23 @@ test("ghNameVariants: dedupes case-insensitively", () => {
   assert.ok(v.includes("crof"));
   assert.ok(v.includes("pi-crofai"));
   assert.ok(v.includes("crofai"));
+});
+
+// ---- searchResetWaitMs (gh search 30/min quota pacing) ------------------------
+
+test("searchResetWaitMs: healthy remaining waits nothing", () => {
+  assert.equal(searchResetWaitMs(30, 1_800_000, 1_799_000), 0);
+  assert.equal(searchResetWaitMs(3, 1_800_000, 1_799_000), 0);
+});
+
+test("searchResetWaitMs: low remaining with close reset waits until reset + 1s", () => {
+  // reset in 30s -> 31_000 ms
+  assert.equal(searchResetWaitMs(2, 1_800_030, 1_800_000), 31_000);
+  assert.equal(searchResetWaitMs(0, 1_800_060, 1_800_000), 61_000);
+});
+
+test("searchResetWaitMs: low remaining with far reset waits nothing", () => {
+  // reset in 5 minutes -> too far, caller should skip backfill
+  assert.equal(searchResetWaitMs(1, 1_800_300, 1_800_000), 0);
+  assert.equal(searchResetWaitMs(0, 1_800_000, 1_799_000), 0); // wait > 60s
 });

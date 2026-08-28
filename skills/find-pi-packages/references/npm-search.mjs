@@ -6,7 +6,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { readFileSync, writeFileSync } from "node:fs";
-import { normRepo, isLoosePiCandidate, normCatalogTerm, extractCatalogCandidates, exactNameMatch, keywordMatch, descMatch, ghSlug, ghNameVariants } from "./npm-search-lib.mjs";
+import { normRepo, isLoosePiCandidate, normCatalogTerm, extractCatalogCandidates, exactNameMatch, keywordMatch, descMatch, ghSlug, ghNameVariants, searchResetWaitMs } from "./npm-search-lib.mjs";
 const run = promisify(execFile);
 
 const STRICT_KWS = ["pi-package", "pi-extension"];
@@ -251,6 +251,28 @@ picks.sort((a, b) => b.dl - a.dl);
 // Respects ghRateLimited flag to avoid hammering when rate-limited.
 let ghRateLimited = false;
 const verifiedCache = new Map(); // slug -> rawName (string|null) cache per run
+// gh search quota is 30 req/min shared across every `gh api search` call. Read it
+// once up front and pace calls so a large fan-out does not exhaust the window
+// mid-run (403 backstop below still applies when gh is missing or unauthenticated).
+let ghSearchBudget = null;
+try {
+  const { stdout } = await run("gh", ["api", "rate_limit", "--jq", ".resources.search | [.remaining,.reset] | @tsv"], { maxBuffer: 1024 * 1024 });
+  const [remainingRaw, resetRaw] = stdout.trim().split("\t");
+  const remaining = parseInt(remainingRaw, 10);
+  const reset = parseInt(resetRaw, 10);
+  if (!Number.isNaN(remaining) && !Number.isNaN(reset)) ghSearchBudget = { remaining, reset };
+} catch { /* no gh or unauthenticated, 403 backstop below still applies */ }
+const settleSearchBudget = async () => {
+  if (!ghSearchBudget) return true; // unknown, let the 403 backstop decide
+  if (ghSearchBudget.remaining > 2) return true;
+  const waitMs = searchResetWaitMs(ghSearchBudget.remaining, ghSearchBudget.reset, Date.now() / 1000);
+  if (waitMs > 0) {
+    await sleep(waitMs);
+    ghSearchBudget = null; // refreshed by the wait, 403 backstop guards the rest
+    return true;
+  }
+  return false; // reset too far away, skip backfill rather than hammer
+};
 for (const pick of picks) {
   if (pick.repo) continue;
   if (ghRateLimited) break;
@@ -260,6 +282,9 @@ for (const pick of picks) {
   let verifies = 0;
   variantLoop: for (const variant of variants) {
     if (ghRateLimited || verifies >= 3 || enriched) break;
+    if (!(await settleSearchBudget())) { ghRateLimited = true; break; }
+    await sleep(2100); // pace: search quota is 30/min shared across all gh api search
+    if (ghSearchBudget) ghSearchBudget.remaining--;
     let slugsFromSearch = [];
     try {
       const { stdout } = await run("gh", ["api", `search/repositories?q=${variant}+in:name&per_page=5`, "--jq", ".items[] | [.full_name,.stargazers_count,.html_url] | @tsv"], { maxBuffer: 1024 * 1024 });

@@ -44,6 +44,7 @@ Division of labor: the script (`references/npm-search.mjs`) owns **mechanics** (
 | Unconditional safety sweeps | 20 healthy-looking scoped hits can hide rank-75 gold; coverage is never conditional |
 | npm-first install preference | Structural: only registry-probed packages enter the pool, so every table row IS on npm; git installs only for proven-absent candidates |
 | gh optional with graceful degradation | node+curl stay portable; gh lifts quota 60/hr → 5K/hr; ladder ends in an actionable advisory, never silent dashes |
+| GH search pacing | gh search quota is 30 req/min shared across all `gh api search` calls; a fan-out of repo-less picks can exhaust it mid-run. Read the budget once up front, sleep 2.1s between calls, wait for a near reset or skip backfill when the reset is far away |
 | Catalog cross-check automatic | Conditional-on-thin-results failed when pools looked healthy; the catalog's engine differs and catches score pathologies + index lag |
 | `<skill-dir>` path convention | Skills install to multiple roots; hardcoded paths break relocation and the whole fan-out |
 | Security posture | Packages execute with full system access (official warning): explicit user approval mandatory, security note mandatory, pre-install SAST scan offered |
@@ -58,8 +59,8 @@ disk caching of search pools (stale-data risk outweighs latency), multi-page cat
 The decision logic lives in `references/npm-search-lib.mjs` (pure, no I/O) so it is unit-testable; `references/npm-search.mjs` imports it and stays the only network-touching surface.
 
 ```bash
-# Unit suite: deterministic, no network (29 tests). Covers post-filter, name/catalog norm,
-# exact/[KW]/[DESC] tiers, catalog extraction, ghSlug, repo norm, ghNameVariants.
+# Unit suite: deterministic, no network (32 tests). Covers post-filter, name/catalog norm,
+# exact/[KW]/[DESC] tiers, catalog extraction, ghSlug, repo norm, ghNameVariants, searchResetWaitMs.
 node --test tests/npm-search.test.mjs
 # same via auto-discovery (unit files only; canary not matched by default patterns)
 node --test
