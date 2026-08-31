@@ -22,8 +22,8 @@ npx skills add imatimba/skills --skill find-pi-packages
 
 | Skill | What it does | README |
 | --- | --- | --- |
-| `find-pi-packages` | Search and vet pi packages (extensions, skills, themes, prompts) from npm and GitHub. | [README](skills/find-pi-packages/README.md) |
-| `userscripts-development` | Write and debug userscripts for any manager (Violentmonkey, Tampermonkey, Greasemonkey, Safari). **(WIP)** | [README](skills/userscripts-development/README.md) |
+| [`find-pi-packages`](skills/find-pi-packages/SKILL.md) | Search and vet pi packages (extensions, skills, themes, prompts) from npm and GitHub. | [README](skills/find-pi-packages/README.md) |
+| [`userscripts-development`](skills/userscripts-development/SKILL.md) | Write and debug userscripts for any manager (Violentmonkey, Tampermonkey, Greasemonkey, Safari). **(WIP)** | [README](skills/userscripts-development/README.md) |
 
 ## Layout
 
