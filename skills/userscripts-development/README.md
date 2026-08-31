@@ -39,3 +39,7 @@ Launch Chrome with `--remote-debugging-port=9222` or install a harness extension
 - **Unit tests** for script logic. Use Vitest with the happy-dom environment and mock the GM APIs with mock-violentmonkey (archived). No manager involved, your logic runs as plain JS.
 
 Details live in `references/testing.md`.
+
+## Acknowledgments
+
+Initially based on the [wookstar-claude-plugins tampermonkey skill](https://github.com/henkisdabro/wookstar-claude-plugins/blob/main/plugins/tampermonkey/skills/tampermonkey/SKILL.md), then expanded from single-manager to the current manager-neutral coverage.
