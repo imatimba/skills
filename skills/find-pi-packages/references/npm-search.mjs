@@ -264,11 +264,16 @@ try {
 } catch { /* no gh or unauthenticated, 403 backstop below still applies */ }
 const settleSearchBudget = async () => {
   if (!ghSearchBudget) return true; // unknown, let the 403 backstop decide
-  if (ghSearchBudget.remaining > 2) return true;
+  if (ghSearchBudget.remaining > 12) return true; // plenty left, no pacing
+  if (ghSearchBudget.remaining > 2) {
+    // approaching the 30/min shared quota: pace gently to stay inside it
+    await sleep(1500);
+    return true;
+  }
   const waitMs = searchResetWaitMs(ghSearchBudget.remaining, ghSearchBudget.reset, Date.now() / 1000);
   if (waitMs > 0) {
     await sleep(waitMs);
-    ghSearchBudget = null; // refreshed by the wait, 403 backstop guards the rest
+    ghSearchBudget = { remaining: 28, reset: Math.floor(Date.now() / 1000) + 60 }; // refilled by the wait
     return true;
   }
   return false; // reset too far away, skip backfill rather than hammer
@@ -283,7 +288,6 @@ for (const pick of picks) {
   variantLoop: for (const variant of variants) {
     if (ghRateLimited || verifies >= 3 || enriched) break;
     if (!(await settleSearchBudget())) { ghRateLimited = true; break; }
-    await sleep(2100); // pace: search quota is 30/min shared across all gh api search
     if (ghSearchBudget) ghSearchBudget.remaining--;
     let slugsFromSearch = [];
     try {

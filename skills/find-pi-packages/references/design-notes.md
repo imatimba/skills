@@ -44,7 +44,7 @@ Division of labor: the script (`references/npm-search.mjs`) owns **mechanics** (
 | Unconditional safety sweeps | 20 healthy-looking scoped hits can hide rank-75 gold; coverage is never conditional |
 | npm-first install preference | Structural: only registry-probed packages enter the pool, so every table row IS on npm; git installs only for proven-absent candidates |
 | gh optional with graceful degradation | node+curl stay portable; gh lifts quota 60/hr → 5K/hr; ladder ends in an actionable advisory, never silent dashes |
-| GH search pacing | gh search quota is 30 req/min shared across all `gh api search` calls; a fan-out of repo-less picks can exhaust it mid-run. Read the budget once up front, sleep 2.1s between calls, wait for a near reset or skip backfill when the reset is far away |
+| GH search pacing | gh search quota is 30 req/min shared across all `gh api search` calls; a fan-out of repo-less picks can exhaust it mid-run. Read the budget once up front; pace only when remaining drops below 12 (1.5s between calls), wait for a near reset or skip backfill when the reset is far away; full-quota runs stay fast |
 | Catalog cross-check automatic | Conditional-on-thin-results failed when pools looked healthy; the catalog's engine differs and catches score pathologies + index lag |
 | `<skill-dir>` path convention | Skills install to multiple roots; hardcoded paths break relocation and the whole fan-out |
 | Security posture | Packages execute with full system access (official warning): explicit user approval mandatory, security note mandatory, pre-install SAST scan offered |
