@@ -57,7 +57,50 @@ async function runLimited(items, fn, limit = 3) {
   return out;
 }
 
-await runLimited(queries, async q => {
+const catNew = [];
+const fetchCatalogHtml = async term => {
+  // pi.dev always returns 200 HTML; use -sf for simplicity but classify failures as gap
+  const { stdout } = await run("curl", ["-sf", "--max-time", "20", `https://pi.dev/packages?name=${encodeURIComponent(term)}`], { maxBuffer: 8 * 1024 * 1024 });
+  return stdout;
+};
+const runCatalogCrossCheck = async () => {
+  if (!terms.length) return;
+  await Promise.all([...new Set(terms)].map(async t => {
+    try {
+      const html = await fetchCatalogHtml(t);
+      const cands = extractCatalogCandidates(html);
+      let added = 0;
+      for (const m of new Set(cands)) {
+        // for git URLs, keep them as catNew but they will be excluded from probes later
+        if (!pool.has(m) && !catNew.includes(m)) { catNew.push(m); added++; }
+      }
+      // second query with normalized term when first added nothing
+      if (added === 0) {
+        const nt = normCatalogTerm(t);
+        if (nt && nt !== t) {
+          try {
+            const html2 = await fetchCatalogHtml(nt);
+            const cands2 = extractCatalogCandidates(html2);
+            for (const m of new Set(cands2)) {
+              if (!pool.has(m) && !catNew.includes(m)) catNew.push(m);
+            }
+          } catch (e2) {
+            // second catalog query failure is also a coverage gap but don't double-count if first succeeded
+            // only report if both failed? We'll report silently; first success means we have some coverage.
+            const msg = (e2.message ?? String(e2)).slice(0, 60);
+            // don't push failed for norm retry unless it's the only attempt? Keep quiet to reduce noise.
+            console.error(`note catalog:${nt} (norm of ${t}): ${msg}`);
+          }
+        }
+      }
+    } catch (e) {
+      failed.push(`catalog:${t}`);
+      console.error(`FAIL catalog:${t}: ${(e.message ?? e).slice(0, 60)}`);
+    }
+  }));
+};
+
+const npmTask = runLimited(queries, async q => {
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const { stdout } = await run("curl", ["-sS", "--max-time", "25", "-w", "\n%{http_code}", q.url], { maxBuffer: 16 * 1024 * 1024 });
@@ -106,6 +149,8 @@ await runLimited(queries, async q => {
   }
 });
 
+await Promise.all([npmTask, runCatalogCrossCheck()]);
+
 const nameHit = r => terms.some(t => r.name.toLowerCase().includes(t));
 // Relevance can live outside the name: authors put domain terms in keywords/description
 // (e.g. pire-browser is THE firefox extension but its name says nothing about firefox).
@@ -118,45 +163,6 @@ const exactHit = r => exactNameMatch(r.name, terms);
 // the npm pool looks healthy — score pathologies and index lag hide from npm only.
 // Extraction now captures both npm: and github installs; second query tries norm(term)
 // (strip pi- prefix and -provider suffix) when first returns nothing new.
-const catNew = [];
-const fetchCatalogHtml = async term => {
-  // pi.dev always returns 200 HTML; use -sf for simplicity but classify failures as gap
-  const { stdout } = await run("curl", ["-sf", "--max-time", "20", `https://pi.dev/packages?name=${encodeURIComponent(term)}`], { maxBuffer: 8 * 1024 * 1024 });
-  return stdout;
-};
-if (terms.length) await Promise.all([...new Set(terms)].map(async t => {
-  try {
-    const html = await fetchCatalogHtml(t);
-    const cands = extractCatalogCandidates(html);
-    let added = 0;
-    for (const m of new Set(cands)) {
-      // for git URLs, keep them as catNew but they will be excluded from probes later
-      if (!pool.has(m) && !catNew.includes(m)) { catNew.push(m); added++; }
-    }
-    // second query with normalized term when first added nothing
-    if (added === 0) {
-      const nt = normCatalogTerm(t);
-      if (nt && nt !== t) {
-        try {
-          const html2 = await fetchCatalogHtml(nt);
-          const cands2 = extractCatalogCandidates(html2);
-          for (const m of new Set(cands2)) {
-            if (!pool.has(m) && !catNew.includes(m)) catNew.push(m);
-          }
-        } catch (e2) {
-          // second catalog query failure is also a coverage gap but don't double-count if first succeeded
-          // only report if both failed? We'll report silently; first success means we have some coverage.
-          const msg = (e2.message ?? String(e2)).slice(0, 60);
-          // don't push failed for norm retry unless it's the only attempt? Keep quiet to reduce noise.
-          console.error(`note catalog:${nt} (norm of ${t}): ${msg}`);
-        }
-      }
-    }
-  } catch (e) {
-    failed.push(`catalog:${t}`);
-    console.error(`FAIL catalog:${t}: ${(e.message ?? e).slice(0, 60)}`);
-  }
-}));
 
 // Probe catalog-only finds + bare terms that might BE package names.
 // Catches search-index lag — brand-new packages can be missing or rank-buried in npm search.
@@ -183,17 +189,21 @@ async function fetchDownloadsForProbe(name) {
   return -1;
 }
 
-await Promise.all(probes.map(async name => {
+await runLimited(probes, async name => {
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const { stdout } = await run("curl", ["-sS", "--max-time", "20", "-w", "\n%{http_code}", `https://registry.npmjs.org/${encodeURIComponent(name)}`], { maxBuffer: 16 * 1024 * 1024 });
+      // Fetch the packument and its download count in parallel: two independent
+      // endpoints, one RTT saved per probe. fetchDownloadsForProbe never rejects.
+      const [regRes, dl] = await Promise.all([
+        run("curl", ["-sS", "--max-time", "20", "-w", "\n%{http_code}", `https://registry.npmjs.org/${encodeURIComponent(name)}`], { maxBuffer: 16 * 1024 * 1024 }),
+        fetchDownloadsForProbe(name),
+      ]);
+      const stdout = regRes.stdout;
       const nl = stdout.lastIndexOf("\n");
       if (nl === -1) throw new Error("no http_code in probe response");
       const status = parseInt(stdout.slice(nl + 1).trim(), 10);
       const body = stdout.slice(0, nl);
       if (status === 200) {
-        let dl = -1;
-        dl = await fetchDownloadsForProbe(name);
         const j = JSON.parse(body);
         const L = j["dist-tags"]?.latest ?? "?";
         const v = j.versions?.[L] ?? {};
@@ -235,7 +245,7 @@ await Promise.all(probes.map(async name => {
       break;
     }
   }
-}));
+}, 6);
 const ranked = [...pool.values()].sort((a, b) => b.dl - a.dl);
 const picks = ranked.slice(0, TOP);
 for (const r of ranked) if (!picks.includes(r) && exactHit(r) && picks.length < MAX_LINES) picks.push(r); // exact intent beats popularity
@@ -249,19 +259,22 @@ picks.sort((a, b) => b.dl - a.dl);
 // Bounded: ≤3 GH search calls + ≤3 raw package.json verifies per repo-less pick.
 // Verify via raw package.json name equality before backfilling; cache verified slugs per-run.
 // Respects ghRateLimited flag to avoid hammering when rate-limited.
+const repoLessPicks = picks.filter(p => !p.repo && ghNameVariants(p.name).length);
 let ghRateLimited = false;
 const verifiedCache = new Map(); // slug -> rawName (string|null) cache per run
 // gh search quota is 30 req/min shared across every `gh api search` call. Read it
-// once up front and pace calls so a large fan-out does not exhaust the window
-// mid-run (403 backstop below still applies when gh is missing or unauthenticated).
+// only when backfill will actually run, then pace so a large fan-out does not
+// exhaust the window mid-run (403 backstop below still applies when gh is missing or unauthenticated).
 let ghSearchBudget = null;
-try {
-  const { stdout } = await run("gh", ["api", "rate_limit", "--jq", ".resources.search | [.remaining,.reset] | @tsv"], { maxBuffer: 1024 * 1024 });
-  const [remainingRaw, resetRaw] = stdout.trim().split("\t");
-  const remaining = parseInt(remainingRaw, 10);
-  const reset = parseInt(resetRaw, 10);
-  if (!Number.isNaN(remaining) && !Number.isNaN(reset)) ghSearchBudget = { remaining, reset };
-} catch { /* no gh or unauthenticated, 403 backstop below still applies */ }
+if (repoLessPicks.length) {
+  try {
+    const { stdout } = await run("gh", ["api", "rate_limit", "--jq", ".resources.search | [.remaining,.reset] | @tsv"], { maxBuffer: 1024 * 1024 });
+    const [remainingRaw, resetRaw] = stdout.trim().split("\t");
+    const remaining = parseInt(remainingRaw, 10);
+    const reset = parseInt(resetRaw, 10);
+    if (!Number.isNaN(remaining) && !Number.isNaN(reset)) ghSearchBudget = { remaining, reset };
+  } catch { /* no gh or unauthenticated, 403 backstop below still applies */ }
+}
 const settleSearchBudget = async () => {
   if (!ghSearchBudget) return true; // unknown, let the 403 backstop decide
   if (ghSearchBudget.remaining > 12) return true; // plenty left, no pacing
@@ -278,11 +291,8 @@ const settleSearchBudget = async () => {
   }
   return false; // reset too far away, skip backfill rather than hammer
 };
-for (const pick of picks) {
-  if (pick.repo) continue;
-  if (ghRateLimited) break;
+const backfillOne = async pick => {
   const variants = ghNameVariants(pick.name).slice(0, 3);
-  if (!variants.length) continue;
   let enriched = false;
   let verifies = 0;
   variantLoop: for (const variant of variants) {
@@ -347,6 +357,7 @@ for (const pick of picks) {
     if (enriched) break variantLoop;
   }
 }
+await runLimited(repoLessPicks, backfillOne, 3);
 
 // Star enrichment for the final table only (bounded): secondary credibility signal
 // for niche packages where npm downloads understate traction. Deduped — many pi
