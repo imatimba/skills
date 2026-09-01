@@ -17,7 +17,7 @@ npx skills add imatimba/skills --skill find-pi-packages
 | Path | Purpose |
 | --- | --- |
 | `SKILL.md` | The agent contract: activation, hard rules, decision gates, output format. |
-| `references/npm-search.mjs` | npm fan-out search script. Needs node + curl; logged-in gh recommended for avoiding rate limits. |
+| `references/npm-search.mjs` | npm fan-out search script. Needs Node 18+ (built-in fetch); logged-in gh recommended for avoiding rate limits. |
 | `references/npm-search-lib.mjs` | Pure decision helpers, unit-tested. |
 | `references/design-notes.md` | Measured facts and rationale behind the rules. |
 | `tests/npm-search.test.mjs` | Deterministic unit suite, no network. |

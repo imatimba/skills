@@ -9,6 +9,26 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { normRepo, isLoosePiCandidate, normCatalogTerm, extractCatalogCandidates, exactNameMatch, keywordMatch, descMatch, ghSlug, ghNameVariants, searchResetWaitMs } from "./npm-search-lib.mjs";
 const run = promisify(execFile);
 
+// HTTP transport: Node built-in fetch (Node 18+). Keep-alive connections and gzip
+// come free, no subprocess per request; curl's --max-time becomes AbortSignal.timeout
+// and res.status replaces the trailing-http_code parsing. Callers check res.ok/status;
+// a fetch rejection (network, DNS, timeout) still surfaces through each try/catch below.
+const UA = "find-pi-packages-search (https://github.com/imatimba/skills)";
+async function httpGet(url, opts = {}) {
+  return fetch(url, {
+    headers: { "user-agent": UA },
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 25000),
+  });
+}
+async function httpGetText(url, opts = {}) {
+  const res = await httpGet(url, opts);
+  return { status: res.status, body: await res.text() };
+}
+if (typeof fetch !== "function") {
+  console.error("ERROR: this script needs Node 18+ (built-in fetch). Node 18 or newer is required.");
+  process.exit(3);
+}
+
 const STRICT_KWS = ["pi-package", "pi-extension"];
 const LOOSE_KW = "pi";
 const SIZE = 100;
@@ -59,9 +79,10 @@ async function runLimited(items, fn, limit = 3) {
 
 const catNew = [];
 const fetchCatalogHtml = async term => {
-  // pi.dev always returns 200 HTML; use -sf for simplicity but classify failures as gap
-  const { stdout } = await run("curl", ["-sf", "--max-time", "20", `https://pi.dev/packages?name=${encodeURIComponent(term)}`], { maxBuffer: 8 * 1024 * 1024 });
-  return stdout;
+  // pi.dev always returns 200 HTML; non-2xx still counts as a coverage gap
+  const res = await httpGet(`https://pi.dev/packages?name=${encodeURIComponent(term)}`, { timeoutMs: 20000 });
+  if (!res.ok) throw new Error(`http ${res.status}`);
+  return await res.text();
 };
 const runCatalogCrossCheck = async () => {
   if (!terms.length) return;
@@ -103,11 +124,7 @@ const runCatalogCrossCheck = async () => {
 const npmTask = runLimited(queries, async q => {
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const { stdout } = await run("curl", ["-sS", "--max-time", "25", "-w", "\n%{http_code}", q.url], { maxBuffer: 16 * 1024 * 1024 });
-      const nl = stdout.lastIndexOf("\n");
-      if (nl === -1) throw new Error("no http_code in search response");
-      const status = parseInt(stdout.slice(nl + 1).trim(), 10);
-      const body = stdout.slice(0, nl);
+      const { status, body } = await httpGetText(q.url, { timeoutMs: 25000 });
       if (status === 429 || (status >= 500 && status < 600)) {
         if (attempt < 3) { await sleep(1500 * attempt); continue; }
         throw new Error(`http ${status}`);
@@ -182,8 +199,9 @@ const probes = [...new Set(rawCandidates)].filter(n => !pool.has(n) && !n.includ
 
 async function fetchDownloadsForProbe(name) {
   try {
-    const { stdout } = await run("curl", ["-sS", "--max-time", "15", `https://api.npmjs.org/downloads/point/last-month/${encodeURIComponent(name)}`], { maxBuffer: 1024 * 1024 });
-    const j = JSON.parse(stdout);
+    const res = await httpGet(`https://api.npmjs.org/downloads/point/last-month/${encodeURIComponent(name)}`, { timeoutMs: 15000 });
+    if (!res.ok) return -1;
+    const j = await res.json();
     if (typeof j.downloads === "number") return j.downloads;
   } catch {}
   return -1;
@@ -195,14 +213,10 @@ await runLimited(probes, async name => {
       // Fetch the packument and its download count in parallel: two independent
       // endpoints, one RTT saved per probe. fetchDownloadsForProbe never rejects.
       const [regRes, dl] = await Promise.all([
-        run("curl", ["-sS", "--max-time", "20", "-w", "\n%{http_code}", `https://registry.npmjs.org/${encodeURIComponent(name)}`], { maxBuffer: 16 * 1024 * 1024 }),
+        httpGetText(`https://registry.npmjs.org/${encodeURIComponent(name)}`, { timeoutMs: 20000 }),
         fetchDownloadsForProbe(name),
       ]);
-      const stdout = regRes.stdout;
-      const nl = stdout.lastIndexOf("\n");
-      if (nl === -1) throw new Error("no http_code in probe response");
-      const status = parseInt(stdout.slice(nl + 1).trim(), 10);
-      const body = stdout.slice(0, nl);
+      const { status, body } = regRes;
       if (status === 200) {
         const j = JSON.parse(body);
         const L = j["dist-tags"]?.latest ?? "?";
@@ -236,9 +250,9 @@ await runLimited(probes, async name => {
         break;
       }
     } catch (e) {
-      // network/timeout/curl non-zero
+      // network/timeout from fetch
       const msg = (e.message ?? String(e)).slice(0, 80);
-      // execFile errors for curl network failures don't yield http_code; treat as transient
+      // fetch rejects on network/timeout without a status; treat as transient
       if (attempt < 2) { await sleep(400); continue; }
       failed.push(`probe:${name}`);
       console.error(`FAIL probe:${name}: ${msg}`);
@@ -334,11 +348,7 @@ const backfillOne = async pick => {
       }
       verifies++;
       try {
-        const { stdout } = await run("curl", ["-sS", "--max-time", "15", "-w", "\n%{http_code}", `https://raw.githubusercontent.com/${slug}/main/package.json`], { maxBuffer: 1024 * 1024 });
-        const nl = stdout.lastIndexOf("\n");
-        if (nl === -1) { verifiedCache.set(slug, null); continue; }
-        const status = parseInt(stdout.slice(nl + 1).trim(), 10);
-        const body = stdout.slice(0, nl);
+        const { status, body } = await httpGetText(`https://raw.githubusercontent.com/${slug}/main/package.json`, { timeoutMs: 15000 });
         if (status !== 200) { verifiedCache.set(slug, null); continue; }
         let j;
         try { j = JSON.parse(body); } catch { verifiedCache.set(slug, null); continue; }
@@ -370,7 +380,7 @@ try {
   starCache = JSON.parse(readFileSync(STAR_CACHE, "utf8"));
   for (const k of Object.keys(starCache)) if (Date.now() - starCache[k].t > DAY) delete starCache[k];
 } catch { /* first run or corrupt cache */ }
-// ghRateLimited already declared above for backfill; reused for star enrichment (curl 403 ⇒ advise gh install/auth)
+// ghRateLimited already declared above for backfill; reused for star enrichment (unauthenticated REST 403 leads to the gh advisory)
 async function fetchStars(slug) {
   const c = starCache[slug];
   if (c && Date.now() - c.t < DAY) return c.s;
@@ -380,13 +390,11 @@ async function fetchStars(slug) {
     if (!Number.isNaN(s)) return s;
   } catch { /* no gh or unauthenticated */ }
   try {
-    // no -f: we need the HTTP status ourselves — -s would swallow it and -f hides the body
-    const { stdout } = await run("curl", ["-sS", "--max-time", "15", "-w", "\n%{http_code}", `https://api.github.com/repos/${slug}`], { maxBuffer: 1024 * 1024 });
-    const nl = stdout.lastIndexOf("\n");
-    const status = parseInt(stdout.slice(nl + 1), 10);
+    // unauthenticated REST fallback: we need the HTTP status ourselves
+    const { status, body } = await httpGetText(`https://api.github.com/repos/${slug}`, { timeoutMs: 15000 });
     if (status === 403 || status === 429) { ghRateLimited = true; return null; }
     if (status !== 200) return null;
-    const s = JSON.parse(stdout.slice(0, nl)).stargazers_count;
+    const s = JSON.parse(body).stargazers_count;
     if (typeof s === "number") return s;
   } catch { /* network down etc. */ }
   return null;
@@ -401,8 +409,9 @@ try { writeFileSync(STAR_CACHE, JSON.stringify(starCache)); } catch { /* cache i
 
 await Promise.all(pkgs.map(async name => {
   try {
-    const { stdout } = await run("curl", ["-sf", "--max-time", "25", `https://registry.npmjs.org/${encodeURIComponent(name)}`], { maxBuffer: 16 * 1024 * 1024 });
-    const j = JSON.parse(stdout);
+    const res = await httpGet(`https://registry.npmjs.org/${encodeURIComponent(name)}`, { timeoutMs: 25000 });
+    if (!res.ok) throw new Error(`http ${res.status}`);
+    const j = await res.json();
     const L = j["dist-tags"]?.latest ?? "?";
     console.log(`PKG ${name} | latest ${L} | last-publish ${j.time?.[L] ?? "?"} | modified ${j.time?.modified ?? "?"} | ${(j.description ?? "").slice(0, 90)}`);
   } catch (e) {

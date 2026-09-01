@@ -4,7 +4,7 @@ description: "Trigger: find/search/install a pi package, pi extension, or pi plu
 license: MIT
 metadata:
   author: imatimba
-  version: "0.12.9"
+  version: "0.13.0"
 ---
 
 ## Activation Contract
@@ -58,7 +58,7 @@ Then follow with the system-access security note offering a pre-install repo sca
 
 ## References
 
-- `references/npm-search.mjs` — parallel npm fan-out (strict terms × `pi-package`/`pi-extension` + loose `keywords:pi` terms/sweep at size=100 + automatic pi.dev catalog cross-check), relevance tiers (`[EXACT]` name-equality modulo `pi-` prefix / substring / `[KW]` / `[DESC]`), GH search backfill for repo-less picks (`ghNameVariants` + `package.json` name verification, 1-star filter, ≤3 GH + ≤3 verifies per pick), guardrail annotation for remaining repo-less rows, star enrichment (cache → gh → curl), Coverage line, single-package mode for args containing `/`. Requires node + curl; gh optional.
+- `references/npm-search.mjs` — parallel npm fan-out (strict terms × `pi-package`/`pi-extension` + loose `keywords:pi` terms/sweep at size=100 + automatic pi.dev catalog cross-check), relevance tiers (`[EXACT]` name-equality modulo `pi-` prefix / substring / `[KW]` / `[DESC]`), GH search backfill for repo-less picks (`ghNameVariants` + `package.json` name verification, 1-star filter, ≤3 GH + ≤3 verifies per pick), guardrail annotation for remaining repo-less rows, star enrichment (cache → gh → fetch), Coverage line, single-package mode for args containing `/`. Requires Node 18+ (built-in fetch, no curl); gh optional.
 - `references/npm-search-lib.mjs` — pure decision helpers (post-filter, normalization, catalog extraction, tiers, ghSlug, ghNameVariants), unit-tested and importable.
 - `tests/npm-search.test.mjs` — deterministic unit suite (no network): `node --test tests/npm-search.test.mjs`.
 - `tests/integration.canary.mjs` — live API canary (self-skips unless `RUN_LIVE=1`): `RUN_LIVE=1 node --test tests/integration.canary.mjs`.
