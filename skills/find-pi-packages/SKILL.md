@@ -4,7 +4,7 @@ description: "Trigger: find/search/install a pi package, pi extension, or pi plu
 license: MIT
 metadata:
   author: imatimba
-  version: "0.13.1"
+  version: "0.13.2"
 ---
 
 ## Activation Contract
@@ -16,7 +16,7 @@ Path convention: `<skill-dir>` below is the directory containing this SKILL.md, 
 ## Hard Rules
 
 - Search BOTH keywords on every lookup as separate queries merged afterward: npm `pi-package` + `pi-extension` (plus a loose `keywords:pi` query per term and per sweep — authors use bare `pi`; post-filtered client-side to drop non-pi noise) + GitHub `topic:pi-package` + `topic:pi-extension`. Never fold keywords into one query (`keywords:a,b` ANDs them and silently returns only dual-tagged packages).
-- Derive terms from the user's stated need first; expand to 2-4 synonym forms (plural/singular/hyphenated tokenize differently: `subagent`/`subagents`/`sub-agent`) plus a hyphenated compound of the core phrase (`keep cache warm` → `cache-warm`). Keyword-only sweeps bury niche matches.
+- Derive terms from the user's stated need first; expand to 4-6 synonym forms (plural/singular/hyphenated tokenize differently: `subagent`/`subagents`/`sub-agent`) plus a hyphenated compound of the core phrase (`keep cache warm` → `cache-warm`). Keyword-only sweeps bury niche matches. Keep them close synonyms — morphological variants and compounds overlap the same pool and cost ~nothing; adjacent topics multiply the pool, probes, and star enrichment instead (measured 2026-09: 4-term fan-out ~8s, 6-term with two extra topics ~20s).
 - Relevance may live in keywords/description rather than the name: never conclude absence from an unpicked top-30; present the script's `[KW]`/`[DESC]` rows (THE Firefox control package may contain neither word in its name).
 - Never order results by npm `searchScore` — it measures text relevance, not popularity (690/mo can outscore 43K/mo). Vet the script table in its given downloads-ranked order; never re-sort.
 - Never emit raw registry/GitHub JSON into tool output — truncation fabricates complete-looking but partial result sets. npm fan-out runs only through `references/npm-search.mjs`; GitHub calls project fields with `--jq`.
@@ -41,7 +41,7 @@ Path convention: `<skill-dir>` below is the directory containing this SKILL.md, 
 
 ## Execution Steps
 
-1. Restate the need as 2-4 synonym terms; fire the whole npm fan-out in one call (Decision Gates).
+1. Restate the need as 4-6 synonym terms; fire the whole npm fan-out in one call (Decision Gates).
 2. In the same parallel batch, run both GitHub topic queries (`--jq`-compacted). If the stars line reports RATE-LIMITED (gh absent + quota exhausted), tell the user and suggest installing GitHub CLI + running `gh auth login`.
 3. Vet from the merged tables only, in table order: prefer ≥1K monthly downloads but never hide a lower-download `[EXACT]`/`[KW]`/`[DESC]` intent match — flag it `(experimental, published <6mo)` instead; weigh stars as secondary traction (292/mo on a 95★ shared repo is credible; on a 2★ personal repo it is not); flag publishes older than 6 months; open the repo URL to confirm it addresses the stated need. For dates or "fork of @x/y" lookups append the name (`npm-search.mjs @x/y`) — compact info line, never a raw packument. Rows annotated `(no repository field — verify source via README, experimental)` are repo-less after GH backfill — verify source via README before install.
 4. If plausible matches are still missing after the automatic catalog cross-check, try adjacent synonyms before web search.
