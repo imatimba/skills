@@ -6,7 +6,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { readFileSync, writeFileSync } from "node:fs";
-import { normRepo, isLoosePiCandidate, normCatalogTerm, extractCatalogCandidates, exactNameMatch, keywordMatch, descMatch, ghSlug, ghNameVariants, searchResetWaitMs } from "./npm-search-lib.mjs";
+import { normRepo, isLoosePiCandidate, normCatalogTerm, extractCatalogCandidates, exactNameMatch, keywordMatch, descMatch, ghSlug, ghNameVariants, searchResetWaitMs, probeRecordFromSearch } from "./npm-search-lib.mjs";
 const run = promisify(execFile);
 
 // HTTP transport: Node built-in fetch (Node 18+). Keep-alive connections and gzip
@@ -14,10 +14,24 @@ const run = promisify(execFile);
 // and res.status replaces the trailing-http_code parsing. Callers check res.ok/status;
 // a fetch rejection (network, DNS, timeout) still surfaces through each try/catch below.
 const UA = "find-pi-packages-search (https://github.com/imatimba/skills)";
+// GitHub token, resolved ONCE per run (best-effort `gh auth token`); every GitHub
+// REST call below reuses it via ghFetch instead of spawning `gh api` per call.
+let ghToken = null;
 async function httpGet(url, opts = {}) {
   return fetch(url, {
     headers: { "user-agent": UA },
-    signal: AbortSignal.timeout(opts.timeoutMs ?? 25000),
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 12000),
+  });
+}
+// GitHub REST over keep-alive fetch: authed (5K/hr) when a token resolved,
+// unauthenticated (60/hr/IP) otherwise. Callers keep the 403/429 → ghRateLimited
+// backstop; a fetch rejection (network, DNS, timeout) surfaces via try/catch.
+async function ghFetch(url, opts = {}) {
+  const headers = { "user-agent": UA, accept: "application/vnd.github+json" };
+  if (ghToken) headers.authorization = `Bearer ${ghToken}`;
+  return fetch(url, {
+    headers,
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 10000),
   });
 }
 async function httpGetText(url, opts = {}) {
@@ -80,7 +94,7 @@ async function runLimited(items, fn, limit = 3) {
 const catNew = [];
 const fetchCatalogHtml = async term => {
   // pi.dev always returns 200 HTML; non-2xx still counts as a coverage gap
-  const res = await httpGet(`https://pi.dev/packages?name=${encodeURIComponent(term)}`, { timeoutMs: 20000 });
+  const res = await httpGet(`https://pi.dev/packages?name=${encodeURIComponent(term)}`, { timeoutMs: 15000 });
   if (!res.ok) throw new Error(`http ${res.status}`);
   return await res.text();
 };
@@ -124,7 +138,7 @@ const runCatalogCrossCheck = async () => {
 const npmTask = runLimited(queries, async q => {
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const { status, body } = await httpGetText(q.url, { timeoutMs: 25000 });
+      const { status, body } = await httpGetText(q.url, { timeoutMs: 12000 });
       if (status === 429 || (status >= 500 && status < 600)) {
         if (attempt < 3) { await sleep(1500 * attempt); continue; }
         throw new Error(`http ${status}`);
@@ -164,7 +178,7 @@ const npmTask = runLimited(queries, async q => {
       break;
     }
   }
-});
+}, 6);
 
 await Promise.all([npmTask, runCatalogCrossCheck()]);
 
@@ -199,7 +213,7 @@ const probes = [...new Set(rawCandidates)].filter(n => !pool.has(n) && !n.includ
 
 async function fetchDownloadsForProbe(name) {
   try {
-    const res = await httpGet(`https://api.npmjs.org/downloads/point/last-month/${encodeURIComponent(name)}`, { timeoutMs: 15000 });
+    const res = await httpGet(`https://api.npmjs.org/downloads/point/last-month/${encodeURIComponent(name)}`, { timeoutMs: 10000 });
     if (!res.ok) return -1;
     const j = await res.json();
     if (typeof j.downloads === "number") return j.downloads;
@@ -207,13 +221,32 @@ async function fetchDownloadsForProbe(name) {
   return -1;
 }
 
+// Probe fast-path: one ~5KB search-index lookup first; indexed packages skip
+// the packument + downloads-point pair entirely. probeRecordFromSearch enforces
+// exact name equality (search ships fuzzy neighbors); a miss means index lag
+// or a truly absent name, and falls through to the packument pair below.
+async function fetchProbeSearchHit(name) {
+  try {
+    const res = await httpGet(`https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(name)}&size=5`, { timeoutMs: 12000 });
+    if (!res.ok) return null;
+    const j = await res.json();
+    return probeRecordFromSearch(j.objects ?? [], name);
+  } catch { return null; }
+}
+
 await runLimited(probes, async name => {
+  const fast = await fetchProbeSearchHit(name);
+  if (fast) {
+    pool.set(name, fast);
+    console.error(`probe ${name}: FOUND (search) dl=${fast.dl}`);
+    return;
+  }
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       // Fetch the packument and its download count in parallel: two independent
       // endpoints, one RTT saved per probe. fetchDownloadsForProbe never rejects.
       const [regRes, dl] = await Promise.all([
-        httpGetText(`https://registry.npmjs.org/${encodeURIComponent(name)}`, { timeoutMs: 20000 }),
+        httpGetText(`https://registry.npmjs.org/${encodeURIComponent(name)}`, { timeoutMs: 15000 }),
         fetchDownloadsForProbe(name),
       ]);
       const { status, body } = regRes;
@@ -276,18 +309,27 @@ picks.sort((a, b) => b.dl - a.dl);
 const repoLessPicks = picks.filter(p => !p.repo && ghNameVariants(p.name).length);
 let ghRateLimited = false;
 const verifiedCache = new Map(); // slug -> rawName (string|null) cache per run
-// gh search quota is 30 req/min shared across every `gh api search` call. Read it
+// Resolve the GitHub token ONCE per run (best-effort); every GitHub REST call
+// below reuses it. No per-call `gh api` subprocess spawns.
+try {
+  const { stdout } = await run("gh", ["auth", "token"], { maxBuffer: 1024 * 1024 });
+  const t = stdout.trim();
+  if (t) ghToken = t;
+} catch { /* no gh or unauthenticated — REST calls proceed unauthenticated */ }
+// gh search quota is 30 req/min shared across every search call. Read it
 // only when backfill will actually run, then pace so a large fan-out does not
-// exhaust the window mid-run (403 backstop below still applies when gh is missing or unauthenticated).
+// exhaust the window mid-run (403 backstop below still applies when unauthenticated).
 let ghSearchBudget = null;
 if (repoLessPicks.length) {
   try {
-    const { stdout } = await run("gh", ["api", "rate_limit", "--jq", ".resources.search | [.remaining,.reset] | @tsv"], { maxBuffer: 1024 * 1024 });
-    const [remainingRaw, resetRaw] = stdout.trim().split("\t");
-    const remaining = parseInt(remainingRaw, 10);
-    const reset = parseInt(resetRaw, 10);
-    if (!Number.isNaN(remaining) && !Number.isNaN(reset)) ghSearchBudget = { remaining, reset };
-  } catch { /* no gh or unauthenticated, 403 backstop below still applies */ }
+    const rateRes = await ghFetch("https://api.github.com/rate_limit", { timeoutMs: 10000 });
+    if (rateRes.ok) {
+      const rateJson = await rateRes.json();
+      const remaining = rateJson?.resources?.search?.remaining;
+      const reset = rateJson?.resources?.search?.reset;
+      if (typeof remaining === "number" && typeof reset === "number") ghSearchBudget = { remaining, reset };
+    }
+  } catch { /* offline or unauthenticated, 403 backstop below still applies */ }
 }
 const settleSearchBudget = async () => {
   if (!ghSearchBudget) return true; // unknown, let the 403 backstop decide
@@ -315,19 +357,15 @@ const backfillOne = async pick => {
     if (ghSearchBudget) ghSearchBudget.remaining--;
     let slugsFromSearch = [];
     try {
-      const { stdout } = await run("gh", ["api", `search/repositories?q=${variant}+in:name&per_page=5`, "--jq", ".items[] | [.full_name,.stargazers_count,.html_url] | @tsv"], { maxBuffer: 1024 * 1024 });
-      const lines = stdout.trim().split("\n").filter(Boolean);
-      for (const line of lines) {
-        const parts = line.split("\t");
-        const full = (parts[0] || "").trim();
-        const starsRaw = (parts[1] || "").trim();
-        const starsNum = parseInt(starsRaw, 10);
-        if (full) slugsFromSearch.push({ slug: full, stars: Number.isNaN(starsNum) ? 0 : starsNum });
+      const searchRes = await ghFetch(`https://api.github.com/search/repositories?q=${encodeURIComponent(variant)}+in:name&per_page=5`, { timeoutMs: 10000 });
+      if (searchRes.status === 403 || searchRes.status === 429) { ghRateLimited = true; continue; }
+      if (!searchRes.ok) continue;
+      const searchJson = await searchRes.json();
+      for (const it of searchJson.items ?? []) {
+        if (it.full_name) slugsFromSearch.push({ slug: it.full_name, stars: typeof it.stargazers_count === "number" ? it.stargazers_count : 0 });
       }
-    } catch (e) {
-      const msg = (e.message ?? String(e)).toLowerCase();
-      if (msg.includes("403") || msg.includes("429") || msg.includes("rate limit") || msg.includes("api rate limit")) ghRateLimited = true;
-      continue;
+    } catch {
+      continue; // network/timeout — transient, next variant still tries
     }
     for (const { slug, stars } of slugsFromSearch) {
       if (verifies >= 3 || enriched) break;
@@ -348,7 +386,7 @@ const backfillOne = async pick => {
       }
       verifies++;
       try {
-        const { status, body } = await httpGetText(`https://raw.githubusercontent.com/${slug}/main/package.json`, { timeoutMs: 15000 });
+        const { status, body } = await httpGetText(`https://raw.githubusercontent.com/${slug}/main/package.json`, { timeoutMs: 10000 });
         if (status !== 200) { verifiedCache.set(slug, null); continue; }
         let j;
         try { j = JSON.parse(body); } catch { verifiedCache.set(slug, null); continue; }
@@ -367,12 +405,11 @@ const backfillOne = async pick => {
     if (enriched) break variantLoop;
   }
 }
-await runLimited(repoLessPicks, backfillOne, 3);
-
 // Star enrichment for the final table only (bounded): secondary credibility signal
 // for niche packages where npm downloads understate traction. Deduped — many pi
-// packages share one monorepo. gh preferred (5K/hr authed), unauthenticated REST as
-// fallback (60/hr/IP), results cached 24h in /tmp so repeat fan-outs cost nothing.
+// packages share one monorepo. Single REST transport (ghFetch, authed at 5K/hr
+// when a token resolved, else 60/hr/IP), results cached 24h in /tmp so repeat
+// fan-outs cost nothing.
 const STAR_CACHE = `${process.env.TMPDIR ?? "/tmp"}/pi-pkg-star-cache-${process.getuid?.() ?? "u"}.json`;
 const DAY = 86_400_000;
 let starCache = {};
@@ -380,31 +417,36 @@ try {
   starCache = JSON.parse(readFileSync(STAR_CACHE, "utf8"));
   for (const k of Object.keys(starCache)) if (Date.now() - starCache[k].t > DAY) delete starCache[k];
 } catch { /* first run or corrupt cache */ }
-// ghRateLimited already declared above for backfill; reused for star enrichment (unauthenticated REST 403 leads to the gh advisory)
+// ghRateLimited shared with the backfill above; any 403/429 on GitHub REST sets
+// it and feeds the actionable advisory in the coverage line.
 async function fetchStars(slug) {
   const c = starCache[slug];
   if (c && Date.now() - c.t < DAY) return c.s;
   try {
-    const { stdout } = await run("gh", ["api", `repos/${slug}`, "--jq", ".stargazers_count"], { maxBuffer: 1024 * 1024 });
-    const s = parseInt(stdout.trim(), 10);
-    if (!Number.isNaN(s)) return s;
-  } catch { /* no gh or unauthenticated */ }
-  try {
-    // unauthenticated REST fallback: we need the HTTP status ourselves
-    const { status, body } = await httpGetText(`https://api.github.com/repos/${slug}`, { timeoutMs: 15000 });
-    if (status === 403 || status === 429) { ghRateLimited = true; return null; }
-    if (status !== 200) return null;
-    const s = JSON.parse(body).stargazers_count;
+    const res = await ghFetch(`https://api.github.com/repos/${slug}`, { timeoutMs: 10000 });
+    if (res.status === 403 || res.status === 429) { ghRateLimited = true; return null; }
+    if (!res.ok) return null;
+    const s = (await res.json()).stargazers_count;
     if (typeof s === "number") return s;
   } catch { /* network down etc. */ }
   return null;
 }
-const slugs = [...new Set(picks.map(r => ghSlug(r.repo)).filter(Boolean))];
 const starMap = new Map();
-await Promise.all(slugs.map(async slug => {
+const attemptedSlugs = new Set();
+async function resolveStar(slug) {
+  attemptedSlugs.add(slug);
   const s = await fetchStars(slug);
   if (s !== null) { starMap.set(slug, s); starCache[slug] = { t: Date.now(), s }; }
-}));
+}
+// Overlap: stars for already-known repos resolve CONCURRENTLY with the GH backfill
+// pass (independent work); only newly-backfilled repos fetch stars afterwards.
+const knownSlugs = [...new Set(picks.map(r => ghSlug(r.repo)).filter(Boolean))];
+await Promise.all([
+  runLimited(knownSlugs, resolveStar, 5),
+  runLimited(repoLessPicks, backfillOne, 3),
+]);
+const slugs = [...new Set(picks.map(r => ghSlug(r.repo)).filter(Boolean))];
+await runLimited(slugs.filter(s => !attemptedSlugs.has(s)), resolveStar, 5);
 try { writeFileSync(STAR_CACHE, JSON.stringify(starCache)); } catch { /* cache is best-effort */ }
 
 await Promise.all(pkgs.map(async name => {

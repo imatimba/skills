@@ -135,6 +135,35 @@ export const ghNameVariants = npmName => {
 };
 
 /**
+ * Probe fast-path: build a pool record from a /-/v1/search response.
+ * Search returns fuzzy neighbors alongside exact hits, so the caller MUST match
+ * on exact `package.name === probedName` — enforced here by returning null when
+ * no object carries the probed name (index lag or truly absent → packument fallback).
+ * Field mapping mirrors the search-fan-out pool insertion (name, downloads.monthly,
+ * version, repo via normRepo, desc ≤90 chars, lowercased kw, dfull).
+ * @param {Array} objects search response `.objects`
+ * @param {string} probedName exact package name being probed
+ * @param {string} hitTag pool hit tag (default `probe+search`)
+ * @returns {object|null} pool record or null when no exact hit
+ */
+export const probeRecordFromSearch = (objects, probedName, hitTag = "probe+search") => {
+  const hit = (objects ?? []).find(o => o?.package?.name === probedName);
+  if (!hit) return null;
+  const p = hit.package;
+  const desc = p.description ?? "";
+  return {
+    name: p.name,
+    dl: hit.downloads?.monthly ?? 0,
+    version: p.version,
+    repo: normRepo(p.links?.repository ?? p.links?.homepage ?? ""),
+    desc: desc.replace(/\s+/g, " ").slice(0, 90),
+    kw: (p.keywords ?? []).map(k => String(k).toLowerCase()),
+    dfull: desc.toLowerCase(),
+    hits: [hitTag],
+  };
+};
+
+/**
  * How long to wait for the gh search quota to reset, when it is nearly exhausted.
  * gh search is 30 req/min shared across every `gh api search` call; a fan-out can
  * exhaust it mid-run. Returns ms to sleep, or 0 when the reset is too far away to

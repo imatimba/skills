@@ -46,6 +46,11 @@ Division of labor: the script (`references/npm-search.mjs`) owns **mechanics** (
 | gh optional with graceful degradation | node stays portable (built-in fetch since Node 18, no curl subprocess); gh lifts quota 60/hr → 5K/hr; ladder ends in an actionable advisory, never silent dashes |
 | GH search pacing | gh search quota is 30 req/min shared across all `gh api search` calls; a fan-out of repo-less picks can exhaust it mid-run. Read the budget only when backfill will run; pace only when remaining drops below 12 (1.5s between calls), wait for a near reset or skip backfill when the reset is far away; full-quota runs stay fast |
 | Parallel phases | Backfill runs over repo-less picks with concurrency 3 (runLimited), catalog cross-check overlaps the npm fan-out (no data dependency), probes are bounded (limit 6) and fetch packument + downloads in parallel. Measured: 3-term fan-out 88s → 17s (2026-08) |
+| Probe fast-path (2026-09) | Verified live: `/-/v1/search?text=<name>&size=5` returns `downloads.monthly` + full `package{name, keywords, version, description, links}` in ~5KB. Each probe tries one search request first and builds the pool record directly (`probe+search` hit tag, `probeRecordFromSearch` in the lib); the packument + downloads-point pair runs only on exact-name miss (search-index lag). Caller MUST enforce `package.name === probedName` — fuzzy neighbors ship in the same response |
+| GitHub REST, one token (2026-09) | All GitHub calls (rate_limit, search/repositories, repos) go over keep-alive fetch with a single best-effort `gh auth token` resolution per run (authed 5K/hr, else 60/hr/IP). No per-call `gh api` subprocess spawns. 403/429 → ghRateLimited backstop and the advisory text are unchanged |
+| Star/backfill overlap (2026-09) | Stars for already-known repo slugs resolve concurrently with the GH backfill pass (independent work, `runLimited` limit 5); only newly-backfilled repos fetch stars afterwards. npm fan-out concurrency 3 → 6 (registry bursts of 15+ are the documented danger zone; probes already run at 6 and never overlap the fan-out) |
+| Tighter timeouts (2026-09) | Search 25s → 12s, catalog 20s → 15s, probe packument 20s → 15s, probe downloads / raw package.json / GitHub REST 15s → 10s. Retry counts and FAILED-reporting semantics unchanged |
+| Abbreviated packument rejected (2026-09) | Verified live: `Accept: application/vnd.npm.install-v1+json` strips description/keywords/repository (16KB → 4KB with those fields gone). Probes need those fields — never use it |
 | Node-fetch transport | All HTTP moved from curl subprocesses to built-in fetch (Node 18+): keep-alive + gzip per connection, no fork/exec per request, res.status replaces http_code parsing. Kills the incident #5/#11 subprocess error-classification bug class outright. Retry semantics preserved per site. Measured: 3-term fan-out 17s → ~18s (wash on latency, but one less dependency) |
 | Catalog cross-check automatic | Conditional-on-thin-results failed when pools looked healthy; the catalog's engine differs and catches score pathologies + index lag |
 | `<skill-dir>` path convention | Skills install to multiple roots; hardcoded paths break relocation and the whole fan-out |
@@ -61,8 +66,9 @@ disk caching of search pools (stale-data risk outweighs latency), multi-page cat
 The decision logic lives in `references/npm-search-lib.mjs` (pure, no I/O) so it is unit-testable; `references/npm-search.mjs` imports it and stays the only network-touching surface.
 
 ```bash
-# Unit suite: deterministic, no network (32 tests). Covers post-filter, name/catalog norm,
-# exact/[KW]/[DESC] tiers, catalog extraction, ghSlug, repo norm, ghNameVariants, searchResetWaitMs.
+# Unit suite: deterministic, no network (36 tests). Covers post-filter, name/catalog norm,
+# exact/[KW]/[DESC] tiers, catalog extraction, ghSlug, repo norm, ghNameVariants, searchResetWaitMs,
+# probeRecordFromSearch (exact-hit extraction + fuzzy-neighbor rejection).
 node --test tests/npm-search.test.mjs
 # same via auto-discovery (unit files only; canary not matched by default patterns)
 node --test

@@ -4,7 +4,7 @@ description: "Trigger: find/search/install a pi package, pi extension, or pi plu
 license: MIT
 metadata:
   author: imatimba
-  version: "0.13.0"
+  version: "0.13.1"
 ---
 
 ## Activation Contract

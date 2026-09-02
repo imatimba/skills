@@ -15,6 +15,7 @@ import {
   ghSlug,
   ghNameVariants,
   searchResetWaitMs,
+  probeRecordFromSearch,
 } from "../references/npm-search-lib.mjs";
 
 // ---- normRepo --------------------------------------------------------------
@@ -227,4 +228,66 @@ test("searchResetWaitMs: low remaining with far reset waits nothing", () => {
   // reset in 5 minutes -> too far, caller should skip backfill
   assert.equal(searchResetWaitMs(1, 1_800_300, 1_800_000), 0);
   assert.equal(searchResetWaitMs(0, 1_800_000, 1_799_000), 0); // wait > 60s
+});
+
+// ---- probeRecordFromSearch (probe fast-path: search-object → pool record) --------
+
+const searchObj = (name, overrides = {}) => ({
+  package: {
+    name,
+    keywords: ["Pi", "Extension"],
+    version: "1.2.3",
+    description: "CrofAI provider for pi coding agents",
+    links: { repository: "https://github.com/monotykamary/pi-crofai-provider" },
+    ...overrides,
+  },
+  downloads: { monthly: 4819 },
+});
+
+test("probeRecordFromSearch: exact hit builds pool record", () => {
+  const objects = [
+    searchObj("pi-crof-extra", { description: "popular neighbor", links: {} }),
+    searchObj("pi-crofai-provider"),
+  ];
+  // downloads reordered so the neighbor outranks: exact match must still win
+  objects[0].downloads = { monthly: 99999 };
+  const rec = probeRecordFromSearch(objects, "pi-crofai-provider");
+  assert.equal(rec.name, "pi-crofai-provider");
+  assert.equal(rec.dl, 4819);
+  assert.equal(rec.version, "1.2.3");
+  assert.equal(rec.repo, "https://github.com/monotykamary/pi-crofai-provider");
+  assert.equal(rec.desc, "CrofAI provider for pi coding agents");
+  assert.deepEqual(rec.kw, ["pi", "extension"]);
+  assert.equal(rec.dfull, "crofai provider for pi coding agents");
+  assert.deepEqual(rec.hits, ["probe+search"]);
+});
+
+test("probeRecordFromSearch: homepage fallback, desc truncation, kw lowercasing", () => {
+  const longDesc = "A pi extension that does things. ".repeat(10); // >90 chars, whitespace to normalize
+  const objects = [searchObj("pi-long", {
+    description: longDesc,
+    keywords: ["Firefox", "BROWSER"],
+    links: { homepage: "git+https://github.com/owner/pi-long.git" },
+  })];
+  const rec = probeRecordFromSearch(objects, "pi-long");
+  assert.equal(rec.repo, "https://github.com/owner/pi-long");
+  assert.ok(rec.desc.length <= 90);
+  assert.ok(!/[\n\t]|  /.test(rec.desc));
+  assert.deepEqual(rec.kw, ["firefox", "browser"]);
+});
+
+test("probeRecordFromSearch: fuzzy neighbors without exact name rejected", () => {
+  const objects = [
+    searchObj("pi-crofai-providerx"),
+    searchObj("pi-crofai"),
+  ];
+  assert.equal(probeRecordFromSearch(objects, "pi-crofai-provider"), null);
+  assert.equal(probeRecordFromSearch([], "pi-crofai-provider"), null);
+});
+
+test("probeRecordFromSearch: missing downloads default to 0", () => {
+  const objects = [searchObj("pi-nodl", {})];
+  delete objects[0].downloads;
+  const rec = probeRecordFromSearch(objects, "pi-nodl");
+  assert.equal(rec.dl, 0);
 });
