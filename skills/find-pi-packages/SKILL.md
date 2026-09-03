@@ -4,7 +4,7 @@ description: "Trigger: find/search/install a pi package, pi extension, or pi plu
 license: MIT
 metadata:
   author: imatimba
-  version: "0.13.2"
+  version: "0.13.3"
 ---
 
 ## Activation Contract
@@ -50,10 +50,7 @@ Path convention: `<skill-dir>` below is the directory containing this SKILL.md, 
 
 ## Output Contract
 
-Return one numbered block per candidate with exactly these elements:
-1. `N. name [EXACT?] — description (↓downloads/mo or git-only, ★stars src, npm|git)` — prefix downloads with `↓` (sorted by monthly downloads, never searchScore) and put `gh` in `src` when the repo is GitHub-hosted, `–` when npm-only/unknown. Mirror the script table's ↓/★/src/legend semantics exactly.
-2. Install: `pi install npm:<pkg>` first; a git install line only when the package has no npm presence
-3. Links: the full `https://github.com/<owner>/<repo>` URL from the table plus `https://pi.dev/packages?name=<pkg>` — always both, always https
+Return a single markdown table sorted by monthly downloads, descending. One row per candidate with exactly these columns: Package (name; append `[EXACT]`, `[KW]`, or `[DESC]` per the script table's tier so intent matches stay visible in a flat sort), ↓/mo (monthly downloads, never searchScore), ★ (GitHub stars), Src (`gh` when the repo is GitHub-hosted, `–` when npm-only/unknown), Install (`pi install npm:<pkg>` first; a `git:` line only when the package has no npm presence), Links (the full `https://github.com/<owner>/<repo>` URL from the table plus `https://pi.dev/packages?name=<pkg>` — always both, always https). Mirror the script table's ↓/★/src semantics exactly. Never show the script's internal query-hits column — it is routing metadata, not user information.
 Then follow with the system-access security note offering a pre-install repo scan via an available code-security skill (e.g. `ghost-scan-code`). If nothing passes vetting, try the web-search fallback (when available), then say so and offer direct help without a package. Emit nothing else — no global install-variant preamble or footer; `@ver`/`-l`/`pi -e` are install-time options applied at step 6 on approval, not presentation content.
 
 ## References
